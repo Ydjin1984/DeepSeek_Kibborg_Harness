@@ -6,7 +6,9 @@
  * never rides a response, so the card learns only whether one is configured
  * and writes it through the credentials domain, addressed by the reference the
  * section names. It is still staged with the rest of the form, so one save
- * covers everything the card shows.
+ * covers everything the card shows. Model, token budget, and API version sit
+ * beside the endpoint because a custom Anthropic-compatible gateway needs
+ * those the same way a hand-declared LLM route does.
  */
 
 import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
@@ -34,6 +36,12 @@ export interface WebSearchSettings {
   apiKeyEnv?: string
   /** Provider endpoint; blank inherits the provider default. */
   baseURL?: string
+  /** Anthropic-format model name sent on each search. */
+  model?: string
+  /** `anthropic-version` header value. */
+  apiVersion?: string
+  /** Upper bound on generated tokens for the auxiliary Messages request. */
+  maxTokens?: number
   /** Maximum searches served within one request. */
   maxUses?: number
 }
@@ -52,6 +60,12 @@ interface CredentialState {
 export interface WebSearchCardState extends CardShell {
   /** Provider endpoint. */
   baseURL: CardFieldState
+  /** Anthropic-format model name. */
+  model: CardFieldState
+  /** `anthropic-version` header value. */
+  apiVersion: CardFieldState
+  /** Generated-token cap for the auxiliary Messages request. */
+  maxTokens: CardFieldState
   /** Searches allowed per request. */
   maxUses: CardFieldState
   /** The staged credential, which starts blank on every load. */
@@ -86,7 +100,13 @@ export class WebSearchCardController {
   ) {
     this.form = new CardForm(
       scope,
-      [textField('baseURL'), numberField('maxUses')],
+      [
+        textField('baseURL'),
+        textField('model'),
+        textField('apiVersion'),
+        numberField('maxTokens'),
+        numberField('maxUses'),
+      ],
       [{ field: API_KEY_FIELD, write: text => this.writeKey(text) }],
     )
     this.store = this.form.bind(() => this.projection())
@@ -98,6 +118,9 @@ export class WebSearchCardController {
     return {
       ...this.form.shell(),
       baseURL: this.form.field('baseURL'),
+      model: this.form.field('model'),
+      apiVersion: this.form.field('apiVersion'),
+      maxTokens: this.form.field('maxTokens'),
       maxUses: this.form.field('maxUses'),
       apiKey: this.form.field(API_KEY_FIELD),
       apiKeyConfigured: this.credential.configured,

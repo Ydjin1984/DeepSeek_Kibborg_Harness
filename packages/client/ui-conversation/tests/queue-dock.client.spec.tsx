@@ -16,7 +16,7 @@ import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { QueueItemId } from '../src/client/contract/queue.ts'
-import type { InputState } from '../src/client/input/contract.ts'
+import type { InputState } from '../src/client/contract/input.ts'
 import { zh } from '../src/client/locales.ts'
 import { QueueDock, queueDockEntry, type QueueDockInjected, type QueueDockProps } from '../src/client/queue/QueueDock.tsx'
 
@@ -64,7 +64,7 @@ function liveSession(initial: ConversationSnapshot) {
 }
 
 /** InputZone owner stub (the dock reads useSession only; the zone fields satisfy the owner share). */
-const INPUT_STATE: InputState = { draft: '', imageIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }
+const INPUT_STATE: InputState = { draft: '', imageIds: [], fileIds: [], draftRev: 0, phase: 'plain', occurrences: [], queue: [] }
 
 // Standard locale seat stub mirroring the real ns → common → key chain.
 const t: QueueDockProps['t'] = makeTranslate(zh, commonZh)

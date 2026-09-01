@@ -26,6 +26,7 @@ const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
 // The English fallback surface: a browser naming no shipped language.
 const DIALOG_EN_EXPECTED = join(SNAPSHOT_DIR, 'dialog-en.expected.md')
+const DIALOG_RU_EXPECTED = join(SNAPSHOT_DIR, 'dialog-ru.expected.md')
 const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$="ui-settings"]'
 const MODE = webSnapshotMode()
 
@@ -491,8 +492,8 @@ describe('web e2e: settings modal and General preferences', () => {
 
   it('opens a browser asking for no shipped language in English', async () => {
     // The product default for "no usable signal": a French browser ships
-    // neither zh nor en, so resolution falls to FALLBACK_LOCALE (en) rather
-    // than to Chinese.
+    // none of zh, en, or ru, so resolution falls to FALLBACK_LOCALE (en)
+    // rather than to Chinese or Russian.
     const fresh = await launchWebScaffold({})
     const frPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'fr-FR' })
     const frTripwire = watchConsole(frPage)
@@ -522,8 +523,34 @@ describe('web e2e: settings modal and General preferences', () => {
     }
   }, 90_000)
 
+  it('opens a Russian browser in Russian without any stored preference', async () => {
+    const fresh = await launchWebScaffold({})
+    const ruPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'ru-RU' })
+    const ruTripwire = watchConsole(ruPage)
+    onTestFailed(() => saveFailureShot(ruPage, 'web-e2e-settings-browser-language-ru'))
+    try {
+      await ruPage.goto(fresh.baseUrl, { waitUntil: 'load' })
+      await ruPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      expect(await ruPage.evaluate(() => localStorage.getItem('dsh.locale'))).toBeNull()
+      await ruPage.getByRole('button', { name: 'Настройки', exact: true }).click()
+      const dialog = ruPage.getByRole('dialog', { name: 'Настройки' })
+      await dialog.waitFor({ timeout: 10_000 })
+      await dialog.getByRole('button', { name: 'Русский' }).waitFor({ timeout: 10_000 })
+      expect(await ruPage.evaluate(() => document.documentElement.lang)).toBe('ru')
+      const snapshot = await captureStableAria(ruPage, '[role="dialog"]', fresh.workspaceCwd)
+      await compareOrRefreshGolden(DIALOG_RU_EXPECTED, snapshot, MODE)
+      expect(ruTripwire.pageErrors).toEqual([])
+      expect(ruTripwire.warnings).toEqual([])
+    } finally {
+      await ruPage.close()
+      await fresh.close()
+    }
+  }, 90_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['dialog-en.expected.md', 'dialog.expected.md', 'plugins.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'dialog-en.expected.md', 'dialog-ru.expected.md', 'dialog.expected.md', 'plugins.expected.md',
+    ])
   })
 })

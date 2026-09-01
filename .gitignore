@@ -1,5 +1,6 @@
 CLAUDE.local.md
 .env
+graphify-out/
 node_modules/
 lib/
 *.tsbuildinfo
@@ -39,3 +40,8 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# local dev artifacts (Ydjin1984 fork)
+.dsh-*.log
+.dsh-pty-probe.ts
+.dsh-skill-descriptions.tsv

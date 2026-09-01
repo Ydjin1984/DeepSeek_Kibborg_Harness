@@ -21,6 +21,11 @@
 - `ctx.llm.registerModelDiscovery(settingsNs: string, discover): () => void` 为本插件拥有的 settings namespace 提供查询提供方端点的能力。每个 namespace 只能有一个（`INVALID_DISCOVERY`/`DUPLICATE_DISCOVERY`），并随调用 fiber dispose。
 - `ctx.llm.listModelDiscoveryNamespaces(): string[]` 列出可以询问端点的 namespace，让界面只在可用之处提供该动作。
 - `ctx.llm.discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>` 询问某个端点它公布了哪些模型。
+- `ctx.llm.registerOAuthLogin(settingsNs: string, handlers): () => void` 为该插件所拥有的 settings 命名空间提供设备码 OAuth 登录。每个命名空间一份，随 fiber 释放。
+- `ctx.llm.startOAuthLogin(settingsNs, provider, signal?): Promise<LlmOAuthDeviceChallenge>` 为一条路由启动设备码登录。
+- `ctx.llm.waitOAuthLogin(settingsNs, loginId, signal?): Promise<void>` 等待该登录写入令牌并激活路由。
+- `ctx.llm.cancelOAuthLogin(settingsNs, loginId): void` 取消进行中的登录。
+- `ctx.llm.logoutOAuth(settingsNs, provider): Promise<void>` 忘记该路由已存储的 OAuth 凭据。
 - `ctx.llm.providerRetryPolicy(provider: string): ResolvedRetryPolicy` 返回注册时捕获的提供方自身的重试策略，并解析 normal 默认值。
 - `ctx.llm.listModels(provider: string): Promise<LlmModelInfo[]>` 发现某个已注册提供方当前公布的模型。
 - `ctx.llm.resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>` 从拥有该精确路由的适配器中，解析并校验确切模型身份，以及可用上下文、输出默认值和推理（reasoning）元数据；异步适配器可选地支持取消。

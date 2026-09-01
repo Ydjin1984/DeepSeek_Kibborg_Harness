@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-30-execution-follow-scroll-pins-to-floor.md
+2026-08-30-execution-follow-scroll-pins-to-floor.md: b03627b1a7ffe47abfad7eda468cc9eb39f61363
+2026-08-30-execution-follow-scroll-pins-to-floor.zh.md: 9f7a3918eb08c74d7260753f49c3161134367cbd

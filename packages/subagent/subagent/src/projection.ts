@@ -10,7 +10,14 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { foldSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
-import type { SubagentIdentityProjection, SubagentTimingProjection } from './projection-types.ts'
+import type {
+  SubagentActivityProjection,
+  SubagentIdentityProjection,
+  SubagentTimingProjection,
+} from './projection-types.ts'
+
+/** Sidebar detail cap for one model-reply snippet. */
+const ACTIVITY_TEXT_LIMIT = 60
 
 interface TimingState {
   /** Milliseconds accumulated across completed post-descriptor turns. */
@@ -108,6 +115,11 @@ const identitySchema = z.discriminatedUnion('mode', [
   }).strict(),
 ]).nullable() as unknown as z.ZodType<SubagentIdentityProjection | null>
 
+const activitySchema = z.object({
+  status: z.union([z.literal('running'), z.literal('idle')]),
+  detail: z.string(),
+}).strict()
+
 /** Interpret one `subagent/descriptor` event's identity; no value when the payload cannot be trusted. */
 function descriptorIdentity(event: SessionEvent): SubagentIdentityProjection | undefined {
   let descriptor: SubagentDescriptorData | undefined
@@ -153,4 +165,49 @@ ProjectionDefinition<'subagent', IdentityState> = {
   // Bumped when the identity gained its `seq` field: an older checkpoint row
   // would replay into a value the schema rejects, so it must refold instead.
   stateVersion: 2,
+}
+
+/** First text block of one assembled assistant message, bounded for the sidebar. */
+function activityText(content: unknown): string {
+  if (!Array.isArray(content)) return ''
+  const text = content
+    .filter((block): block is { type: 'text'; text: string } =>
+      typeof block === 'object' && block !== null
+      && (block as { type?: unknown }).type === 'text'
+      && typeof (block as { text?: unknown }).text === 'string')
+    .map(block => block.text)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text.slice(0, ACTIVITY_TEXT_LIMIT)
+}
+
+/**
+ * The `subagentActivity` unit: a compact last-activity summary (running/idle
+ * plus the last tool name or a bounded reply snippet) folded from turn and
+ * step boundaries. It feeds the web sidebar's per-child live status; the
+ * fold itself is pure and runs for every session, while the api-proxy
+ * restricts push frames to subagent-origin sessions.
+ */
+export const subagentActivityProjectionDefinition:
+ProjectionDefinition<'subagentActivity', SubagentActivityProjection> = {
+  key: 'subagentActivity',
+  schema: activitySchema,
+  init: () => ({ status: 'idle', detail: '' }),
+  apply: (state, event) => {
+    switch (event.type) {
+      case 'turn/start':
+        return state.status === 'running' ? state : { status: 'running', detail: '' }
+      case 'tool/call':
+        return { status: 'running', detail: event.data.name }
+      case 'assistant/message':
+        return { status: 'running', detail: activityText(event.data.message.content) }
+      case 'turn/end':
+        return state.status === 'idle' ? state : { status: 'idle', detail: '' }
+      default:
+        return state
+    }
+  },
+  view: state => state,
+  stateVersion: 1,
 }

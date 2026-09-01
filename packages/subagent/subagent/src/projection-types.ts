@@ -46,6 +46,17 @@ export type SubagentIdentityProjection =
     seq: number
   }
 
+/** Compact last-activity summary of a subagent child, folded for the web sidebar. */
+export interface SubagentActivityProjection {
+  /** Whether the child's last folded turn is still open. */
+  status: 'running' | 'idle'
+  /**
+   * The last tool call name while running, or a bounded text snippet of the
+   * last assembled model reply; empty while idle or before any activity.
+   */
+  detail: string
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /** Active-turn duration for a descriptor-backed subagent session. */
@@ -60,5 +71,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * non-optional.
      */
     subagent: SubagentIdentityProjection | null
+    /** Compact last-activity summary of a subagent child session. */
+    subagentActivity: SubagentActivityProjection
   }
 }

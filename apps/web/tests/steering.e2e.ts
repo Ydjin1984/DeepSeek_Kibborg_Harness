@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/steering', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -101,6 +101,9 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     const settled = scaffold.whenTurnSettled(MODE === 'record' ? 180_000 : 30_000)
     await input.fill(PROMPT)
     await input.press('Enter')
+    // The Execution view is the conversation default; the turn's first content
+    // is visible now, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     // Enter remains the Queue gesture. The row action then atomically moves
     // this exact occurrence into the current turn's steering outbox.
@@ -206,6 +209,9 @@ describe('web e2e: composer shortcut steers directly', () => {
     await input.fill(PROMPT)
     await input.press('Enter')
     await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
+    // The Execution view is the conversation default; the prompt rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     await input.fill(STEER)
     await input.press('Meta+Enter')
@@ -268,6 +274,9 @@ describe('web e2e: composer shortcut follows the swapped busy behavior', () => {
     await input.fill(PROMPT)
     await input.press('Enter')
     await page.getByRole('button', { name: 'Stop generating' }).waitFor({ timeout: 10_000 })
+    // The Execution view is the conversation default; the prompt rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     const queuedText = 'Queued by the complementary Cmd+Enter shortcut.'
     await input.fill(queuedText)
@@ -335,6 +344,9 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     await input.press('Enter')
     await input.fill(STEER_TWO)
     await input.press('Enter')
+    // The Execution view is the conversation default; the turn's first content
+    // is visible now, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     const dock = page.locator('[data-queue-dock]')
     // Both messages queued: the two-row dock shows a collapsed count header,
     // and Playwright text matching skips the hidden rows — expand the list,

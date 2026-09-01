@@ -15,7 +15,7 @@ import type {
 import type {
   DraftAttachmentId, EditRange, EditSelection, InputActions, InputEffect, InputNotice, InputState,
   PasteComponent, QueuedMessage, SessionInput, SubmitAttempt,
-} from './contract.ts'
+} from '../contract/input.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import { InputMachine, projectClipboard } from './machine.ts'
 
@@ -48,6 +48,7 @@ export interface SessionInputDeps {
   defaultSink(
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome>
@@ -58,6 +59,15 @@ export interface SessionInputDeps {
     /** Free consumed draft images after a successful command submit. */
     release(ids: readonly DraftAttachmentId[]): void
     /** Localized composer notice for a claimed command that does not accept images. */
+    unsupportedNotice(token: string): string
+  }
+  /** Draft-file plumbing (the hub owns the conversation face and the copy). */
+  commandFiles: {
+    /** Mint browser-owned draft files (any format) and return their ids. */
+    create(ids: readonly File[]): readonly DraftAttachmentId[]
+    /** Free draft files (browser-owned bytes) after removal or teardown. */
+    release(ids: readonly DraftAttachmentId[]): void
+    /** Localized composer notice for a claimed command (commands never accept files). */
     unsupportedNotice(token: string): string
   }
 }
@@ -91,6 +101,9 @@ export class SessionInputShell implements SessionInput {
     addImages: ids => this.addImages(ids),
     removeImage: (id) => { this.removeImage(id) },
     pruneImages: (ids) => { this.pruneImages(ids) },
+    addFiles: files => this.addFiles(files),
+    removeFile: (id) => { this.removeFile(id) },
+    pruneFiles: (ids) => { this.pruneFiles(ids) },
     submit: () => { this.submit('queue') },
   }
 
@@ -100,8 +113,9 @@ export class SessionInputShell implements SessionInput {
   private noticeSeq = 0
   private lastMirroredDraft = ''
   private imageIds: readonly DraftAttachmentId[] = []
-  /** One image-only send at a time: Enter during the Host round-trip is a no-op. */
-  private imageSendInFlight = false
+  private fileIds: readonly DraftAttachmentId[] = []
+  /** One attachment-only send at a time: Enter during the Host round-trip is a no-op. */
+  private attachmentSendInFlight = false
   private disposed = false
   /** Draft persistence mirror (chat store write; receives the clipboard projection, never display-only ranges). */
   private mirrorFn: ((text: string) => void) | undefined
@@ -158,14 +172,60 @@ export class SessionInputShell implements SessionInput {
   }
 
   /**
+   * Mint browser-owned draft files (any format) and append their ids. Busy
+   * admission phases refuse without minting (nothing to leak); the caller —
+   * the composer paperclip — stays disabled during the same span.
+   * @param files - browser files to attach.
+   * @returns null when every file was attached, or a rejection reason string.
+   */
+  addFiles(files: readonly File[]): string | null {
+    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return null
+    if (files.length === 0) return null
+    const ids = this.deps.commandFiles.create(files)
+    this.fileIds = [...this.fileIds, ...ids]
+    this.publish()
+    return null
+  }
+
+  /**
+   * Remove one file id from this draft and release its browser-owned bytes.
+   * Busy admission phases refuse, like {@link addImages}: a removal landing
+   * while a submit serializes would otherwise vanish from the rail yet still
+   * ride the in-flight send.
+   */
+  removeFile(id: DraftAttachmentId): void {
+    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return
+    const next = this.fileIds.filter(candidate => candidate !== id)
+    if (next.length === this.fileIds.length) return
+    this.fileIds = next
+    this.deps.commandFiles.release([id])
+    this.publish()
+  }
+
+  /**
+   * Keep only file ids that still resolve in the browser attachment registry.
+   * @param available - live registry ids.
+   */
+  pruneFiles(available: readonly DraftAttachmentId[]): void {
+    const keep = new Set(available)
+    const next = this.fileIds.filter(id => keep.has(id))
+    if (next.length === this.fileIds.length) return
+    this.fileIds = next
+    this.publish()
+  }
+
+  /**
    * Clear the draft as a successful-send commit: no undo unit is recorded and
    * the undo history is cut, so Ctrl/Cmd-Z cannot resurrect sent content
    * (the command path gets the same discipline from submit-settled success).
    * @param imageIds - admitted image ids to remove from this draft.
+   * @param fileIds - admitted file ids to remove from this draft.
    */
-  commitSend(imageIds: readonly DraftAttachmentId[]): void {
-    const submitted = new Set(imageIds)
-    this.imageIds = this.imageIds.filter(id => !submitted.has(id))
+  commitSend(imageIds: readonly DraftAttachmentId[], fileIds: readonly DraftAttachmentId[] = []): void {
+    const submittedImages = new Set(imageIds)
+    this.imageIds = this.imageIds.filter(id => !submittedImages.has(id))
+    const submittedFiles = new Set(fileIds)
+    this.fileIds = this.fileIds.filter(id => !submittedFiles.has(id))
     this.run(this.core.dispatch({ type: 'send-committed' }))
   }
 
@@ -207,27 +267,35 @@ export class SessionInputShell implements SessionInput {
    * dismisses and the menu tracks frozen.
    */
   submit(mode: InputSubmitMode = 'queue'): void {
-    if (this.snapshot.draft.trim() === '' && this.imageIds.length > 0) {
-      if (this.snapshot.phase === 'plain' && !this.imageSendInFlight) {
+    if (this.snapshot.draft.trim() === '' && (this.imageIds.length > 0 || this.fileIds.length > 0)) {
+      if (this.snapshot.phase === 'plain' && !this.attachmentSendInFlight) {
         const imageIds = [...this.imageIds]
-        this.imageSendInFlight = true
-        void this.deps.defaultSink('', imageIds, mode, new AbortController().signal).then((outcome) => {
-          this.imageSendInFlight = false
+        const fileIds = [...this.fileIds]
+        this.attachmentSendInFlight = true
+        void this.deps.defaultSink('', imageIds, fileIds, mode, new AbortController().signal).then((outcome) => {
+          this.attachmentSendInFlight = false
           if (this.disposed) return
-          if (outcome.kind === 'success') this.commitSend(imageIds)
+          if (outcome.kind === 'success') this.commitSend(imageIds, fileIds)
           else if (outcome.text !== undefined) this.notify('error', outcome.text)
         }, (error: unknown) => {
-          this.imageSendInFlight = false
+          this.attachmentSendInFlight = false
           if (!this.disposed) this.notify('error', error instanceof Error ? error.message : String(error))
         })
       }
+      return
+    }
+    // Claimed pre-gate: files never ride commands — a claimed line refuses to
+    // submit while files are attached (one notice, everything retained). The
+    // image gate below then applies its own opt-in policy.
+    const before = this.snapshot
+    if (before.phase === 'claimed' && this.fileIds.length > 0) {
+      this.notify('error', this.deps.commandFiles.unsupportedNotice(before.claim?.token ?? before.draft))
       return
     }
     // Claimed pre-gate: a claim that does not declare image acceptance never
     // submits while images are attached — one notice, everything retained.
     // Enter-time adjudication applies the same policy for unclaimed lines
     // inside the command source itself.
-    const before = this.snapshot
     if (before.phase === 'claimed' && this.imageIds.length > 0 && before.claim?.images !== true) {
       this.notify('error', this.deps.commandImages.unsupportedNotice(before.claim?.token ?? before.draft))
       return
@@ -415,6 +483,35 @@ export class SessionInputShell implements SessionInput {
     }
   }
 
+  /**
+   * Append already-minted file ids (the workspace-carry move: the browser
+   * objects stay in the shared conversation controller, so only the ids
+   * travel). Same admission lock as {@link addFiles}.
+   * @param ids - minted draft file ids to carry into this draft.
+   * @returns whether every id was appended.
+   */
+  addFileIds(ids: readonly DraftAttachmentId[]): boolean {
+    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
+    if (ids.length === 0) return true
+    this.fileIds = [...this.fileIds, ...ids]
+    this.publish()
+    return true
+  }
+
+  /**
+   * Drop ids from this draft WITHOUT releasing their browser objects (the
+   * workspace-carry move: the ids travel to the next shell, so the bytes stay
+   * in the shared controller — {@link removeFile} would free them).
+   * @param ids - file ids being carried away.
+   */
+  detachFileIds(ids: readonly DraftAttachmentId[]): void {
+    const gone = new Set(ids)
+    const next = this.fileIds.filter(id => !gone.has(id))
+    if (next.length === this.fileIds.length) return
+    this.fileIds = next
+    this.publish()
+  }
+
   // ---- effect executor ----
 
   private run(effects: readonly InputEffect[]): void {
@@ -455,9 +552,15 @@ export class SessionInputShell implements SessionInput {
    */
   private sinkSerialized(attempt: SubmitAttempt, draft: string, mode: InputSubmitMode): void {
     const imageIds = [...this.imageIds]
+    const fileIds = [...this.fileIds]
     const occurrences = this.core.state.occurrences
     if (occurrences.length === 0) {
-      this.settleSubmit(attempt, this.deps.defaultSink(draft.trim(), imageIds, mode, attempt.signal), imageIds)
+      this.settleSubmit(
+        attempt,
+        this.deps.defaultSink(draft.trim(), imageIds, fileIds, mode, attempt.signal),
+        imageIds,
+        fileIds,
+      )
       return
     }
     const inputTriggers = this.deps.inputTriggers?.()
@@ -481,7 +584,12 @@ export class SessionInputShell implements SessionInput {
           cursor = part.offset + part.length
         }
         out += draft.slice(cursor)
-        this.settleSubmit(attempt, this.deps.defaultSink(out.trim(), imageIds, mode, attempt.signal), imageIds)
+        this.settleSubmit(
+          attempt,
+          this.deps.defaultSink(out.trim(), imageIds, fileIds, mode, attempt.signal),
+          imageIds,
+          fileIds,
+        )
       },
       (error: unknown) => {
         controller.abort()
@@ -492,18 +600,25 @@ export class SessionInputShell implements SessionInput {
     )
   }
 
-  /** Settle one admission attempt; successful sends consume only their captured images. */
+  /** Settle one admission attempt; successful sends consume only their captured attachments. */
   private settleSubmit(
     attempt: SubmitAttempt,
     pending: Promise<SubmitOutcome>,
     imageIds: readonly DraftAttachmentId[] = [],
+    fileIds: readonly DraftAttachmentId[] = [],
   ): void {
     pending.then(
       (outcome) => {
         if (this.dead(attempt)) return
-        if (outcome.kind === 'success' && imageIds.length > 0) {
-          const submitted = new Set(imageIds)
-          this.imageIds = this.imageIds.filter(id => !submitted.has(id))
+        if (outcome.kind === 'success') {
+          if (imageIds.length > 0) {
+            const submitted = new Set(imageIds)
+            this.imageIds = this.imageIds.filter(id => !submitted.has(id))
+          }
+          if (fileIds.length > 0) {
+            const submitted = new Set(fileIds)
+            this.fileIds = this.fileIds.filter(id => !submitted.has(id))
+          }
         }
         this.run(this.core.dispatch({
           type: 'submit-settled',
@@ -590,7 +705,12 @@ export class SessionInputShell implements SessionInput {
 
   private compose(): InputState {
     const core = this.core.state
-    return { ...core, imageIds: this.imageIds, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
+    return {
+      ...core,
+      imageIds: this.imageIds,
+      fileIds: this.fileIds,
+      queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE,
+    }
   }
 
   private publish(): void {

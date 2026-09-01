@@ -2,7 +2,13 @@
 
 English | [中文](README.zh.md)
 
-Dynamic attachment presentation plugin for the conversation UI. It waits for the conversation package's `conversation.input.attachments` and `conversation.message.images` declarations through `ctx.slots.inject`, then registers the composer draft-image rail, document drop target, chat-history image gallery, and original-image lightbox. The conversation slot owner supplies attachment data, image loading, callbacks, and its namespace translator; presentation components remain pure props and are not exported from the package entry.
+Dynamic attachment presentation plugin for the conversation UI. It waits for the conversation package's `conversation.input.left`, `conversation.input.attachments`, and `conversation.message.images` declarations through `ctx.slots.inject`, then registers the composer attach-files button (the paperclip beside the command-menu `+`), the composer draft-image rail, the draft-file chip row, the document drop target, chat-history image gallery, and original-image lightbox. The conversation slot owner supplies attachment data, image loading, callbacks, and its namespace translator; presentation components remain pure props and are not exported from the package entry.
+
+## Attach files
+
+`PaperclipButton` occupies the first `conversation.input.left` seat, immediately right of the command-menu `+`. One click opens a native multi-file picker with no `accept` restriction — any format is offered — and every picked file enters the session input as a file draft through `inputActions.addFiles` (which mints the browser-owned draft and appends its id). The button disables while the session is removed or an admission phase is live, and re-selecting the same file works because the picker input resets after each change. The host turns file drafts into model-visible context on submit (see the apiproxy README); this package only collects and presents them.
+
+`ComposerAttachments` renders file drafts as chips (name plus a size suffix) below the image rail, each with a hover-visible remove control. Dropped and pasted batches route by declared type: images keep the image validation path, everything else attaches as a file draft.
 
 ## Attachment rail
 
@@ -18,7 +24,7 @@ Dynamic attachment presentation plugin for the conversation UI. It waits for the
 
 ## Model Experience
 
-None, as the plugin only renders attachment state supplied by the conversation UI and contributes no model-visible input.
+The attach-files button lets the user add files of any format to a message; the host admission converts those bytes into a model-visible text descriptor (plus inline content for text-decodable files) and materializes the bytes under the session workspace so the model can read them with its tools. The plugin itself renders only attachment state supplied by the conversation UI and neither assembles nor sends a provider request.
 
 #### KV Cache effect
 
@@ -26,6 +32,7 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **Images only** — non-image files have no rail card or history renderer yet; DeepSeek Chat-style file cards and upload-progress states wait until the composer accepts non-image attachments.
+- **Slash commands do not carry file drafts** — the composer refuses submit while a command is claimed and files are attached (files only ride ordinary messages).
+- **History renders file attachments as text** — a sent file appears in the transcript as the host's text descriptor (name, type, size, path, optional inline content), not a DeepSeek Chat-style file card; binary documents are addressed by their materialized path.
 - **No zoom or download in the lightbox** — the preview renders the original at fit-to-viewport size only.
 - **The lightbox does not trap focus** — it sets `aria-modal` and restores focus on close, but Tab can reach the page behind it.

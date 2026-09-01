@@ -88,6 +88,18 @@ describe('MenuView', () => {
     expect(screen.queryByText('正在加载…')).not.toBeNull()
   })
 
+  it('renders the localized label in place of the raw name when present', () => {
+    mount(openState({
+      groups: [{
+        source: 'command',
+        status: 'ready',
+        items: [{ name: 'goal', label: '目标', description: '设置目标' }],
+      }],
+    }))
+    const options = screen.getAllByRole('option')
+    expect(options.map(o => o.textContent)).toEqual(['目标设置目标'])
+  })
+
   it('keeps an opted-out source title hidden while its candidates are pending', () => {
     mount(openState({
       groups: [{ source: 'reference', showGroupTitle: false, status: 'pending', items: [] }],

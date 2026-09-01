@@ -36,7 +36,7 @@ import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { SkillRow } from './SkillRow.tsx'
-import { en, NS, zh, type SkillKey } from './locales.ts'
+import { en, NS, ru, zh, type SkillKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -61,7 +61,7 @@ export const inject = ['inputTriggers', 'connection', 'sessions', 'slots', 'loca
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-skill: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), 'ui-skill: dictionaries')
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
     { name: 'tool.call.toolview', key: 'skill', locale: NS },
     SkillRow,
@@ -130,6 +130,19 @@ export function apply(ctx: ClientContext): void {
   // locale service's own fallback ladder; candidate-time reads stay plain text.
   const t = ctx.locale.bind(NS)
 
+  /**
+   * The active locale's routing description when the skill carries one; the
+   * raw model-facing description is the fallback for `en` and unknown locales.
+   * @param skill - catalog entry whose descriptions to project.
+   * @returns the display description for the current locale.
+   */
+  const displayDescription = (skill: SkillEntry): string => {
+    const locale = ctx.get('locale')?.getLocale?.()?.active
+    return locale === 'zh' || locale === 'ru'
+      ? skill.localizedDescription?.[locale] ?? skill.description
+      : skill.description
+  }
+
   const source: InputTriggerSource = {
     trigger: '/',
     name: 'skill',
@@ -138,14 +151,21 @@ export function apply(ctx: ClientContext): void {
       const skills = await fetchCatalog(session.sessionId)
       // Superseded keystroke: the shared fetch stays warm, this caller yields.
       if (signal.aborted) return []
+      // Case-insensitive substring on the name, mirroring the command group's
+      // name-keyed matching: a query matches anywhere in the id, never a bare
+      // prefix, so `/sk` finds `find-skills` and `/eploy` finds `deploy`.
+      const normalized = query.trim().toLocaleLowerCase()
       return skills
-        .filter(skill => skill.name.startsWith(query))
-        .map(skill => ({
-          name: skill.name,
-          // The user-only marker rides the description (the menu's only
-          // secondary text); `hint` is the claim-state ghost text, not a badge.
-          description: skill.modelInvocable ? skill.description : `${t('menu.userOnly')} · ${skill.description}`,
-        }))
+        .filter(skill => normalized.length === 0 || skill.name.toLocaleLowerCase().includes(normalized))
+        .map(skill => {
+          const description = displayDescription(skill)
+          return {
+            name: skill.name,
+            // The user-only marker rides the description (the menu's only
+            // secondary text); `hint` is the claim-state ghost text, not a badge.
+            description: skill.modelInvocable ? description : `${t('menu.userOnly')} · ${description}`,
+          }
+        })
     },
     warm(session) {
       // Fire-and-forget scope-birth prewarm; the shared fetch reports

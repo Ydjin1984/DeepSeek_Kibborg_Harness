@@ -22,6 +22,7 @@ import type {
 import type { CommandContribution, CommandDecoration, CommandUiContract } from './contract.ts'
 import type { CommandDescriptor } from './directory.ts'
 import { CommandDirectory } from './directory.ts'
+import { zh, type CommandKey } from './locales.ts'
 import { PopupSelectController } from './popup.ts'
 import type { TokenSegment } from './popup.ts'
 
@@ -245,6 +246,30 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     }
   }
 
+  /**
+   * Localized menu label for one command. The key set (zh) decides whether a
+   * dictionary entry exists, so the lookup never falls back to a raw key in
+   * the UI; an unknown command keeps its raw name.
+   * @param name - command name without the leading slash.
+   * @returns the localized display label, or the raw name.
+   */
+  private menuLabel(name: string): string {
+    const key = `menu.${name}` as CommandKey
+    return key in zh ? this.t(key) : name
+  }
+
+  /**
+   * Localized menu description for one command; an unknown command keeps its
+   * raw description.
+   * @param name - command name without the leading slash.
+   * @param fallback - the raw description published by the host or contribution.
+   * @returns the localized description, or the raw one.
+   */
+  private menuDescription(name: string, fallback: string | undefined): string | undefined {
+    const key = `menu.${name}.description` as CommandKey
+    return key in zh ? this.t(key) : fallback
+  }
+
   /** Menu candidates: host catalog + contribution availability, then position filtering and fuzzy name ranking. */
   private async candidates(session: ClientSessionContext, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]> {
     const list = await this.directory.ensureReady(session.sessionId, req.signal)
@@ -252,14 +277,25 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     const seen = new Set<string>()
     for (const c of list) {
       seen.add(c.name)
-      rows.push({ name: c.name, description: c.description, ...(c.input !== undefined ? { hint: c.input.hint } : {}) })
+      const description = this.menuDescription(c.name, c.description)
+      rows.push({
+        name: c.name,
+        label: this.menuLabel(c.name),
+        ...(description === undefined ? {} : { description }),
+        ...(c.input !== undefined ? { hint: c.input.hint } : {}),
+      })
     }
     for (const contribution of this.live.contributions.values()) {
       if (!contribution.available(session)) continue
       if (seen.has(contribution.name)) {
         throw new Error(`ui-commands: contribution /${contribution.name} collides with a host command`)
       }
-      rows.push({ name: contribution.name, description: contribution.description })
+      const description = this.menuDescription(contribution.name, contribution.description)
+      rows.push({
+        name: contribution.name,
+        label: this.menuLabel(contribution.name),
+        ...(description === undefined ? {} : { description }),
+      })
     }
     return fuzzyCandidates(
       rows.filter(c => req.position === 'leading' || c.hint === undefined),

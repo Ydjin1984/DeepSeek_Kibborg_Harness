@@ -31,8 +31,10 @@ async function bench() {
   new RemoteService(ctx)
   const list = vi.fn<() => Promise<ListResult>>()
     .mockResolvedValue({ ok: true, value: EMPTY })
-  ctx.provide('remote.pluginInventory', { list })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list }
+  const setEnabled = vi.fn<(entryId: string, enabled: boolean) => Promise<ListResult>>()
+    .mockResolvedValue({ ok: true, value: EMPTY })
+  ctx.provide('remote.pluginInventory', { list, setEnabled })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, list, setEnabled }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -64,6 +66,23 @@ describe('ui-settings-plugin-inventory browser plugin', () => {
     expect(b.list).toHaveBeenCalledOnce()
     b.list.mockResolvedValueOnce({ ok: false, error: { code: 'REMOTE_ERROR', message: 'unavailable' } })
     await expect(injected.list()).rejects.toThrow('pluginInventory.list failed: REMOTE_ERROR: unavailable')
+    await b.ctx.fiber.dispose()
+  })
+
+  it('routes setEnabled through the generated Remote and folds its failures', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+
+    const entryId = 'some-entry' as Parameters<PluginInventorySettingsTabInjected['setEnabled']>[0]
+    const injected = (b.slots.entries('settings.plugins.tab')[0]!.inject as unknown as
+      () => PluginInventorySettingsTabInjected)()
+    await expect(injected.setEnabled(entryId, false)).resolves.toEqual(EMPTY)
+    expect(b.setEnabled).toHaveBeenCalledExactlyOnceWith(entryId, false)
+
+    b.setEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'REMOTE_ERROR', message: 'denied' } })
+    await expect(injected.setEnabled(entryId, true)).rejects
+      .toThrow('pluginInventory.setEnabled failed: REMOTE_ERROR: denied')
     await b.ctx.fiber.dispose()
   })
 

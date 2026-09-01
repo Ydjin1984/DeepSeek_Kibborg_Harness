@@ -18,7 +18,7 @@ import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type {
   ConsumeTokenGuard, EditRange, EditSelection, InputEffect, InputEvent, InputMachineOptions,
   InputState, Occurrence, PasteAttemptState, PasteComponent, SubmitAttempt,
-} from './contract.ts'
+} from '../contract/input.ts'
 
 /** Legacy fixed-width object replacement character rejected from pasted text. */
 export const PLACEHOLDER = '￼'
@@ -145,6 +145,7 @@ export class InputMachine {
     return {
       draft: this.draft,
       imageIds: [],
+      fileIds: [],
       draftRev: this.draftRev,
       phase: this.phase,
       ...(c

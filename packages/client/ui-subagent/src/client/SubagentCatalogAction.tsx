@@ -273,8 +273,13 @@ function CatalogRows({
         const label = entry.label ?? entry.id
         const mode = entry.mode === 'one-shot' ? t('mode.oneShot') : t('mode.continuable')
         const activity = entry.activity === 'running' ? t('activity.running') : t('activity.inactive')
-        const secondary = [summary?.title, mode, activity]
-          .filter(value => value !== undefined)
+        // Live last-activity detail folded on the host (see subagentActivity):
+        // the last tool call or a bounded reply snippet, shown only while running.
+        const runningDetail = entry.activity === 'running'
+          ? summary?.projectionValues?.subagentActivity?.detail
+          : undefined
+        const secondary = [summary?.title, mode, activity, runningDetail]
+          .filter((value): value is string => value !== undefined && value !== '')
           .join(' · ')
         const totalTokens = tokenTotal(summary?.projectionValues?.tokenUsage)
         const durationMs = activityDuration(

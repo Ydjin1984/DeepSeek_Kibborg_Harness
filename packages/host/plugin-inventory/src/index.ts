@@ -1,4 +1,4 @@
-/** Read-only projection of the current Cordis Loader plugin entries. */
+/** Projection of the current Cordis Loader plugin entries, with enablement control. */
 
 import type { Context, FiberState } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
@@ -66,6 +66,30 @@ export class PluginInventoryGateway extends TypertRemoteService {
       })
     }
     return { entries }
+  }
+
+  /**
+   * Toggle one non-group Loader entry's own enablement and persist the change
+   * through the entry's owning tree. A disabled entry loses its root Fiber;
+   * re-enabling restarts it. The bootstrap include and structural group rows
+   * are refused, because neither is a plugin a surface may switch off.
+   * @param entryId - Loader entry id of the entry to toggle.
+   * @param enabled - desired own enablement (`disabled: false` replaces a
+   * literal or expression-form `disabled` option).
+   * @returns the fresh inventory snapshot after the update commits.
+   */
+  @Remote
+  async setEnabled(entryId: PluginEntryId, enabled: boolean): Promise<PluginInventorySnapshot> {
+    const entry = this.ctx.loader.resolve(entryId)
+    if (entry.options.group) {
+      throw new Error(`pluginInventory.setEnabled: entry ${String(entryId)} is a group row and cannot be toggled`)
+    }
+    if (entry.options.name === 'cordis:include') {
+      throw new Error(`pluginInventory.setEnabled: entry ${String(entryId)} is the bootstrap include and cannot be toggled`)
+    }
+    await entry.update({ disabled: !enabled }, false, true)
+    entry.parent.tree.write()
+    return this.list()
   }
 }
 

@@ -20,7 +20,7 @@ import type {
 import { EMPTY_CHAT_SNAPSHOT } from './conversation.ts'
 import type { PendingInteraction } from './pending.ts'
 import { PendingWait } from './pending.ts'
-import { Notifier } from './notifier.ts'
+import { Notifier } from '../contract/notifier.ts'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionRemotes } from './remotes.ts'
 import { ProjectionValueStore } from './projection-store.ts'

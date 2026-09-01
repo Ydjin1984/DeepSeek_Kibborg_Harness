@@ -179,6 +179,11 @@ async function bench(snapshot: ConversationSnapshot) {
     },
   }, AppRoot)
 
+  // The Execution view is the conversation default; this suite asserts the
+  // chat flow, so the persisted per-session selection restores Chat.
+  localStorage.setItem('dsh.conversation.chat.s1', JSON.stringify({
+    selection: null, draft: '', view: 'chat', inspect: null,
+  }))
   const fiber = ctx.plugin({ inject: [...injectConversation], apply: applyConversation })
   await fiber.await()
   const toolFiber = ctx.plugin({ inject: [...injectTool], apply: applyTool })

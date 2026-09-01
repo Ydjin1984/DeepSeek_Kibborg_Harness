@@ -18,7 +18,7 @@ import type { PendingInteractionStatus } from './pending.ts'
 // the 'title' projection key this manager projects into list rows (and any
 // useProjection('title') consumer reads). Zero value imports by construction.
 import type {} from '@deepseek-ai/dsh-session-title/client'
-import { Notifier } from './notifier.ts'
+import { Notifier } from '../contract/notifier.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import { Session } from './session.ts'
 import type { SessionRemotes } from './remotes.ts'
@@ -31,13 +31,14 @@ import type { SessionRemotes } from './remotes.ts'
  * re-pulls ride the `state`/`error` axis, which is where failure is modeled
  * (no `error` phase here; that would duplicate `state`).
  */
-export type SessionListPhase = 'pending' | 'ready'
-
-/** Request-local content hit returned to sidebar search consumers. */
-export interface SessionSearchResultItem {
-  sessionId: SessionId
-  snippet: string
-}
+// Session-list state types live in contract (the outward sessions face);
+// re-exported here for in-domain consumers.
+export type {
+  SessionListPhase, SessionSearchResultItem, SubagentCatalogSnapshot,
+} from '../contract/session-list.ts'
+import type {
+  SessionListPhase, SessionSearchResultItem, SubagentCatalogSnapshot,
+} from '../contract/session-list.ts'
 
 /** Immutable session-list snapshot for useSessionList. */
 export interface SessionListSnapshot {
@@ -52,12 +53,6 @@ export interface SessionListSnapshot {
   /** Background jobs per session; an absent key is an empty set. */
   jobsBySession: Readonly<Record<SessionId, readonly JobView[]>>
   currentAddress: SubagentAddress | undefined
-}
-
-/** One parent-addressed durable catalog projected through the sessions snapshot. */
-export interface SubagentCatalogSnapshot extends SubagentCatalog {
-  state: 'loading' | 'ready' | 'error'
-  error: RpcError | null
 }
 
 interface CatalogInflight {
@@ -322,6 +317,66 @@ export class SessionManager {
     })
   }
 
+  /**
+   * Open the live window of one running subagent child so its mux frames are
+   * consumed and its transcript stays current while the user works elsewhere.
+   * The address is retained for later navigation, and open() is idempotent, so
+   * repeated calls (catalog refreshes, status frames) are no-ops.
+   * @param address - the durable direct-parent address routing the child's history.
+   */
+  private openSubagentWindow(address: SubagentAddress): void {
+    this.addresses.set(address.childSessionId, address)
+    const session = this.get(address.childSessionId)
+    session.configureSubagent(
+      address,
+      this.catalogs.get(address.parentSessionId)?.parentAvailable ?? false,
+    )
+    void session.open()
+  }
+
+  /** Resolve one subagent child's transport address from retained or catalogued facts. */
+  private subagentAddressOf(sessionId: SessionId): SubagentAddress | undefined {
+    const retained = this.addresses.get(sessionId)
+    if (retained !== undefined) return retained
+    for (const [parentSessionId, catalog] of this.catalogs) {
+      const entry = catalog.entries.find(candidate =>
+        candidate.kind === 'child' && candidate.id === sessionId)
+      if (entry?.kind === 'child') {
+        return { parentSessionId, childSessionId: sessionId, mode: entry.mode }
+      }
+    }
+    return undefined
+  }
+
+  /** Whether one session is a running subagent child known through list or catalog facts. */
+  private isRunningSubagent(sessionId: SessionId): boolean {
+    const summary = this.summaries.find(candidate => candidate.sessionId === sessionId)
+    if (summary?.origin === 'subagent' && summary.running) return true
+    for (const catalog of this.catalogs.values()) {
+      const entry = catalog.entries.find(candidate =>
+        candidate.kind === 'child' && candidate.id === sessionId)
+      if (entry?.kind === 'child' && entry.activity === 'running') return true
+    }
+    return false
+  }
+
+  /**
+   * Open the live window of a running subagent child, loading its parent's
+   * catalog first when the mode is not yet known (the catalog is the
+   * authoritative mode source; guessing would misroute one-shot history).
+   * @param sessionId - the running child session id.
+   */
+  private ensureRunningSubagentWindow(sessionId: SessionId): void {
+    const address = this.subagentAddressOf(sessionId)
+    if (address !== undefined) {
+      this.openSubagentWindow(address)
+      return
+    }
+    const summary = this.summaries.find(candidate => candidate.sessionId === sessionId)
+    if (summary?.origin !== 'subagent' || summary.parentSessionId === undefined) return
+    void this.refreshSubagents(summary.parentSessionId)
+  }
+
   /** Rebuild every resident Session after one coalesced registry transaction. */
   rebuildConversationRegistry(): void {
     for (const session of this.sessions.values()) session.rebuildConversationRegistry()
@@ -363,9 +418,10 @@ export class SessionManager {
         if (result.ok) {
           const parentAvailable = this.catalogInflight.get(parentSessionId)?.parentAvailableOverride
             ?? result.value.parentAvailable
+          const entries = this.withCatalogMutations(result.value.entries, expandableRows, activityRows)
           this.catalogs.set(parentSessionId, {
             ...result.value,
-            entries: this.withCatalogMutations(result.value.entries, expandableRows, activityRows),
+            entries,
             parentAvailable,
             state: 'ready',
             error: null,
@@ -373,6 +429,12 @@ export class SessionManager {
           for (const [childId, address] of this.addresses) {
             if (address.parentSessionId !== parentSessionId) continue
             this.sessions.get(childId)?.handleSubagentParentAvailable(parentAvailable)
+          }
+          // Running children stay live off-screen: open each one's window so
+          // its mux frames are consumed and its transcript stays current.
+          for (const entry of entries) {
+            if (entry.kind !== 'child' || entry.activity !== 'running') continue
+            this.openSubagentWindow({ parentSessionId, childSessionId: entry.id, mode: entry.mode })
           }
         } else {
           this.catalogs.set(parentSessionId, {
@@ -782,6 +844,21 @@ export class SessionManager {
           return
         }
         default:
+          // A running subagent child's live window consumes its own frames
+          // off-screen; open it on the first event so history and live events
+          // stitch through the existing open/backfill machinery.
+          if (frame.type === 'session/event' && this.isRunningSubagent(frame.sessionId)) {
+            const address = this.subagentAddressOf(frame.sessionId)
+            if (address !== undefined) {
+              this.openSubagentWindow(address)
+              // The freshly opened window consumes this very frame (the open
+              // history backfill covers the frames that dropped before it).
+              this.sessions.get(frame.sessionId)?.handleMuxEnvelope(envelope.rpcId, frame)
+            } else {
+              const summary = this.summaries.find(candidate => candidate.sessionId === frame.sessionId)
+              if (summary?.parentSessionId !== undefined) void this.refreshSubagents(summary.parentSessionId)
+            }
+          }
           return
       }
     }
@@ -864,6 +941,10 @@ export class SessionManager {
         this.recordMutation({ kind: 'status', sessionId: frame.sessionId, running: frame.running })
         this.sessions.get(frame.sessionId)?.handleRunning(frame.running)
         this.updateCatalogActivity(frame.sessionId, frame.running)
+        // A subagent child entering its turn starts its live window off-screen
+        // (see openSubagentWindow): without it the client drops the child's
+        // session/event frames until the user opens it by hand.
+        if (frame.running) this.ensureRunningSubagentWindow(frame.sessionId)
         return
       }
       case 'host/agent-error': {

@@ -5,18 +5,47 @@
     - text: Session log
     - img
   - tablist:
-    - tab "Chat" [selected]
+    - tab "Chat"
+    - tab "Execution" [selected]
     - tab "Trajectory"
+- region "Task execution":
+  - text: Reference order target Completed 1 turns · 0 steps · 0 tools · 0 files · 0 errors
+  - button "Collapse details" [expanded]:
+    - img
+  - text: No active task
+- searchbox "Search events…"
+- group "Filter events":
+  - button "All" [pressed]
+  - button "Analysis"
+  - button "Tools"
+  - button "Files"
+  - button "Terminal"
+  - button "Git"
+  - button "Errors"
+  - button "Success"
+- button "Expand all"
+- button "Collapse all"
+- button "{{clock}} User @Research notes what changed?" [expanded]:
+  - time: {{clock}}
+  - text: User @Research notes what changed?
 - text: Research notes what changed? Referenced session · Research notes {{clock}}
 - button "Copy":
   - img
+- 'button "{{clock}} Context ## Referenced sessions Research notes" [expanded]':
+  - time: {{clock}}
+  - text: "Context ## Referenced sessions Research notes"
 - button "Session recall Research notes":
   - img
   - text: Session recall Research notes
+- button "{{clock}} Completed Turn 1 complete":
+  - time: {{clock}}
+  - text: Completed Turn 1 complete
 - textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

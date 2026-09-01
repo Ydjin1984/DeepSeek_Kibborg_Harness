@@ -90,6 +90,11 @@ async function bench(nodes: ToolResultNode[]) {
     },
   })
   await runtime.root.declare(LAYOUT_CHILDREN, AppRoot)
+  // The Execution view is the conversation default; this suite asserts the
+  // chat flow, so the persisted per-session selection restores Chat.
+  localStorage.setItem('dsh.conversation.chat.s1', JSON.stringify({
+    selection: null, draft: '', view: 'chat', inspect: null,
+  }))
   await runtime.mount({ inject: [...injectConversation], apply: applyConversation })
   await runtime.mount({ inject: [...injectTool], apply: applyTool })
   return runtime

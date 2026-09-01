@@ -22,7 +22,7 @@ import {
   fixtureUserPrompts, launchWebScaffold, seedSession, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/pwsh-terminal', import.meta.url))
 const SEED = join(SNAPSHOT_DIR, 'seed.jsonl')
@@ -77,6 +77,9 @@ describe.skipIf(MODE === 'record' || !HAS_PWSH)('web e2e: pwsh calls use the bas
     const result = page.getByRole('tree', { name: 'Search results' }).getByRole('treeitem')
     await expect.poll(() => result.count(), { timeout: 15_000 }).toBe(1)
     await result.click()
+    // The opened session has visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await page.getByRole('tab', { name: 'Chat', exact: true }).waitFor({ timeout: 15_000 })
     // The tool row is expand-gated: the settled row uses the bash layout and carries the
     // shell-family variant, and the terminal card lives in the expanded body.

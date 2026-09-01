@@ -161,6 +161,10 @@ function scriptedFace(overrides: {
         ],
       }))),
       models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
+      oauthLoginStart: vi.fn(),
+      oauthLoginWait: vi.fn(),
+      oauthLoginCancel: vi.fn(),
+      oauthLogout: vi.fn(),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: wireNamespaces() }))),
@@ -315,6 +319,7 @@ describe('ModelsSection', () => {
       removable: false,
       apiKeyEnv: 'X',
       credential,
+      oauthCredential: undefined,
     })
     expect(needsSetup(row(undefined), false)).toBe(true)
     expect(needsSetup(row({ configured: true, writable: true }), false)).toBe(false)

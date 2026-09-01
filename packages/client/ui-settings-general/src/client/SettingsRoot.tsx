@@ -45,10 +45,55 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [visitedIds, setVisitedIds] = useState<ReadonlySet<string>>(() => new Set())
+
+  // A section stays mounted once visited and is hidden instead of unmounted,
+  // so local state (an in-progress provider edit, the inventory's query and
+  // expansion, form drafts) survives switching between nav sections — the
+  // same contract the Plugins tabs already honor with their own visited set.
+  useEffect(() => {
+    if (active === undefined) return
+    setVisitedIds((previous) => {
+      if (previous.has(active)) return previous
+      return new Set([...previous, active])
+    })
+  }, [active])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // A nested dialog (delete/copy confirmations) attaches its own document
+      // listener; Escape and the Tab trap must defer to it. Portals append
+      // nested dialogs later in the DOM, so the topmost `[role="dialog"]` is
+      // the one that owns the keyboard.
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      const topmost = dialogs[dialogs.length - 1]
+      const nested = topmost !== undefined && topmost !== panelRef.current
+      if (e.key === 'Escape') {
+        if (!nested) onClose()
+        return
+      }
+      if (e.key !== 'Tab' || nested) return
+      // Focus trap: aria-modal="true" promises keyboard containment, so Tab
+      // cycles inside the panel instead of escaping into the application.
+      // Visited-but-hidden sections stay mounted for their local state, so
+      // their controls are excluded from the cycle.
+      const focusables = [...panelRef.current!.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter(el => el.closest('[hidden]') === null)
+      if (focusables.length === 0) return
+      const first = focusables[0]!
+      const last = focusables[focusables.length - 1]!
+      const active = document.activeElement
+      if (e.shiftKey) {
+        if (active === first || !panelRef.current?.contains(active)) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (active === last || !panelRef.current?.contains(active)) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
@@ -61,7 +106,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
   return (
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
-      <div className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div ref={panelRef} className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <nav className={css.nav}>
           <div className={css.navTitle} id={titleId}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
@@ -88,7 +133,13 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
             </button>
           </div>
           <div className={css.options}>
-            {active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+            {rows
+              .filter(row => row.id === active || visitedIds.has(row.id))
+              .map(row => (
+                <div key={row.id} hidden={row.id !== active}>
+                  {renderSlot('settings.section', { close: onClose }, { only: row.id })}
+                </div>
+              ))}
           </div>
         </div>
       </div>
@@ -106,9 +157,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   const [open, setOpen] = useState(false)
   const [activeId, setActiveId] = useState<string | undefined>(undefined)
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const close = useCallback(() => {
     setOpen(false)
     setActiveId(undefined)
+    // Restore keyboard focus to the trigger that opened the panel.
+    triggerRef.current?.focus()
   }, [])
   const openSection = useCallback((id: string) => {
     setActiveId(id)
@@ -142,6 +196,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className={clsx(css.trigger, !wide && css.rail)}
         aria-haspopup="dialog"

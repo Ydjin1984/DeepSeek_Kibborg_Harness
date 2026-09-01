@@ -88,12 +88,30 @@ function isTrustedAuthority(hostUrl: URL, trustedHosts: readonly string[]): bool
 }
 
 /**
+ * Whether a socket peer address is a loopback. The TCP peer is set by the OS,
+ * never by the client, so it closes the one hole the header fence leaves open:
+ * a remote client can put `Host: 127.0.0.1` on the wire, but it cannot make
+ * its socket originate from the loopback interface.
+ * @param address - `socket.remoteAddress` as node:http reports it.
+ */
+export function isLoopbackPeer(address: string): boolean {
+  return address === '::1'
+    || address === '127.0.0.1'
+    || address.startsWith('127.')
+    || address.startsWith('::ffff:127.')
+}
+
+/**
  * Decide whether one /api request may reach the RPC bridge.
  * @param request - Node HTTP or Fetch request facts (headers).
  * @param trustedHosts - non-loopback authorities this deployment serves: exact `host:port`, or port-less `host` matching any port.
+ * @param peer - the request's socket peer address when known (node:http
+ *   remoteAddress). A loopback-pinned gate (empty `trustedHosts`) additionally
+ *   requires the peer to be loopback, so a remote client cannot pass the pin by
+ *   forging the Host header — headers are client-controlled, the TCP peer is not.
  * @returns true when the Host is ours (loopback or trusted) and any attached browser markers are same-origin.
  */
-export function isTrustedApiRequest(request: ApiTrustRequest, trustedHosts: readonly string[]): boolean {
+export function isTrustedApiRequest(request: ApiTrustRequest, trustedHosts: readonly string[], peer?: string): boolean {
   // Host fence (DNS-rebinding defense), applied to every request: the browser
   // fills Host from the URL it believes it is talking to, so a rebound page
   // carries the attacker's domain here even though the socket lands on this
@@ -106,6 +124,11 @@ export function isTrustedApiRequest(request: ApiTrustRequest, trustedHosts: read
   const hostUrl = parseAuthority(host)
   if (hostUrl === undefined) return false
   if (!isLoopbackHostname(hostUrl.hostname) && !isTrustedAuthority(hostUrl, trustedHosts)) return false
+  // Socket-peer fence for loopback-pinned gates: even a header that names a
+  // loopback authority is not enough when the connection itself arrived from
+  // elsewhere (forged Host over the LAN). When the peer is unknown (non-TCP
+  // transports) the header fence alone stands.
+  if (trustedHosts.length === 0 && peer !== undefined && !isLoopbackPeer(peer)) return false
   // Cross-site fence: modern browsers label the initiator relationship on
   // every fetch; an explicit cross-site marker is refused regardless of Origin.
   if (header(request.headers, 'sec-fetch-site') === 'cross-site') return false

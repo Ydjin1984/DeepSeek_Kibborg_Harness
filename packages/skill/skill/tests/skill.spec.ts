@@ -5,6 +5,7 @@ import SkillRegistry, {
   isModelInvocable,
   isUserInvocable,
   renderSkillContent,
+  type LocalizedSkillDescription,
   type SkillCandidate,
   type SkillDefinition,
   type SkillInvocationPolicy,
@@ -218,6 +219,37 @@ describe('SkillRegistry registry', () => {
     await expect(badBoolean.skills.list()).rejects.toThrow('non-boolean invocation.modelInvocable')
   })
 
+  it('carries optional localized descriptions through list() and get()', async () => {
+    const localized: LocalizedSkillDescription = { zh: '本地化描述', ru: 'Локализованное описание' }
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    const candidate = {
+      ...memorySkill('localized-skill', 'Default description', 1),
+      provider: 'localized',
+      localizedDescription: localized,
+    }
+    registerProvider(ctx, {
+      name: 'localized',
+      list: () => Promise.resolve([candidate]),
+      get: () => Promise.resolve({
+        name: candidate.name,
+        description: candidate.description,
+        localizedDescription: candidate.localizedDescription,
+        invocation: candidate.invocation,
+        source: candidate.source,
+        provider: candidate.provider,
+        resourceBase: { kind: 'opaque', description: 'resources' },
+        content: 'body',
+      }),
+    })
+    expect((await ctx.skills.list())[0]).toMatchObject({
+      name: 'localized-skill',
+      description: 'Default description',
+      localizedDescription: localized,
+    })
+    expect((await ctx.skills.get('localized-skill'))?.localizedDescription).toEqual(localized)
+  })
+
   it('rejects malformed provider results and every malformed candidate scalar', async () => {
     const malformedOutputs: unknown[] = [null, 1, {}, { candidates: [], complete: 'yes' }]
     for (const [index, output] of malformedOutputs.entries()) {
@@ -238,6 +270,15 @@ describe('SkillRegistry registry', () => {
       { patch: { rank: '1' as unknown as number }, expected: 'invalid rank' },
       { patch: { provider: { value: 'provider' } as unknown as string }, expected: 'non-string provider' },
       { patch: { path: 1 as unknown as string }, expected: 'non-string path' },
+      {
+        patch: { localizedDescription: [] as unknown as LocalizedSkillDescription },
+        expected: 'localizedDescription must be an object',
+      },
+      {
+        patch: { localizedDescription: { en: 'English' } as unknown as LocalizedSkillDescription },
+        expected: 'unsupported locale "en"',
+      },
+      { patch: { localizedDescription: { zh: '' } }, expected: 'localizedDescription.zh must be a non-empty string' },
     ]
     for (const [index, { patch, expected }] of cases.entries()) {
       const ctx = new Context()
@@ -1031,6 +1072,13 @@ describe('SkillRegistry registry', () => {
       invocation: [] as never,
       content: 'bad',
     })).toThrow('non-object invocation policy')
+    expect(() => ctx.skills.register({
+      name: 'bad-localized',
+      description: 'Bad localized',
+      source: 'runtime',
+      content: 'bad',
+      localizedDescription: { en: 'English' } as unknown as LocalizedSkillDescription,
+    })).toThrow('unsupported locale "en"')
     expect(await ctx.skills.get('missing-skill')).toBeUndefined()
     expect(await ctx.skills.get('Bad_Name')).toBeUndefined()
 

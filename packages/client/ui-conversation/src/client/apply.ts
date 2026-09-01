@@ -16,18 +16,19 @@ import type {
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
   DetailsInjected,
 } from './contract/slots.ts'
-import type { InputNotice } from './input/contract.ts'
+import type { InputNotice } from './contract/input.ts'
 import { createChatStore } from './stores.ts'
 import { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 import type { IConversation } from './service.ts'
-import { ComposerBlockRegistry } from './input/blocks.ts'
-import type { ComposerBlock } from './input/blocks.ts'
+import { ComposerBlockRegistry } from './contract/blocks.ts'
+import type { ComposerBlock } from './contract/blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ChatView } from './chat/ChatView.tsx'
+import { ExecutionView } from './execution/ExecutionView.tsx'
 import { StatsLine } from './chat/StatsLine.tsx'
 import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
@@ -35,7 +36,7 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
-import { en, NS, zh, type ConversationKey } from './locales.ts'
+import { en, NS, ru, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
@@ -121,7 +122,7 @@ export function apply(ctx: Context): void {
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)
 
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), 'ui-conversation: dictionaries')
 
   // Registration-time text (the view tab label) reads through the bound
   // translate as a thunk, so it follows the active locale without
@@ -163,6 +164,45 @@ export function apply(ctx: Context): void {
     list: viewTabs,
     subscribe: (fn: () => void) => slots.subscribe('conversation.view', fn),
     version: () => slots.getVersion('conversation.view'),
+  }
+
+  // Shared view inject: Chat and Execution are registered with the same
+  // callbacks (openers, inspect handoff, scroll memory, fork), so one factory
+  // serves both ring entries.
+  const viewInject = (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
+    const scoped = scopedConversation(sessions, sessionId)
+    return {
+      openDetails: (target) => {
+        actions.select(target)
+        layout.openDetails()
+      },
+      fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
+      openFile: (path) => {
+        const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
+        return workspaces.openPath(resolveWorkspacePath(cwd, path))
+      },
+      loadOlder: () => { void scoped.loadOlder() },
+      // Unregistered 'trajectory' id is safe: the tab ring falls back to
+      // the first view, and the untouched inspect target stays inert.
+      inspectCall: (callId) => {
+        actions.setInspect({ callId })
+        actions.setView('trajectory')
+      },
+      chatScroll: {
+        save: (position) => {
+          if (position === null) chatScrollPositions.delete(sessionId)
+          else chatScrollPositions.set(sessionId, position)
+        },
+        read: () => chatScrollPositions.get(sessionId) ?? null,
+      },
+      forkAt: (seq) => {
+        sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
+          .then((childId) => { sessions.open(childId) })
+          .catch(() => {
+            // Fork or child-rename failure keeps the source view untouched.
+          })
+      },
+    }
   }
 
   // The per-session input machine registry (SessionInputResolver face; published as
@@ -218,14 +258,19 @@ export function apply(ctx: Context): void {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
           const imageIds = from.snapshot.imageIds
+          const fileIds = from.snapshot.fileIds
           const next = inputHub.shell(nextId)
-          if (imageIds.length === 0 || next.addImages(imageIds)) {
+          if ((imageIds.length === 0 || next.addImages(imageIds))
+            && (fileIds.length === 0 || next.addFileIds(fileIds))) {
             if (draft !== '') {
               next.setDraft(draft)
               from.setDraft('')
             }
             if (imageIds.length > 0) {
               for (const id of imageIds) from.removeImage(id)
+            }
+            if (fileIds.length > 0) {
+              from.detachFileIds(fileIds)
             }
           }
         }
@@ -236,11 +281,18 @@ export function apply(ctx: Context): void {
 
   // The strict session body fills the resident scrollport without owning it;
   // the Hero/composer path therefore stays fixed while the first blank
-  // session appears after a Workspace pick.
+  // session appears after a Workspace pick. The body ALSO declares the
+  // shared Chat-node seats ('conversation.chat.node' + the message-image
+  // gallery) once, and hands their render callbacks to every conversation
+  // view through the view owner share — slots allow one declarer per key, so
+  // Chat and Execution dispatch the same node renderers without each
+  // re-declaring the child slots.
   slots.register({
     name: 'conversation.session',
     children: {
       'conversation.view': { kind: 'list', scope: 'session' },
+      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
+      'conversation.message.images': { kind: 'single', scope: 'session' },
     },
     store: chatStore,
     inject: (sessionId: SessionId, _actions: BoundActions<typeof chatStore>): ConversationSessionInjected => {
@@ -249,6 +301,7 @@ export function apply(ctx: Context): void {
         views,
         releaseSessionImages: (id) => { conversation.releaseSessionImages(id) },
         bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
+        loadImage: attachment => conversation.resolveImage(sessionId, attachment),
       }
     },
   }, ConversationSession)
@@ -294,6 +347,9 @@ export function apply(ctx: Context): void {
           addImages: undefined,
           removeImage: undefined,
           draftImages: undefined,
+          addFiles: undefined,
+          removeFile: undefined,
+          draftFiles: undefined,
           resolveSubmitMode: (running, gesture, steeringAvailable) =>
             submissionPolicy.resolve(running, gesture, steeringAvailable),
           toggleCommandMenu: undefined,
@@ -328,6 +384,18 @@ export function apply(ctx: Context): void {
           shell.removeImage(id)
         },
         draftImages: ids => conversation.draftImages(ids),
+        addFiles: (files) => {
+          const ids = conversation.createDraftFiles(files).map(file => file.id)
+          if (!shell.addFileIds(ids)) {
+            for (const id of ids) conversation.releaseDraftFile(id)
+          }
+          return null
+        },
+        removeFile: (id) => {
+          conversation.releaseDraftFile(id)
+          shell.removeFile(id)
+        },
+        draftFiles: ids => conversation.draftFiles(ids),
         resolveSubmitMode: (running, gesture, steeringAvailable) =>
           submissionPolicy.resolve(running, gesture, steeringAvailable),
         toggleCommandMenu: inputTriggers === undefined
@@ -375,56 +443,29 @@ export function apply(ctx: Context): void {
 
   // The chat view: first entry of the ring this package just declared.
   // ChatView owns only the stable ordered Node list. Business renderers are
-  // independently keyed behind its one Node seat.
+  // independently keyed behind the shared Node seat, which the session body
+  // declares and hands to this view as renderChatNode.
   slots.register({
     name: 'conversation.view',
     id: 'chat',
     order: 0,
     label: () => t('view.chat'),
     locale: NS,
-    children: {
-      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
-      'conversation.message.images': { kind: 'single', scope: 'session' },
-    },
     store: chatStore,
-    inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
-      const conversation = concreteConversation(ctx)
-      const scoped = scopedConversation(sessions, sessionId)
-      return {
-        openDetails: (target) => {
-          actions.select(target)
-          layout.openDetails()
-        },
-        fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
-        openFile: (path) => {
-          const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
-          return workspaces.openPath(resolveWorkspacePath(cwd, path))
-        },
-        loadOlder: () => { void scoped.loadOlder() },
-        loadImage: attachment => conversation.resolveImage(sessionId, attachment),
-        // Unregistered 'trajectory' id is safe: the tab ring falls back to
-        // the first view, and the untouched inspect target stays inert.
-        inspectCall: (callId) => {
-          actions.setInspect({ callId })
-          actions.setView('trajectory')
-        },
-        chatScroll: {
-          save: (position) => {
-            if (position === null) chatScrollPositions.delete(sessionId)
-            else chatScrollPositions.set(sessionId, position)
-          },
-          read: () => chatScrollPositions.get(sessionId) ?? null,
-        },
-        forkAt: (seq) => {
-          sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
-            .then((childId) => { sessions.open(childId) })
-            .catch(() => {
-              // Fork or child-rename failure keeps the source view untouched.
-            })
-        },
-      }
-    },
+    inject: viewInject,
   }, ChatView)
+
+  // The execution view: the professional trace timeline over the same
+  // conversation snapshot (second ring entry, between Chat and Trajectory).
+  slots.register({
+    name: 'conversation.view',
+    id: 'execution',
+    order: 5,
+    label: () => t('view.execution'),
+    locale: NS,
+    store: chatStore,
+    inject: viewInject,
+  }, ExecutionView)
 
   // Session stats stick with the composer (composer.dock = stats-line family).
   slots.register({ name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS }, StatsLine)

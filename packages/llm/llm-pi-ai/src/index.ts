@@ -61,10 +61,11 @@ import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
-import { catalogProviderIds, catalogProviderTakesApiKey } from './catalog.ts'
+import { catalogProviderIds, catalogProviderOAuth, catalogProviderTakesApiKey } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
+import { credentialHost, OAuthLoginRegistry, oauthRef } from './oauth.ts'
 
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
@@ -123,6 +124,7 @@ function directoryEntries(
   const catalog = new Set(catalogProviderIds())
   const entries = new Map<string, LlmConfigurableProvider>()
   const declare = (provider: string, displayName: string): void => {
+    const oauth = catalogProviderOAuth(provider)
     entries.set(provider, {
       provider,
       displayName,
@@ -132,6 +134,12 @@ function directoryEntries(
       // narrowing a shipped provider's models stores a profile too, and that
       // route is still one pi-ai knows.
       declared: !catalog.has(provider),
+      ...oauth === undefined ? {} : {
+        oauth: {
+          loginLabel: oauth.loginLabel ?? oauth.name,
+          credentialRef: oauthRef(provider),
+        },
+      },
     })
   }
   // A provider whose only native method is OAuth leaves this adapter nothing
@@ -172,17 +180,46 @@ export function apply(ctx: Context, config: Config): void {
   }
   profiles()
 
+  const oauthLogins = new OAuthLoginRegistry(
+    catalogProviderOAuth,
+    {
+      ...credentialHost(ctx.get('credentials')),
+      ensureRoute: async (provider) => {
+        if (profiles().has(provider)) return
+        const settings = ctx.get('settings')
+        if (settings === undefined) {
+          throw new LlmError(
+            `llm-pi-ai: OAuth login for "${provider}" needs the settings service to activate the route`,
+            'NO_OAUTH',
+          )
+        }
+        await settings.mutate(NS, [{ op: 'set', path: ['providers', provider], value: {} }])
+      },
+    },
+  )
+  ctx.llm.registerOAuthLogin(NS, {
+    start: (provider, signal) => oauthLogins.start(provider, signal),
+    wait: (loginId, signal) => oauthLogins.wait(loginId, signal),
+    cancel: (loginId) => { oauthLogins.cancel(loginId) },
+    logout: provider => oauthLogins.logout(provider),
+  })
+
   const resolveApiKey = async (
     provider: string,
     profile: ResolvedPiAiProviderProfile,
   ): Promise<string | undefined> => {
     const ref = profile.apiKeyEnv
-    // Only a profile that names no credential at all defers to pi-ai's
-    // provider-native discovery. Once one is named, a miss must fail loud:
-    // handing pi-ai `undefined` would let it pick up an unrelated ambient key
-    // (OPENAI_API_KEY and friends), billing another tenant for a request the
-    // deployment meant to authenticate differently.
-    if (ref === undefined) return undefined
+    // Only a profile that names no credential at all defers to OAuth, then
+    // pi-ai's provider-native discovery. Once an API-key reference is named,
+    // a miss must fail loud: handing pi-ai `undefined` would let it pick up
+    // an unrelated ambient key (OPENAI_API_KEY and friends), billing another
+    // tenant for a request the deployment meant to authenticate differently.
+    if (ref === undefined) {
+      const oauthToken = await oauthLogins.accessToken(provider)
+      return oauthToken === undefined
+        ? undefined
+        : assertUsableApiKey(oauthToken, 'llm-pi-ai', oauthRef(provider))
+    }
     const credentials = ctx.get('credentials')
     const hit = credentials !== undefined
       ? (await credentials.resolve(ref))?.value

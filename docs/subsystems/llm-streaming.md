@@ -812,6 +812,47 @@ registerModelDiscovery( settingsNs: string, discover: (request: LlmModelDiscover
 async discoverModels( settingsNs: string, request: LlmModelDiscoveryRequest, ): Promise<LlmDiscoveredModel[]>
 
 /**
+ * Offer device-code OAuth login for the settings namespace this plugin owns.
+ * One offer per namespace (`INVALID_OAUTH`/`DUPLICATE_OAUTH`), disposed with
+ * the calling fiber.
+ * @param settingsNs - the namespace whose profiles this login serves.
+ * @param handlers - start/wait/cancel/logout for that namespace.
+ * @returns the disposer that withdraws the offer.
+ */
+registerOAuthLogin(settingsNs: string, handlers: LlmOAuthLoginHandlers): () => void
+
+/**
+ * Start device-code OAuth for one route in a namespace that registered login.
+ * @param settingsNs - namespace whose registered handlers serve this login.
+ * @param provider - provider route key.
+ * @param signal - cancels obtaining the device code.
+ * @returns the device challenge the UI must show.
+ */
+startOAuthLogin( settingsNs: string, provider: string, signal?: AbortSignal, ): Promise<LlmOAuthDeviceChallenge>
+
+/**
+ * Wait for an in-flight OAuth login to store tokens and activate the route.
+ * @param settingsNs - namespace whose registered handlers serve this login.
+ * @param loginId - id from {@link startOAuthLogin}.
+ * @param signal - cancels the wait and the login.
+ */
+waitOAuthLogin(settingsNs: string, loginId: string, signal?: AbortSignal): Promise<void>
+
+/**
+ * Cancel one in-flight OAuth login. Unknown ids are a no-op at the handler.
+ * @param settingsNs - namespace whose registered handlers serve this login.
+ * @param loginId - id from {@link startOAuthLogin}.
+ */
+cancelOAuthLogin(settingsNs: string, loginId: string): void
+
+/**
+ * Forget the stored OAuth credential for one route.
+ * @param settingsNs - namespace whose registered handlers serve this login.
+ * @param provider - provider route key.
+ */
+logoutOAuth(settingsNs: string, provider: string): Promise<void>
+
+/**
  * Resolve the retry policy captured when one provider route was registered.
  * @param provider - registered provider route to inspect.
  * @returns the provider-owned policy, with normal defaults already resolved.
@@ -873,7 +914,7 @@ async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<Prepared
 stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:284`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:286`](../../packages/llm/llm/src/index.ts)
 
 <a id="llm-events"></a>
 
@@ -922,5 +963,5 @@ Waterfall around every streaming model call (retry, replay, routing). Bound to t
 'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:64`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts:66`](../../packages/llm/llm/src/index.ts)
 <!-- END GENERATED cordis-surface -->

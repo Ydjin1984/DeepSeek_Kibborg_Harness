@@ -62,7 +62,11 @@ export type ProducedFilesProps = Pick<TurnTailOwnerProps, 'openFile'> & {
 } & PropsLocale<typeof NS> & InjectFace<ProducedFilesInjected>
 
 function moreLabel(t: ProducedFilesProps['t'], count: number): string {
-  return count === 1 ? t('produced.moreOne') : t('produced.more', { count: String(count) })
+  if (count === 1) return t('produced.moreOne')
+  // Russian inflects 2-4 as the "few" form; the few/many strings are identical
+  // in zh and en, so a single count selector serves every shipped locale.
+  if (count >= 2 && count <= 4) return t('produced.moreFew', { count: String(count) })
+  return t('produced.more', { count: String(count) })
 }
 
 /**

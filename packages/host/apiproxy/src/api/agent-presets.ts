@@ -111,6 +111,17 @@ export interface AgentPresetsApi {
   openDocument(request: RpcRequest<{ agentPreset: string }>, signal: AbortSignal):
   Promise<RpcResponse<{ opened: true } | { opened: false; path: string }>>
 
+  /**
+   * Hand one locally authored preset's COMPOSITION FILE to the platform's text
+   * editor — the direct way to paste a custom system prompt into the persona
+   * row. Same trust line as {@link openDocument}: id only, never a path, and
+   * a shipped preset is refused because its install is not the user's to
+   * manage. Where the deployment has no native editor, the reply carries the
+   * resolved file path for the surface to show as text.
+   */
+  openComposition(request: RpcRequest<{ agentPreset: string }>, signal: AbortSignal):
+  Promise<RpcResponse<{ opened: true } | { opened: false; path: string }>>
+
   /** Delete a locally authored preset. Shipped presets are refused. */
   remove(request: RpcRequest<{ agentPreset: string }>): Promise<RpcResponse<{}>>
 }

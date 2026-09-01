@@ -3,7 +3,7 @@
 // cannot leave sticky page controls above the mask. This is still an in-page
 // WebUI dialog; it never creates or targets another browser/native window.
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
@@ -41,10 +41,22 @@ export function Modal({
   contentClassName?: string
   headless?: boolean
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null)
+
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      // Nested dialogs (this one stacked above another, or another stacked
+      // above this one — portals append later dialogs later in the DOM) each
+      // attach their own document listener, so every stacked dialog would
+      // fire for one Escape press. Only the topmost dialog may act; the rest
+      // must wait for their own turn instead of closing underneath the one
+      // the user is actually looking at.
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      const topmost = dialogs[dialogs.length - 1]
+      if (topmost !== undefined && topmost !== dialogRef.current) return
+      onClose()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => { document.removeEventListener('keydown', onKeyDown) }
@@ -56,6 +68,7 @@ export function Modal({
     <div className={css.root} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div
+        ref={dialogRef}
         className={clsx(css.dialog, className)}
         role="dialog"
         aria-modal="true"

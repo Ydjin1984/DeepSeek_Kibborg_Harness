@@ -30,6 +30,14 @@
       "types": "./lib/types/checkpoint.d.ts",
       "default": "./lib/types/checkpoint.js"
     },
+    "./projection": {
+      "types": "./lib/types/projection.d.ts",
+      "default": "./lib/types/projection.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -46,6 +54,7 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
@@ -54,6 +63,7 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   }
 }

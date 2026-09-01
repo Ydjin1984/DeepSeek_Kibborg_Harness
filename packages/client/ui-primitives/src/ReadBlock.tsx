@@ -35,6 +35,39 @@ export interface ReadBlockLine {
   text: string
 }
 
+/**
+ * Display copy for the read surface; the owner passes localized labels
+ * (this package is cordis-free, so copy arrives via props). Every field
+ * defaults to the current built-in value, so existing consumers render
+ * unchanged.
+ */
+export interface ReadBlockLabels {
+  /** Banner count when the returned window is not the whole file. */
+  window: (shown: number, total: number) => string
+  /** Copy-button idle label. */
+  copy: string
+  /** Copy-button label during the post-copy confirmation window. */
+  copied: string
+  /** Collapse-toggle aria label while expanded. */
+  collapseAria: string
+  /** Collapse-toggle text while expanded. */
+  collapse: string
+  /** Expand-toggle aria label while capped, given the hidden line count. */
+  expandAria: (hidden: number) => string
+  /** Expand-toggle text while capped, given the hidden line count. */
+  expand: (hidden: number) => string
+}
+
+const DEFAULT_LABELS: ReadBlockLabels = {
+  window: (shown, total) => `显示 ${shown} / ${total} 行`,
+  copy: '复制',
+  copied: '复制成功',
+  collapseAria: '收起内容',
+  collapse: '收起',
+  expandAria: hidden => `展开其余 ${hidden} 行`,
+  expand: hidden => `… 其余 ${hidden} 行`,
+}
+
 export interface ReadBlockProps {
   /** Banner label (the file path, or a tool-supplied replacement title); omitted draws no label. */
   label?: string | undefined
@@ -48,6 +81,8 @@ export interface ReadBlockProps {
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper (callers position; this component draws). */
   className?: string | undefined
+  /** Localized display copy; omitted fields keep the built-in defaults. */
+  labels?: Partial<ReadBlockLabels> | undefined
 }
 
 /**
@@ -74,7 +109,9 @@ export function ReadBlock({
   lang,
   maxLines = DEFAULT_READ_MAX_LINES,
   className,
+  labels,
 }: ReadBlockProps) {
+  const copy = labels === undefined ? DEFAULT_LABELS : { ...DEFAULT_LABELS, ...labels }
   // The raw text the copy control writes and the highlighter tokenizes: the
   // window's lines joined by newlines, without the file numbers or any chrome.
   // Highlighting the whole window in one call (not line by line) keeps grammar
@@ -138,7 +175,7 @@ export function ReadBlock({
         <div className={css.label}>{label ?? ''}</div>
         <div className={css.action}>
           {windowed && (
-            <span className={css.count}>{`显示 ${lines.length} / ${totalLines} 行`}</span>
+            <span className={css.count}>{copy.window(lines.length, totalLines)}</span>
           )}
           <span className={css.lang}>{lang ?? ''}</span>
           {/* Hide copy on an empty window, matching TerminalBlock's empty-output
@@ -147,7 +184,7 @@ export function ReadBlock({
               wipe the clipboard with an empty string. */}
           {lines.length > 0 && (
             <button type="button" className={css.copyButton} onClick={onCopy}>
-              {copied ? '复制成功' : '复制'}
+              {copied ? copy.copied : copy.copy}
             </button>
           )}
         </div>
@@ -159,10 +196,10 @@ export function ReadBlock({
             type="button"
             className={css.expand}
             aria-expanded={expanded}
-            aria-label={expanded ? '收起内容' : `展开其余 ${hidden} 行`}
+            aria-label={expanded ? copy.collapseAria : copy.expandAria(hidden)}
             onClick={onToggle}
           >
-            {expanded ? '收起' : `… 其余 ${hidden} 行`}
+            {expanded ? copy.collapse : copy.expand(hidden)}
           </button>
         )}
         {capped && rows(paired.slice(paired.length - tailLines))}

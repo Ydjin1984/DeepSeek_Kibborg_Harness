@@ -8,6 +8,7 @@
     - img
   - tablist:
     - tab "Chat" [selected]
+    - tab "Execution"
     - tab "Trajectory"
 - text: Use web_search once with queries ["DeepSeek Harness snapshot search","DeepSeek Harness multi-query search"]. Then reply exactly SEARCH_DONE and stop. {{clock}}
 - button "Copy":
@@ -34,6 +35,8 @@
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

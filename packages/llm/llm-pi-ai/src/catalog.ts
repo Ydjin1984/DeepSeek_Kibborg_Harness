@@ -178,22 +178,31 @@ export function catalogProviderIds(): readonly string[] {
 
 /**
  * Whether the installed catalog provider for one route declares an api-key
- * method — the only authentication this adapter obtains on its own.
+ * method — the authentication this adapter can obtain without a login flow.
  *
  * A key is what the harness resolves through its own credential seam and hands
- * pi-ai per request. pi-ai's other method, OAuth, resolves from a *stored*
- * OAuth credential alone: `resolveProviderAuth` has no ambient path for it,
- * this adapter builds its `Models` collection with no credential store, and
- * nothing here runs a login flow. So a provider offering OAuth by itself
- * leaves nothing for this adapter to authenticate with, and the posture such a
- * provider invites — no key configured, credentials discovered by the provider
- * — fails every request with `Provider is not configured`.
+ * pi-ai per request. A catalog route that also declares OAuth is still listed:
+ * the Models page offers API-key entry and subscription sign-in side by side.
+ * A provider offering OAuth by itself (no api-key method) still stays out of
+ * the directory unless a stored profile already names it, because a card whose
+ * only posture is "no key, credentials discovered by the provider" still fails
+ * every request until someone completes OAuth — and that login is offered on
+ * routes that already appear for another reason.
  * @param provider - provider route key.
  * @returns whether the catalog provider takes an api key; false for a route
  *   pi-ai does not ship, which the caller answers for separately.
  */
 export function catalogProviderTakesApiKey(provider: string): boolean {
   return catalogProvider(provider)?.auth.apiKey !== undefined
+}
+
+/**
+ * The catalog OAuth method for one route, when pi-ai ships one.
+ * @param provider - provider route key.
+ * @returns the OAuth auth, or `undefined` when the catalog has none.
+ */
+export function catalogProviderOAuth(provider: string): Provider['auth']['oauth'] {
+  return catalogProvider(provider)?.auth.oauth
 }
 
 /**

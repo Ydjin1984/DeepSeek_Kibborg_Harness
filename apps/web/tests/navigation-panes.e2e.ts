@@ -19,7 +19,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { newEnglishPage, saveFailureShot } from './support.ts'
+import { newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/navigation-panes', import.meta.url))
 const SEED = join(SNAPSHOT_DIR, 'seed.jsonl')
@@ -216,6 +216,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     // Search navigation addresses the session, not a specific event, and the
     // query remains until the user explicitly clears it.
     await expect.poll(() => search.inputValue(), { timeout: 5_000 }).toBe('WATERFALL')
+    // The opened session has visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await expect.poll(() => page.getByText('FIRST_DONE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
     await expect.poll(() => page.getByRole('heading', { name: 'Navigation Summary' }).count(), { timeout: 15_000 }).toBe(1)
     await page.getByRole('button', { name: 'Clear search' }).click()

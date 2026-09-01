@@ -298,6 +298,28 @@ export class AgentPresetSectionController {
   }
 
   /**
+   * Open one preset's composition file in the host text editor — the direct
+   * way to paste a custom system prompt into its persona row — or reveal the
+   * file path on the row where the deployment has no editor to hand it to.
+   * @param id - the preset whose composition the user wants to edit.
+   * @returns once the host answered and the page reflects it.
+   */
+  async edit(id: string): Promise<void> {
+    try {
+      const response = await this.api.agentPresets.openComposition({ agentPreset: id })
+      if (!response.result.ok) {
+        this.set({ error: response.result.error.message })
+        return
+      }
+      if (response.result.value.opened) return
+      const { path } = response.result.value
+      this.set({ revealedPaths: { ...this.store.getSnapshot().revealedPaths, [id]: path } })
+    } catch (error) {
+      this.set({ error: messageOf(error) })
+    }
+  }
+
+  /**
    * Ask for confirmation before deleting one preset.
    * @param id - the preset to delete, or null to dismiss the confirmation.
    */

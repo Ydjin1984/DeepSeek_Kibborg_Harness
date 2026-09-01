@@ -192,13 +192,16 @@ describe('SettingsPanel navigation', () => {
     expect(glyphs[4]).toBe(glyphs[0])
   })
 
-  it('switches the rendered section on nav click', () => {
+  it('switches the rendered section on nav click, keeping visited sections mounted but hidden', () => {
     mount()
     openPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Models' }))
     expect(screen.getByRole('button', { name: 'Models' }).getAttribute('aria-current')).toBe('true')
     expect(screen.getByTestId('section-models')).toBeTruthy()
-    expect(screen.queryByTestId('section-general')).toBeNull()
+    // A visited section stays mounted (its local state — drafts, search,
+    // expansion — survives switching) but is hidden from view and a11y.
+    expect(screen.getByTestId('section-general').closest('[hidden]')).not.toBeNull()
+    expect(screen.getByTestId('section-models').closest('[hidden]')).toBeNull()
   })
 
   it('mounts onboarding steps in order and transfers ownership only on completion', () => {

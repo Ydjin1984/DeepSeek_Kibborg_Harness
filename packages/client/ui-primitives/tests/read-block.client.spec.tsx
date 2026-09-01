@@ -238,4 +238,15 @@ describe('ReadBlock copy', () => {
     const view = render(<ReadBlock label="empty.ts" lines={[]} totalLines={0} />)
     expect(view.queryByRole('button', { name: '复制' })).toBeNull()
   })
+
+  it('renders owner-supplied labels over the built-in copy', () => {
+    render(<ReadBlock
+      label="a.ts"
+      lines={lines(3, 41)}
+      totalLines={180}
+      labels={{ window: (shown, total) => `Showing ${shown} of ${total}`, copy: 'Copy', copied: 'Copied' }}
+    />)
+    expect(screen.getByText('Showing 3 of 180')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+  })
 })

@@ -55,11 +55,20 @@ export function GoalBar({ goal, onEdit, onPause, onResume, onClear, t }: GoalBar
     pendingRef.current = true
     setPending(true)
     setActionError(null)
-    const result = await action()
-    pendingRef.current = false
-    setPending(false)
-    if (!result.ok) setActionError(`${result.error.message} (${result.error.code})`)
-    return result
+    try {
+      const result = await action()
+      if (!result.ok) setActionError(`${result.error.message} (${result.error.code})`)
+      return result
+    } catch (error) {
+      // A rejected Remote (HMR reload, dead connection) must unlock the bar
+      // and surface the failure; without this arm the panel stays pending
+      // forever with every action disabled.
+      setActionError(error instanceof Error ? error.message : String(error))
+      return undefined
+    } finally {
+      pendingRef.current = false
+      setPending(false)
+    }
   }, [])
 
   const handleEdit = useCallback(async () => {
@@ -88,7 +97,8 @@ export function GoalBar({ goal, onEdit, onPause, onResume, onClear, t }: GoalBar
             value={draft}
             onChange={(e) => { setDraft(e.target.value) }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleEdit()
+              // IME composition: Enter confirms the composition, not the edit.
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleEdit()
               if (e.key === 'Escape') setEditing(false)
             }}
             autoFocus

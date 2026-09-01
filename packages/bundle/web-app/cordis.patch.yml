@@ -16,7 +16,9 @@
 - id: system-prompt
   config:
     persona: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      Ты — кодирующий агент на основе модели {{model}}. Твоя рабочая директория — {{cwd}}.
+
+      Всегда отвечай на русском языке, независимо от языка запроса.
 
 # TODO: Re-enable shared HMR for Web after its reload lifecycle is tested.
 - id: hmr
@@ -262,6 +264,12 @@
     - id: ui-goal
       name: '@deepseek-ai/dsh-client-ui-goal'
 
+    # Manual context compaction: the composer button over the compaction
+    # session projection and the /compact command. Renders nothing while the
+    # host mounts no compaction backend (the projection key is absent).
+    - id: ui-compact
+      name: '@deepseek-ai/dsh-client-ui-compact'
+
     # Per-message feedback: Like/Dislike plus an optional note in the
     # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
@@ -283,6 +291,19 @@
     # cards. A namespace this deployment does not expose renders nothing.
     - id: ui-settings-plugins
       name: '@deepseek-ai/dsh-client-ui-settings-plugins'
+
+    # Skill lifecycle management: the manager service, the model-facing
+    # skill_manage tool, and the bundled skill-create system skill. The host
+    # plane keeps one instance for every session and the gateway's skill
+    # domain; the filesystem provider's watcher invalidates the registry on
+    # this package's mutations.
+    - id: skill-manager
+      name: '@deepseek-ai/dsh-skill-manager'
+
+    # The Skills Manager tab: the Settings section that lists, searches,
+    # edits, enables/disables, trashes, versions, and benchmarks skills.
+    - id: ui-settings-skills
+      name: '@deepseek-ai/dsh-client-ui-settings-skills'
 
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan

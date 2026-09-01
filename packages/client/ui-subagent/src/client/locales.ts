@@ -77,5 +77,42 @@ export const en: Record<SubagentKey, string> = {
   'readonly.body': 'The parent session is offline; reopen it to continue sending messages.',
 }
 
+/** Russian dictionary, key-identical to the Chinese source of truth. */
+export const ru: Record<SubagentKey, string> = {
+  'diagnostic.corrupt': 'запись сессии повреждена',
+  'diagnostic.unsupported': 'неподдерживаемая версия записи субагента',
+  'diagnostic.unavailable': 'запись сессии временно недоступна',
+  'duration.seconds': '{seconds} с',
+  'duration.minutes': '{minutes} м {seconds} с',
+  'duration.hours': '{hours} ч {minutes} м {seconds} с',
+  'duration.days': '{days} д',
+  'duration.daysHours': '{days} д {hours} ч',
+  'duration.months': '~{months} мес',
+  'duration.monthsDays': '~{months} мес {days} д',
+  'duration.years': '~{years} г',
+  'duration.yearsMonths': '~{years} г {months} мес',
+  'duration.exactDays': '{days} д {hours} ч {minutes} м {seconds} с',
+  'duration.exactTitle': 'Суммарное активное время: {duration}',
+  'loading.label': 'Загрузка субагентов…',
+  'loading.aria': 'Загрузка субагентов',
+  'load.error': 'Не удалось загрузить субагентов',
+  'retry': 'Повторить',
+  'mode.oneShot': 'разовый',
+  'mode.continuable': 'с продолжением',
+  'activity.running': 'выполняется',
+  'activity.inactive': 'не выполняется',
+  'branch.collapse': 'Свернуть потомков {label}',
+  'branch.expand': 'Развернуть потомков {label}',
+  'count.total.one': '{count} субагент',
+  'count.total.other': '{count} субагентов',
+  'count.running.one': '{count} субагент выполняется',
+  'count.running.other': '{count} субагентов выполняется',
+  'tree.aria': 'Сессии субагентов',
+  'readonly.oneShot.title': 'Запись разового субагента',
+  'readonly.title': 'Этот субагент пока только для чтения',
+  'readonly.oneShot.body': 'Разовые задачи не принимают последующие сообщения; здесь можно просмотреть полную запись выполнения.',
+  'readonly.body': 'Родительская сессия офлайн; откройте её снова, чтобы продолжить отправку сообщений.',
+}
+
 /** Key domain of the `subagent` namespace (zh is the source of truth). */
 export type SubagentKey = keyof typeof zh

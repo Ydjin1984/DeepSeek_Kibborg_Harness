@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-host-plugin-inventory",
-  "description": "Read-only Remote projection of current Cordis Loader plugin state",
+  "description": "Remote projection and enablement control of current Cordis Loader plugin state",
   "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"

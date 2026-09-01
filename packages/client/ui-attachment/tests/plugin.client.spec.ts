@@ -5,6 +5,7 @@ import { apply as applyHost } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { ComposerAttachments } from '../src/client/ComposerAttachments.tsx'
 import { MessageImages } from '../src/client/MessageImages.tsx'
+import { PaperclipButton } from '../src/client/PaperclipButton.tsx'
 
 async function bench() {
   const ctx = new Context()
@@ -12,6 +13,7 @@ async function bench() {
   ctx.slots.register({
     name: 'root',
     children: {
+      'conversation.input.left': { kind: 'list', scope: 'session' },
       'conversation.input.attachments': { kind: 'single', scope: 'session-maybe' },
       'conversation.message.images': { kind: 'single', scope: 'session' },
     },
@@ -29,6 +31,10 @@ describe('attachment plugin', () => {
   it('registers both entries and removes them with the plugin fiber', async () => {
     const { ctx, fiber } = await bench()
     expect(inject).toEqual(['slots'])
+    expect(ctx.slots.entries('conversation.input.left')).toMatchObject([{
+      locale: 'conversation',
+      component: PaperclipButton,
+    }])
     expect(ctx.slots.entries('conversation.input.attachments')).toMatchObject([{
       locale: 'conversation',
       component: ComposerAttachments,
@@ -40,6 +46,7 @@ describe('attachment plugin', () => {
 
     await fiber.dispose()
 
+    expect(ctx.slots.entries('conversation.input.left')).toHaveLength(0)
     expect(ctx.slots.entries('conversation.input.attachments')).toHaveLength(0)
     expect(ctx.slots.entries('conversation.message.images')).toHaveLength(0)
   })

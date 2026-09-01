@@ -1,6 +1,8 @@
 ---
 name: editing-cordis-compositions
 description: Use when creating, changing, or validating a Cordis composition for this harness — writing or editing an agent preset, adding or removing a plugin row, deciding whether something belongs to the host composition or to one session, checking whether a preset you authored actually mounts, or diagnosing a row that mounted but contributed nothing.
+description.zh: 在为这个 harness 创建、修改或验证 Cordis 组合时使用——编写或编辑 agent preset、添加或移除插件行、判断某个东西属于 host 组合还是某个会话、检查你编写的 preset 是否真的被挂载，或诊断已挂载却没有贡献任何内容的行。
+description.ru: Используйте при создании, изменении или проверке Cordis-композиции для этого harness — написании или редактировании agent preset, добавлении или удалении строк плагинов, решении о том, принадлежит ли что-то host-композиции или одной сессии, проверке того, что написанный вами preset действительно монтируется, или диагностике строки, которая смонтировалась, но ничего не внесла.
 ---
 
 # Editing Cordis compositions

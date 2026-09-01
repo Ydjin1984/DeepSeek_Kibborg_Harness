@@ -14,8 +14,26 @@
  * @module
  */
 import { abbreviateHomePath } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ReadBlockLine, ReadBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ReadBlockLabels, ReadBlockLine, ReadBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { relativizeToCwd, type ToolCallBlock } from './tool-call-model.ts'
+
+/**
+ * Build the ReadBlock display copy from the conversation locale seat.
+ * @param t - the render site's conversation locale seat.
+ * @returns the full label set for {@link ReadBlockProps}'s `labels`.
+ */
+export function readBlockLabels(t: TranslateNS<'conversation'>): ReadBlockLabels {
+  return {
+    window: (shown, total) => t('read.window', { shown, total }),
+    copy: t('read.copy'),
+    copied: t('read.copied'),
+    collapseAria: t('read.collapseAria'),
+    collapse: t('collapse'),
+    expandAria: hidden => t('read.expandAria', { n: hidden }),
+    expand: hidden => t('terminal.expandRest', { n: hidden }),
+  }
+}
 
 /**
  * Content lines the chat row's resident read body shows before collapsing the

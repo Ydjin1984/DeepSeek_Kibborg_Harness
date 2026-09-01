@@ -1,6 +1,8 @@
 ---
 name: dsh-trim-cot-leakage
 description: Use when auditing or fixing prose that reads like a leaked reasoning transcript — dead design-session citations such as (decision N), audit item codes, or §N of uncommitted drafts; change narration such as "used to", "no longer", "this cut"; stack or review vantage ("a later PR in this stack", "rejected in review"); reviewer-addressed justifications; control-flow narration; or hedged planning residue in comments, JSDoc, docs, or Agent Notes.
+description.zh: 在审计或修复读起来像泄露推理记录的文案时使用——诸如 (decision N)、审计项代码或未提交草稿的 §N 之类的失效设计会话引用；「以前是」「不再是」「这次砍掉」之类的变更叙述；栈或评审视角（「这个栈里的后续 PR」「评审中被拒」）；面向评审者的辩护；或注释、JSDoc、文档或 Agent Notes 中模棱两可的计划残留。
+description.ru: Используйте при аудите или исправлении прозы, которая читается как утёкшая запись рассуждений — мёртвые цитаты дизайн-сессий вроде (decision N), коды пунктов аудита или §N незакоммиченных черновиков; повествование об изменениях вроде «раньше было», «больше не», «это вырезали»; ракурс стека или ревью («более поздний PR в этом стеке», «отклонено при ревью»); оправдания, адресованные ревьюеру; повествование о потоке управления; или остатки осторожного планирования в комментариях, JSDoc, документации или Agent Notes.
 ---
 
 # Trimming Chain-of-Thought Leakage

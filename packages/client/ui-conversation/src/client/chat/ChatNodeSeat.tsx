@@ -1,13 +1,13 @@
 import { memo, useMemo } from 'react'
 import { JsonBlock } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
+import type { ChatNodeOwnerProps, ChatViewSlotProps, RenderChatNode } from '../contract/slots.ts'
 import type { ChatNode } from '../contract/chat-nodes.ts'
 import css from './ChatView.module.css'
 
 interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly nodeKey: string
   readonly useSession: ChatViewSlotProps['useSession']
-  readonly renderSlot: ChatViewSlotProps['renderSlot']
+  readonly renderChatNode: RenderChatNode
   readonly t: ChatViewSlotProps['t']
 }
 
@@ -18,7 +18,7 @@ type RoutedChatNodeOwner = {
 /** Subscribe and dispatch one stable Context key without observing sibling Nodes. */
 export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, selectedCallId, cwd, openFile, inspectCall, forkAt,
-  renderMessageImages, fileMentions, useSession, renderSlot, t,
+  renderMessageImages, fileMentions, useSession, renderChatNode, t,
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
@@ -47,7 +47,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       data-chat-flow-key={routedNode.key}
       data-chat-flow-kind={routedNode.kind}
     >
-      {renderSlot('conversation.chat.node', routedOwner, {
+      {renderChatNode(routedOwner, {
         entryKey: routedNode.kind,
         hookContext: nodeKey,
         fallback: (

@@ -1,7 +1,9 @@
 /**
- * The web-search provider's card: its endpoint, its per-request search budget,
- * and the key — which is written through the credentials domain, never into
- * the settings section, so the literal never rides a response.
+ * The web-search provider's card: its endpoint, the model and token budget of
+ * the auxiliary Messages call, the Anthropic API version, its per-request
+ * search budget, and the key — which is written through the credentials
+ * domain, never into the settings section, so the literal never rides a
+ * response.
  */
 
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -59,6 +61,43 @@ export function WebSearchCard(props: WebSearchCardProps) {
         {...state.baseURL}
         onEdit={(text) => { props.edit('baseURL', text) }}
         onReset={() => { props.resetField('baseURL') }}
+      />
+      <ValueField
+        id="plugin-config-web-search-api-version"
+        label={t('webSearchApiVersion')}
+        hint={t('webSearchApiVersionHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('invalidNumber')}
+        disabled={disabled}
+        {...state.apiVersion}
+        onEdit={(text) => { props.edit('apiVersion', text) }}
+        onReset={() => { props.resetField('apiVersion') }}
+      />
+      <ValueField
+        id="plugin-config-web-search-model"
+        label={t('webSearchModel')}
+        hint={t('webSearchModelHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('invalidNumber')}
+        disabled={disabled}
+        {...state.model}
+        onEdit={(text) => { props.edit('model', text) }}
+        onReset={() => { props.resetField('model') }}
+      />
+      <ValueField
+        id="plugin-config-web-search-max-tokens"
+        label={t('webSearchMaxTokens')}
+        hint={t('webSearchMaxTokensHint')}
+        overriddenLabel={t('overridden')}
+        resetLabel={t('reset')}
+        invalidLabel={t('invalidNumber')}
+        numeric
+        disabled={disabled}
+        {...state.maxTokens}
+        onEdit={(text) => { props.edit('maxTokens', text) }}
+        onReset={() => { props.resetField('maxTokens') }}
       />
       <ValueField
         id="plugin-config-web-search-max-uses"

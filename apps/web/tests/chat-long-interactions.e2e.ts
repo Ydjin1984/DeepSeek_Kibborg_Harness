@@ -19,7 +19,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { conversationContextKey, newEnglishPage, saveFailureShot } from './support.ts'
+import { conversationContextKey, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const MODE = webSnapshotMode()
 const SESSION_ID = 'chat-long-interactions-e2e'
@@ -158,6 +158,9 @@ describe('web e2e: long Chat interaction contract', () => {
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await openSeed(page)
+    // The opened seed has visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
   }, 120_000)
 
   afterAll(async () => {
@@ -270,6 +273,9 @@ describe('web e2e: long Chat interaction contract', () => {
       .getByRole('button').last()
     await expect.poll(() => currentCrumb.textContent(), { timeout: 15_000 })
       .toBe(`${FIXTURE.title} (1)`)
+    // The forked child session has its own view default (Execution); switch
+    // it to Chat before the transcript assertions.
+    await selectChatView(page)
     await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
     const settled = scaffold.whenTurnSettled(60_000)
     const composer = page.locator('textarea:enabled').last()

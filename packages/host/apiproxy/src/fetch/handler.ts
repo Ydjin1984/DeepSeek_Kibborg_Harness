@@ -43,9 +43,28 @@ import {
   workspaceListRequestSchema,
   workspaceRenameRequestSchema,
 } from '../api/workspace.schema.ts'
-import { skillListRequestSchema } from '../api/skills.schema.ts'
 import {
-  agentPresetCopyRequestSchema, agentPresetListRequestSchema, agentPresetOpenDocumentRequestSchema,
+  skillAutoImproveRequestSchema,
+  skillBenchmarkBatchStartRequestSchema,
+  skillBenchmarkCancelRequestSchema,
+  skillBenchmarkPollRequestSchema,
+  skillBenchmarkStartRequestSchema,
+  skillListManagedRequestSchema,
+  skillListRequestSchema,
+  skillPermanentDeleteRequestSchema,
+  skillReadRequestSchema,
+  skillRemoveRequestSchema,
+  skillRestoreRequestSchema,
+  skillRollbackRequestSchema,
+  skillSaveRequestSchema,
+  skillSecurityCheckRequestSchema,
+  skillSetEnabledRequestSchema,
+  skillTrashRequestSchema,
+  skillValidateRequestSchema,
+  skillVersionsRequestSchema,
+} from '../api/skills.schema.ts'
+import {
+  agentPresetCopyRequestSchema, agentPresetListRequestSchema, agentPresetOpenCompositionRequestSchema, agentPresetOpenDocumentRequestSchema,
   agentPresetReadRequestSchema, agentPresetRemoveRequestSchema, agentPresetSelectRequestSchema,
 } from '../api/agent-presets.schema.ts'
 import {
@@ -63,7 +82,11 @@ import {
 import {
   credentialsDescribeRequestSchema, credentialsSetRequestSchema, credentialsUnsetRequestSchema,
 } from '../api/credentials.schema.ts'
-import { llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmProvidersRequestSchema } from '../api/llm.schema.ts'
+import {
+  llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmOauthLoginCancelRequestSchema,
+  llmOauthLoginStartRequestSchema, llmOauthLoginWaitRequestSchema, llmOauthLogoutRequestSchema,
+  llmProvidersRequestSchema,
+} from '../api/llm.schema.ts'
 import {
   subagentHistoryRequestSchema,
   subagentInterruptRequestSchema,
@@ -117,11 +140,29 @@ const UNARY_ROUTES: UnaryRoutes = {
   'workspace.insertSessionBefore': { schema: workspaceInsertSessionBeforeRequestSchema, invoke: (api, r) => api.workspace.insertSessionBefore(r) },
   'workspace.archiveSession': { schema: workspaceArchiveSessionRequestSchema, invoke: (api, r) => api.workspace.archiveSession(r) },
   'skill.list': { schema: skillListRequestSchema, invoke: (api, r) => api.skills.list(r) },
+  'skill.listManaged': { schema: skillListManagedRequestSchema, invoke: (api, r) => api.skills.listManaged(r) },
+  'skill.read': { schema: skillReadRequestSchema, invoke: (api, r) => api.skills.read(r) },
+  'skill.save': { schema: skillSaveRequestSchema, invoke: (api, r) => api.skills.save(r) },
+  'skill.remove': { schema: skillRemoveRequestSchema, invoke: (api, r) => api.skills.remove(r) },
+  'skill.restore': { schema: skillRestoreRequestSchema, invoke: (api, r) => api.skills.restore(r) },
+  'skill.permanentDelete': { schema: skillPermanentDeleteRequestSchema, invoke: (api, r) => api.skills.permanentDelete(r) },
+  'skill.trash': { schema: skillTrashRequestSchema, invoke: (api, r) => api.skills.trash(r) },
+  'skill.setEnabled': { schema: skillSetEnabledRequestSchema, invoke: (api, r) => api.skills.setEnabled(r) },
+  'skill.versions': { schema: skillVersionsRequestSchema, invoke: (api, r) => api.skills.versions(r) },
+  'skill.rollback': { schema: skillRollbackRequestSchema, invoke: (api, r) => api.skills.rollback(r) },
+  'skill.validate': { schema: skillValidateRequestSchema, invoke: (api, r) => api.skills.validate(r) },
+  'skill.securityCheck': { schema: skillSecurityCheckRequestSchema, invoke: (api, r) => api.skills.securityCheck(r) },
+  'skill.benchmarkStart': { schema: skillBenchmarkStartRequestSchema, invoke: (api, r) => api.skills.benchmarkStart(r) },
+  'skill.benchmarkPoll': { schema: skillBenchmarkPollRequestSchema, invoke: (api, r) => api.skills.benchmarkPoll(r) },
+  'skill.benchmarkCancel': { schema: skillBenchmarkCancelRequestSchema, invoke: (api, r) => api.skills.benchmarkCancel(r) },
+  'skill.benchmarkBatchStart': { schema: skillBenchmarkBatchStartRequestSchema, invoke: (api, r) => api.skills.benchmarkBatchStart(r) },
+  'skill.autoImprove': { schema: skillAutoImproveRequestSchema, invoke: (api, r) => api.skills.autoImprove(r) },
   'agentPreset.list': { schema: agentPresetListRequestSchema, invoke: (api, r) => api.agentPresets.list(r) },
   'agentPreset.select': { schema: agentPresetSelectRequestSchema, invoke: (api, r) => api.agentPresets.select(r) },
   'agentPreset.read': { schema: agentPresetReadRequestSchema, invoke: (api, r) => api.agentPresets.read(r) },
   'agentPreset.copy': { schema: agentPresetCopyRequestSchema, invoke: (api, r) => api.agentPresets.copy(r) },
   'agentPreset.openDocument': { schema: agentPresetOpenDocumentRequestSchema, invoke: (api, r, signal) => api.agentPresets.openDocument(r, signal) },
+  'agentPreset.openComposition': { schema: agentPresetOpenCompositionRequestSchema, invoke: (api, r, signal) => api.agentPresets.openComposition(r, signal) },
   'agentPreset.remove': { schema: agentPresetRemoveRequestSchema, invoke: (api, r) => api.agentPresets.remove(r) },
   'goal.create': { schema: goalCreateRequestSchema, invoke: (api, r) => api.goals.create(r) },
   'goal.edit': { schema: goalEditRequestSchema, invoke: (api, r) => api.goals.edit(r) },
@@ -140,6 +181,10 @@ const UNARY_ROUTES: UnaryRoutes = {
   'llm.providers': { schema: llmProvidersRequestSchema, invoke: (api, r) => api.llm.providers(r) },
   'llm.models': { schema: llmModelsRequestSchema, invoke: (api, r) => api.llm.models(r) },
   'llm.discoverModels': { schema: llmDiscoverModelsRequestSchema, invoke: (api, r, signal) => api.llm.discoverModels(r, signal) },
+  'llm.oauthLoginStart': { schema: llmOauthLoginStartRequestSchema, invoke: (api, r, signal) => api.llm.oauthLoginStart(r, signal) },
+  'llm.oauthLoginWait': { schema: llmOauthLoginWaitRequestSchema, invoke: (api, r, signal) => api.llm.oauthLoginWait(r, signal) },
+  'llm.oauthLoginCancel': { schema: llmOauthLoginCancelRequestSchema, invoke: (api, r) => api.llm.oauthLoginCancel(r) },
+  'llm.oauthLogout': { schema: llmOauthLogoutRequestSchema, invoke: (api, r) => api.llm.oauthLogout(r) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */

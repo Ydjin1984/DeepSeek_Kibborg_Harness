@@ -64,7 +64,20 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
-    const { result } = await this.sessions.models({ sessionId: this.sessionId })
+    // A transport failure (fetch error, HTTP status, timeout) rejects instead
+    // of returning a business result; without this arm the store would sit in
+    // 'loading' forever and the entries would spin with no error and no retry.
+    let result: Awaited<ReturnType<IApiClient['sessions']['models']>>['result']
+    try {
+      result = (await this.sessions.models({ sessionId: this.sessionId })).result
+    } catch (error) {
+      if (this.disposed || generation !== this.generation) throw error
+      this.store.update((s) => {
+        s.status = 'error'
+        s.error = error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
     if (this.disposed || generation !== this.generation) {
       if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
       return result.value
@@ -95,14 +108,26 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
-    const { result } = await this.sessions.selectModel({
-      sessionId: this.sessionId,
-      provider: selection.provider,
-      model: selection.model,
-      ...selection.reasoningEffort === undefined
-        ? {}
-        : { reasoningEffort: selection.reasoningEffort },
-    })
+    let result: Awaited<ReturnType<IApiClient['sessions']['selectModel']>>['result']
+    try {
+      result = (await this.sessions.selectModel({
+        sessionId: this.sessionId,
+        provider: selection.provider,
+        model: selection.model,
+        ...selection.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: selection.reasoningEffort },
+      })).result
+    } catch (error) {
+      // Transport failure: surface it and unlock the entries' controls instead
+      // of leaving the store stuck in 'selecting' (every action disabled).
+      if (this.disposed || generation !== this.generation) throw error
+      this.store.update((s) => {
+        s.status = 'error'
+        s.error = error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
     if (this.disposed || generation !== this.generation) {
       if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
       return

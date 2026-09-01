@@ -24,6 +24,7 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { agentEvents, type Agent, type RequestErrorAction } from '@deepseek-ai/dsh-agent'
 import ToolResultPruner from '@deepseek-ai/dsh-compaction-tool-result-pruner'
 
@@ -1860,6 +1861,24 @@ describe('automatic listener and loader composition', () => {
     expect(ctx.get('compaction')).toBeUndefined()
     await meterFiber.dispose()
     expect(ctx.get('tokenMeter')).toBeUndefined()
+  })
+
+  it('registers the compaction projection when the projection registry is mounted', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(TokenMeter)
+    const compactFiber = await ctx.plugin(BasicCompactionEngine, { auto: false, thresholdRatio: 0.75 })
+
+    const session = conversation(4)
+    session.append('request/context', { provider: MODEL, model: MODEL, contextWindow: 128_000 })
+    expect(ctx.sessionProjections.snapshot(session).values.compaction).toMatchObject({
+      auto: false,
+      thresholdRatio: 0.75,
+      active: false,
+    })
+    await compactFiber.dispose()
   })
 
   it('removes its automatic listener with the plugin fiber', async () => {

@@ -21,6 +21,11 @@ Each provider adapter supplies its resolved route policy. Omitting provider conf
 - `ctx.llm.registerModelDiscovery(settingsNs: string, discover): () => void` Offer to interrogate provider endpoints for the settings namespace this plugin owns. One offer per namespace (`INVALID_DISCOVERY`/`DUPLICATE_DISCOVERY`), disposed with the calling fiber.
 - `ctx.llm.listModelDiscoveryNamespaces(): string[]` List the namespaces that can interrogate an endpoint, so a surface offers the action only where it works.
 - `ctx.llm.discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>` Ask one endpoint which models it advertises.
+- `ctx.llm.registerOAuthLogin(settingsNs: string, handlers): () => void` Offer device-code OAuth login for the settings namespace this plugin owns. One offer per namespace, disposed with the calling fiber.
+- `ctx.llm.startOAuthLogin(settingsNs, provider, signal?): Promise<LlmOAuthDeviceChallenge>` Start device-code login for one route.
+- `ctx.llm.waitOAuthLogin(settingsNs, loginId, signal?): Promise<void>` Wait for that login to store tokens and activate the route.
+- `ctx.llm.cancelOAuthLogin(settingsNs, loginId): void` Cancel an in-flight login.
+- `ctx.llm.logoutOAuth(settingsNs, provider): Promise<void>` Forget the stored OAuth credential for one route.
 - `ctx.llm.providerRetryPolicy(provider: string): ResolvedRetryPolicy` Return the provider-owned retry policy captured during registration, with normal defaults resolved.
 - `ctx.llm.listModels(provider: string): Promise<LlmModelInfo[]>` Discover the models one registered provider currently advertises.
 - `ctx.llm.resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>` Resolve validated exact-model identity plus available context, output-default, and reasoning metadata from the owning adapter, with optional cancellation for asynchronous adapters.

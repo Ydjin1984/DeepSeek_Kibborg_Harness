@@ -12,7 +12,7 @@ import {
   compareOrRefreshGolden, launchWebScaffold, watchConsole, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-command-presentation', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL(
@@ -53,6 +53,11 @@ describe('web e2e: /goal human transcript presentation', () => {
     await input.press('Enter')
     await expect.poll(() => input.inputValue()).toBe('/goal ')
     await input.press('Enter')
+
+    // The /goal command renders its bubble in the chat flow; the Execution
+    // view is the conversation default, so this lane selects Chat once the
+    // command activated the session (the tab ring appears with content).
+    await selectChatView(page)
 
     const commandInput = page.locator('[data-command-input]')
     await commandInput.waitFor({ timeout: 10_000 })

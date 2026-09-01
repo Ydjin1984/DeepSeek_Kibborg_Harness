@@ -1,6 +1,8 @@
 ---
 name: dsh-merging-stacked-prs
 description: Use when landing a stack of dependent GitHub PRs (A ← B ← C, where each bases on the one below) onto master, merging a PR whose base is another open PR's branch, or whenever a request mentions "stacked PRs", "PR stack", "dependent PRs", or merging several related PRs in sequence. Requires every same-repository dependency chain to use GitHub's official stacked-PR feature before landing so GitHub owns stack-wide rules, CI, ordering, retargeting, and merge state.
+description.zh: 在把一组相互依赖的 GitHub PR（A ← B ← C，每个基于其下一条）合入 master、合并一个以另一个未合并 PR 的分支为基础的 PR，或请求中提到「stacked PRs」「PR stack」「dependent PRs」或按顺序合并多个相关 PR 时使用。要求同一仓库的每条依赖链在合入前使用 GitHub 官方的 stacked-PR 功能，以便 GitHub 管理跨栈规则、CI、顺序与合并状态。
+description.ru: Используйте при вливании стека зависимых GitHub PR (A ← B ← C, где каждый базируется на предыдущем) в master, слиянии PR, чья база — ветка другого открытого PR, или когда запрос упоминает «stacked PRs», «PR stack», «dependent PRs» или последовательное слияние нескольких связанных PR. Требует, чтобы каждая цепочка зависимостей в одном репозитории использовала официальную функцию stacked-PR от GitHub перед вливанием, чтобы GitHub владел правилами всего стека, CI, порядком и состоянием слияния.
 ---
 
 # Landing an official GitHub PR stack

@@ -80,6 +80,10 @@
 }
 
 .rowName {
+  min-width: 0;
+  /* Custom provider display names are user-authored and can be long or
+     unbroken; wrap instead of letting the name overlap the row actions. */
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 22px;
   font-weight: 500;
@@ -245,6 +249,32 @@
   line-height: 22px;
   font-weight: 500;
   color: var(--dsw-alias-label-primary);
+}
+
+.oauth {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.oauthStatus {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.oauthCode {
+  font-family: var(--ds-font-family-code);
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-primary);
+}
+
+.oauthLink {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .editorRoute {

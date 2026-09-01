@@ -24,7 +24,7 @@ import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const BASE_FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
 
@@ -158,6 +158,10 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     await parentInput.fill('Ask a research subagent to explain event sourcing.')
     await parentInput.press('Enter')
     expect(await parentSettled).toBe(parent.id)
+    // The parent prompt rendered visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions
+    // (the preference persists through the reload below).
+    await selectChatView(page)
 
     // Reload onto the restart baseline (the proven route to a freshly
     // discovered catalog), with the child still live and running host-side.
@@ -199,6 +203,9 @@ describe.skipIf(MODE === 'record')('web e2e: composer interrupt for a running co
     try {
       await page.getByRole('button', { name: /1 subagent/ }).click()
       await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
+      // The child session has visible content; its own view defaults to
+      // Execution, so switch it to Chat before the chat-flow assertions.
+      await selectChatView(page)
       const input = page.getByRole('textbox', {
         name: 'Parent session offline; sending is unavailable but you can still stop the run',
       })

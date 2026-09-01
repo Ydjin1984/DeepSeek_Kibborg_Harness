@@ -55,6 +55,23 @@ export type {
 export type { JobView } from './jobs.ts'
 export type { WorkspaceApi, WorkspaceId, WorkspaceView } from './workspace.ts'
 export type { SkillsApi, SkillEntry } from './skills.ts'
+export type {
+  AutoImproveIterationView,
+  BenchmarkCaseResultView,
+  BenchmarkResultView,
+  BenchmarkRunView,
+  BenchmarkSummaryView,
+  ManagedSkillStatus,
+  ManagedSkillSummaryView,
+  ManagedSkillView,
+  ModelRouteView,
+  SaveSkillResultView,
+  SecurityFindingView,
+  SecurityVerdictView,
+  SkillVersionView,
+  TokenMetricsView,
+  TrashEntryView,
+} from './skills.ts'
 export type { AgentPresetsApi, AgentPresetEntry } from './agent-presets.ts'
 export type { EventsApi, MuxFrame, HostFrame, QueuedInboxItem, ToolCallView, ToolEventView, ToolResultView } from './events.ts'
 export type { GoalsApi, GoalId, GoalRef } from './goals.ts'

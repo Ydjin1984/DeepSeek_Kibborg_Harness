@@ -50,6 +50,13 @@ export function attachmentErrorText(
     case 'IMAGES_TOO_LARGE':
       if (limits !== undefined) return t('image.totalTooLarge', { size: imageSizeText(limits.maxMessageImageBytes) })
       break
+    // File reasons (any-format uploads): the exact caps live host-side and are
+    // not projected, so the copy names the class of problem without numbers.
+    case 'TOO_MANY_FILES': return t('file.tooMany')
+    case 'FILE_TOO_LARGE': return t('file.fileTooLarge')
+    case 'FILES_TOO_LARGE': return t('file.totalTooLarge')
+    case 'FILE_STORAGE_FAILED': return t('file.storageFailed')
+    case 'INVALID_FILE_BASE64': return t('file.sendFailed', { reason })
     default: break
   }
   return t('image.sendFailed', { reason })

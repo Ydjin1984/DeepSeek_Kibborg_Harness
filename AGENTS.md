@@ -149,3 +149,7 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 ## Vendoring policy
 
 `vendor/` packages are pinned source copies (manifest with upstream SHAs in [vendor/README.md](vendor/README.md)). Update via the sync procedure there; re-apply or retire the logged local modifications; rerun `pnpm run test && pnpm run build`.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ (code scan root: packages/) with god nodes, community structure, and cross-file relationships. For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists; use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than raw grep output. Dirty graphify-out/ files are expected after updates; dirty graph files are not a reason to skip graphify. Read graphify-out/GRAPH_REPORT.md only for broad architecture review. After modifying code in packages/, run `graphify update packages` to keep the graph current (AST-only, no API cost).

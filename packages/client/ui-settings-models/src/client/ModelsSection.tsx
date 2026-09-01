@@ -65,6 +65,8 @@ interface EditorTarget extends ProviderIdentity {
   credentialRef?: string
   /** The adapter reports this route as one it does not ship (see {@link ProviderEditorProps.declared}). */
   declared?: boolean
+  /** Device-code OAuth this adapter offers for the route. */
+  oauth?: { loginLabel: string; credentialRef: string }
 }
 
 /** Values that vary around the shared provider-editor rendering. */
@@ -83,6 +85,7 @@ function renderProviderEditor({ target, ...props }: ProviderEditorRenderProps): 
       displayName={target.displayName}
       settingsPath={target.settingsPath}
       {...target.declared === true ? { declared: true } : {}}
+      {...target.oauth === undefined ? {} : { oauth: target.oauth }}
       {...props}
     />
   )
@@ -155,6 +158,7 @@ function targetOf(row: ProviderRow): EditorTarget {
     // route-level fields only a declared route owns off the card, exactly as
     // it leaves the custom tag off the row.
     ...row.entry.declared === true ? { declared: true } : {},
+    ...row.entry.oauth === undefined ? {} : { oauth: row.entry.oauth },
   }
 }
 
@@ -318,6 +322,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
           }
           const open = !adding && editing?.provider === row.entry.provider
           const credentialConfigured = row.credential?.configured === true
+            || row.oauthCredential?.configured === true
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
@@ -436,6 +441,7 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
                 api={api}
                 t={t}
                 readOnly={!state.writable}
+                {...addTarget.oauth === undefined ? {} : { oauth: addTarget.oauth }}
                 onClose={(changed) => { closeEditor(changed, addTarget) }}
               />
             </div>

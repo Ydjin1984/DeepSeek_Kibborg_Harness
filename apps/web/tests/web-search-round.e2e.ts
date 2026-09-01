@@ -16,7 +16,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/web-search-round', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/web-search-round/session.jsonl', import.meta.url))
@@ -190,6 +190,9 @@ describe('web e2e: shipped default web search', () => {
     await input.fill(PROMPT)
     await input.press('Enter')
     const sessionId = await settled
+    // The Execution view is the conversation default; the drive turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     if (MODE === 'record') await recordFixture(scaffold, sessionId, FIXTURE)
   }, 200_000)
 
@@ -280,7 +283,9 @@ describe('web e2e: shipped default web search', () => {
     expect(await sources.locator('li').count()).toBe(WEB_SEARCH_MAX_RESULTS)
     // The list is complete in the DOM, so the card carries no expand control.
     expect(await card.locator('button').count()).toBe(0)
-    expect(await card.getByText('来源列表已截断').isVisible()).toBe(true)
+    // The assembled app honors the browser language (en-US in this harness), so
+    // the cap notice renders in English.
+    expect(await card.getByText('Source list truncated').isVisible()).toBe(true)
 
     const geometry = await sources.evaluate((element) => {
       const computed = getComputedStyle(element)

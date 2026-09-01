@@ -64,26 +64,57 @@ afterEach(() => {
  * call because a body can only be read once, and the call history is cleared
  * because repeated `spyOn` returns the same spy.
  * @param ctx - context whose `ctx.web` serves the search.
- * @returns the URL the provider fetched.
+ * @returns the URL, body, and Anthropic version the provider sent.
  */
-async function searchOnce(ctx: Context): Promise<string> {
+async function searchOnce(ctx: Context): Promise<{
+  url: string
+  body: Record<string, unknown>
+  apiVersion: string
+}> {
   const fetchSpy = vi.spyOn(globalThis, 'fetch')
     .mockImplementation(() => Promise.resolve(jsonResponse(ONE_RESULT)))
   fetchSpy.mockClear()
   await ctx.web.search({ query: 'anything' })
-  return String((fetchSpy.mock.calls.at(-1)?.[0] as URL | string | undefined) ?? '')
+  const call = fetchSpy.mock.calls.at(-1)
+  const init = call?.[1]
+  const headers = init?.headers as Record<string, string> | undefined
+  const requestInfo = call?.[0]
+  const body = init?.body
+  return {
+    url: requestInfo === undefined ? '' : typeof requestInfo === 'string'
+      ? requestInfo
+      : requestInfo instanceof URL ? requestInfo.href : requestInfo.url,
+    body: JSON.parse(typeof body === 'string' ? body : '{}') as Record<string, unknown>,
+    apiVersion: headers?.['anthropic-version'] ?? '',
+  }
 }
 
 describe('web-search-deepseek settings section', () => {
   it('serves a stored endpoint to the next search without re-registering the provider', async () => {
     const bench = await boot()
-    expect(await searchOnce(bench.ctx)).toContain('https://search.entry.test/v1')
+    expect((await searchOnce(bench.ctx)).url).toContain('https://search.entry.test/v1')
 
     await bench.ctx.settings.update(WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE, {
       baseURL: 'https://search.stored.test/v1',
     })
 
-    expect(await searchOnce(bench.ctx)).toContain('https://search.stored.test/v1')
+    expect((await searchOnce(bench.ctx)).url).toContain('https://search.stored.test/v1')
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('serves a stored model, token budget, and API version to the next search', async () => {
+    const bench = await boot()
+
+    await bench.ctx.settings.update(WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE, {
+      model: 'kibborg-brain',
+      maxTokens: 2048,
+      apiVersion: '2024-01-01',
+    })
+
+    const request = await searchOnce(bench.ctx)
+    expect(request.body['model']).toBe('kibborg-brain')
+    expect(request.body['max_tokens']).toBe(2048)
+    expect(request.apiVersion).toBe('2024-01-01')
     await bench.ctx.fiber.dispose()
   })
 
@@ -104,11 +135,11 @@ describe('web-search-deepseek settings section', () => {
     await bench.ctx.settings.update(WEB_SEARCH_DEEPSEEK_SETTINGS_NAMESPACE, {
       baseURL: 'https://search.stored.test/v1',
     })
-    expect(await searchOnce(bench.ctx)).toContain('https://search.stored.test/v1')
+    expect((await searchOnce(bench.ctx)).url).toContain('https://search.stored.test/v1')
 
     await bench.settingsFiber.dispose()
 
-    expect(await searchOnce(bench.ctx)).toContain('https://search.entry.test/v1')
+    expect((await searchOnce(bench.ctx)).url).toContain('https://search.entry.test/v1')
     await bench.ctx.fiber.dispose()
   })
 

@@ -21,6 +21,9 @@ export function PlanChip({ useProjection, locked, exitPlanMode, t }: PlanChipPro
   const [leaving, setLeaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const aliveRef = useRef(true)
+  // Same-render fence: `disabled` only lands on the next render, so two rapid
+  // clicks would both see `leaving === false` and submit /plan off twice.
+  const offRef = useRef(false)
 
   useEffect(() => {
     aliveRef.current = true
@@ -34,14 +37,17 @@ export function PlanChip({ useProjection, locked, exitPlanMode, t }: PlanChipPro
   if (!target) return null
 
   const off = (): void => {
-    // No leaving/locked guard: both disable the button, so no click arrives.
+    if (offRef.current) return
+    offRef.current = true
     setLeaving(true)
     setError(null)
     void exitPlanMode().then((failure) => {
+      offRef.current = false
       if (!aliveRef.current) return
       setLeaving(false)
       setError(failure)
     }, (reason: unknown) => {
+      offRef.current = false
       if (!aliveRef.current) return
       setLeaving(false)
       setError(reason instanceof Error ? reason.message : String(reason))

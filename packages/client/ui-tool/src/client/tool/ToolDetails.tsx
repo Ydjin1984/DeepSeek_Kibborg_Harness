@@ -1,12 +1,12 @@
 /** Card-aware output body for the selected Tool call in details. */
 import { DiffBlock, ReadBlock, SearchBlock, TerminalBlock, WebBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolDetailsProps } from '../contract/slots.ts'
-import { diffCardModel } from './models/diff-card-model.ts'
-import { readCardModel } from './models/read-card-model.ts'
-import { searchCardModel } from './models/search-card-model.ts'
+import { diffBlockLabels, diffCardModel } from './models/diff-card-model.ts'
+import { readBlockLabels, readCardModel } from './models/read-card-model.ts'
+import { searchBlockLabels, searchCardModel } from './models/search-card-model.ts'
 import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-model.ts'
 import { resultText } from './models/tool-call-model.ts'
-import { webCardModel } from './models/web-card-model.ts'
+import { webBlockLabels, webCardModel } from './models/web-card-model.ts'
 import css from './ToolDetails.module.css'
 
 /**
@@ -31,14 +31,14 @@ export function ToolDetails({
     )
   }
   const read = readCardModel(block, cwd, home)
-  if (read !== null) return <ReadBlock {...read} className={css.read} />
+  if (read !== null) return <ReadBlock {...read} labels={readBlockLabels(t)} className={css.read} />
   const diff = diffCardModel(block)
-  if (diff !== null) return <DiffBlock {...diff.card} className={css.cardBody} />
+  if (diff !== null) return <DiffBlock {...diff.card} labels={diffBlockLabels(t)} className={css.cardBody} />
   const search = searchCardModel(block)
   if (search !== null) {
     return (
       <>
-        <SearchBlock {...search.card} className={css.cardBody} />
+        <SearchBlock {...search.card} labels={searchBlockLabels(t)} className={css.cardBody} />
         {search.recovery !== undefined ? <div className={css.recovery}>{search.recovery}</div> : null}
       </>
     )
@@ -48,7 +48,7 @@ export function ToolDetails({
     const body = 'kind' in block ? resultText(block) : ''
     return (
       <>
-        <WebBlock {...web} className={css.web} />
+        <WebBlock {...web} labels={webBlockLabels(t)} className={css.web} />
         {body !== '' ? <pre className={css.code}>{body}</pre> : null}
       </>
     )

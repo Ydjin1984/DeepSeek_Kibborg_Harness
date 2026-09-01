@@ -34,3 +34,13 @@ export const en = {
   'candidate.session': 'Session',
   'candidate.noCwd': '(no cwd)',
 } satisfies Record<ReferenceKey, string>
+
+/** Russian dictionary, checked complete against the zh key set. */
+export const ru = {
+  'section.files': 'Файлы и папки',
+  'section.sessions': 'Разговоры в сессиях',
+  'candidate.file': 'Файл',
+  'candidate.folder': 'Папка',
+  'candidate.session': 'Сессия',
+  'candidate.noCwd': '(нет рабочего каталога)',
+} satisfies Record<ReferenceKey, string>

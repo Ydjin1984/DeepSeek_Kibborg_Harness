@@ -750,13 +750,21 @@ export function fixtureUserPrompts(fixtureText: string): string[] {
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // The fixture is JSONL, so every injected path sits inside a JSON string
+  // value: on Windows the workspace path carries backslashes that must be
+  // JSON-escaped or the first-line parse fails ("Bad escaped character").
+  const jsonEscape = (path: string): string => path.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const jsonCwd = jsonEscape(scaffold.workspaceCwd)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(jsonCwd)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
+  // The recorded cwd is decoded by the parse; the realized TEXT still holds its
+  // JSON-escaped form, so both the split and the replacement use the escaped
+  // spellings.
   return fixtureCwd === undefined
     ? realized
-    : realized.split(fixtureCwd).join(scaffold.workspaceCwd)
+    : realized.split(jsonEscape(fixtureCwd)).join(jsonCwd)
 }
 
 export async function seedSession(
@@ -837,10 +845,22 @@ async function persistSeedSession(
  */
 function normalizeAria(snapshot: string, workspaceCwd: string): string {
   // The session heading renders the workspace's basename, not the full
-  // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split('/').pop()!
-  return snapshot
-    .split(workspaceCwd).join('{{cwd}}')
+  // path, so both spellings must collapse to the token. Windows paths use
+  // backslashes; split on either separator so the basename masks there too.
+  const base = workspaceCwd.split(/[\\/]/).pop()!
+  // On Windows the aria snapshot escapes backslashes (a JSON-style `\\`) and
+  // the browser can render the workspace path with different casing than
+  // fs.realpath returned, so a literal split misses it; match both the single-
+  // and doubled-backslash spellings case-insensitively. POSIX stays
+  // case-sensitive with a literal split.
+  const maskPath = (text: string, path: string, token: string): string => {
+    if (process.platform !== 'win32') return text.split(path).join(token)
+    const special = /[.*+?^${}()|[\]\\]/g
+    const single = path.replace(special, '\\$&')
+    const doubled = path.replace(/\\/g, '\\\\').replace(special, '\\$&')
+    return text.replace(new RegExp(`(?:${single}|${doubled})`, 'gi'), token)
+  }
+  return maskPath(snapshot, workspaceCwd, '{{cwd}}')
     .split(base).join('{{workspace}}')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
     // The optional space in `\d+m ?\d+s` covers both minute spellings: the

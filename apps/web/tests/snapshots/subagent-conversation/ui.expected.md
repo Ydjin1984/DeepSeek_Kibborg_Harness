@@ -13,6 +13,7 @@
     - img
   - tablist:
     - tab "Chat" [selected]
+    - tab "Execution"
     - tab "Trajectory"
 - text: Explain event sourcing in one sentence. {{clock}}
 - button "Copy":
@@ -55,6 +56,8 @@
 - button "Commands":
   - img
 - 'button "Access mode, current: Custom"': Custom
+- button "Attach files"
+- button "Compact conversation history"
 - button "6% of context used"
 - button "Send message" [disabled]
 - text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok

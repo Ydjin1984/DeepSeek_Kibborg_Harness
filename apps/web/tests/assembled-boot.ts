@@ -150,6 +150,14 @@ let unmount: (() => Promise<void>) | undefined
 export function installAssembledBootEnv(): void {
   beforeEach(() => {
     localStorage.clear()
+    // The Execution view is the conversation default; these assembled
+    // snapshots assert the chat flow, so restore the per-session selection
+    // to Chat for the deterministic fixture sessions.
+    for (const fixtureSession of ['fx-alpha', 'fx-beta', 'fx-gamma']) {
+      localStorage.setItem(`dsh.conversation.chat.${fixtureSession}`, JSON.stringify({
+        selection: null, draft: '', view: 'chat', inspect: null,
+      }))
+    }
     // The locale service derives its provisional locale from the browser and
     // takes an explicit choice only from Host settings, which this lane's
     // fixture transport does not serve; pinning the navigator is what selects

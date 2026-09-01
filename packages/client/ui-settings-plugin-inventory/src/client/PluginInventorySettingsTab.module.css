@@ -115,6 +115,11 @@
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-3);
+  transition: border-color .16s, box-shadow .16s;
+}
+
+.card:hover {
+  border-color: var(--dsw-alias-label-dimmed);
 }
 
 .card[data-open='true'] {
@@ -122,13 +127,20 @@
   box-shadow: var(--dsw-shadow-lv1);
 }
 
+.cardHeader {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
 .cardContent {
   box-sizing: border-box;
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: 100%;
+  min-width: 0;
   min-height: 52px;
   border: 0;
   padding: 12px 14px;
@@ -140,7 +152,7 @@
 }
 
 .cardContent:hover,
-.card[data-open='true'] > .cardContent {
+.card[data-open='true'] > .cardHeader > .cardContent {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
@@ -149,17 +161,76 @@
   outline-offset: -2px;
 }
 
+.toggle {
+  flex: none;
+  align-self: center;
+  min-height: 26px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  margin-right: 12px;
+  padding: 2px 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color .16s, color .16s, background .16s;
+}
+
+.toggle:hover:not(:disabled) {
+  border-color: var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+  color: var(--dsw-alias-label-primary);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 1px;
+}
+
+.toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.toggleFailure {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Plugin names are long kebab-case identifiers (up to ~40 chars). The header
+   row also carries the toggle button and, in Russian, a wide «Отключить» label,
+   which squeezed a single nowrap title to 50-78px and truncated most names in
+   every locale. The title now owns its own column: it grows to the full width
+   left after the chevron and wraps up to two lines, while the status dot and
+   enabled/disabled tag move to a meta line beneath it. */
 .cardTitle {
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.cardTrailing {
+/* Title + meta stack: flex-grow eats the row so the title never competes
+   with the toggle; the chevron keeps its own flex:none column on the right. */
+.cardMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cardMeta {
   display: inline-flex;
   flex: none;
   align-items: center;

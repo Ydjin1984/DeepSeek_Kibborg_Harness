@@ -6,7 +6,10 @@
 }
 
 .error {
-  max-width: 180px;
+  /* The header action row is narrow; the localized failure message (e.g.
+     Russian «Не удалось открыть файл конфигурации») must stay readable, so
+     the cap is sized for the longest shipped copy rather than the shortest. */
+  max-width: 340px;
   overflow: hidden;
   color: var(--dsw-alias-state-error-primary);
   font-size: 12px;

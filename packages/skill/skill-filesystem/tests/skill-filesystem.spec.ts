@@ -241,6 +241,8 @@ describe('FileSystemSkillProvider', () => {
       '---',
       'name: rich-skill',
       'description: rich description',
+      'description.zh: 富描述',
+      'description.ru: Расширенное описание',
       'whenToUse: For richer local parsing',
       'disable-model-invocation: off',
       'user-invocable: YES',
@@ -292,6 +294,7 @@ describe('FileSystemSkillProvider', () => {
     })
     expect(await ctx.skills.get('rich-skill')).toMatchObject({
       whenToUse: 'For richer local parsing',
+      localizedDescription: { zh: '富描述', ru: 'Расширенное описание' },
       invocation: { modelInvocable: true, userInvocable: true },
       metadata: { owner: 'tests' },
     })
@@ -877,6 +880,96 @@ describe('FileSystemSkillProvider', () => {
       } else {
         process.env.DSH_BUNDLED_SKILL_DIR = previousBundledSkillDir
       }
+    }
+  })
+
+  it('hides a directory skill carrying the .disabled marker and reveals it again when the marker is removed', { timeout: 15000 }, async () => {
+    const home = await tempDir('skill-disabled')
+    const project = await tempDir('skill-disabled-project')
+    await mkdir(join(project, '.git'), { recursive: true })
+    await writeSkill(join(project, '.dsh/skills'), 'offline-skill', 'Toggled skill')
+    await writeSkill(join(project, '.dsh/skills'), 'online-skill', 'Always visible')
+    const marker = join(project, '.dsh/skills/offline-skill/.disabled')
+    await writeFile(marker, '')
+
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    const fiber = await ctx.plugin(SkillFileSystem, {
+      dshHome: join(home, '.dsh'),
+      agentsHome: join(home, '.agents'),
+      watch: true,
+      watchStabilityThresholdMs: 20,
+      watchPollIntervalMs: 10,
+    })
+    try {
+      expect((await ctx.skills.list({ cwd: project })).map(skill => skill.name)).toEqual(['online-skill'])
+      expect(await ctx.skills.get('offline-skill', { cwd: project })).toBeUndefined()
+
+      await rm(marker)
+      await waitFor(async () => (await ctx.skills.list({ cwd: project })).some(skill => skill.name === 'offline-skill'), value => value)
+      expect((await ctx.skills.list({ cwd: project })).map(skill => skill.name)).toEqual(['offline-skill', 'online-skill'])
+    } finally {
+      await fiber.dispose()
+    }
+  })
+
+  it('parses a valid skill source with the shared parser', () => {
+    const result = SkillFileSystem.parseSkillSource([
+      '---',
+      'name: demo-skill',
+      'description: Demo description',
+      'description.ru: Демо',
+      'whenToUse: For demos',
+      'user-invocable: false',
+      'metadata:',
+      '  owner: demo',
+      '---',
+      '',
+      'Instructions body.',
+      '',
+    ].join('\n'))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.skill.name).toBe('demo-skill')
+    expect(result.skill.description).toBe('Demo description')
+    expect(result.skill.localizedDescription).toEqual({ ru: 'Демо' })
+    expect(result.skill.whenToUse).toBe('For demos')
+    expect(result.skill.invocation).toEqual({ modelInvocable: true, userInvocable: false })
+    expect(result.skill.metadata).toEqual({ owner: 'demo' })
+    expect(result.skill.content).toBe('Instructions body.')
+
+    // A zh-only description exercises the localized-description branch where
+    // the ru entry is absent (both present is covered by the rich-skill case).
+    const zhOnly = SkillFileSystem.parseSkillSource([
+      '---',
+      'name: zh-demo',
+      'description: Zh demo',
+      'description.zh: 中文描述',
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'))
+    expect(zhOnly.ok).toBe(true)
+    if (!zhOnly.ok) return
+    expect(zhOnly.skill.localizedDescription).toEqual({ zh: '中文描述' })
+  })
+
+  it('reports exact reasons for each invalid skill source shape', () => {
+    const cases: Array<[string, RegExp]> = [
+      ['plain text without frontmatter', /missing YAML frontmatter/],
+      ['---\nname: "unterminated\n---\n', /invalid YAML frontmatter/],
+      ['---\nname: demo-skill\n---\n\nBody.\n', /requires name and description/],
+      ['---\ndescription: Missing name\n---\n\nBody.\n', /requires name and description/],
+      ['---\nname: Bad_Name\ndescription: desc\n---\n\nBody.\n', /invalid skill name "Bad_Name"/],
+      ['---\nname: demo-skill\ndescription: desc\ndisableModelInvocation: true\n---\n\nBody.\n', /disableModelInvocation/],
+      ['---\nname: demo-skill\ndescription: desc\nuser-invocable: maybe\n---\n\nBody.\n', /user-invocable/],
+    ]
+    for (const [source, pattern] of cases) {
+      const result = SkillFileSystem.parseSkillSource(source)
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.reason).toMatch(pattern)
     }
   })
 })

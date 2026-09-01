@@ -52,12 +52,17 @@ export interface SkillInvocationPolicy {
   readonly userInvocable: boolean
 }
 
+/** Optional per-locale routing descriptions for locale-aware discovery consumers; the base `description` stays the model-facing default. */
+export type LocalizedSkillDescription = Readonly<Partial<Record<'zh' | 'ru', string>>>
+
 /** Invocation-neutral skill metadata returned by `ctx.skills.list()`. */
 export interface SkillSummary {
   /** Kebab-case identifier used to address the skill. */
   readonly name: string
   /** Short routing description shown by discovery consumers. */
   readonly description: string
+  /** Optional per-locale routing descriptions; locale-aware consumers prefer the active locale's entry. */
+  readonly localizedDescription?: LocalizedSkillDescription
   /** Optional extra routing guidance. */
   readonly whenToUse?: string
   /** Resolved model and user invocation controls. */
@@ -718,6 +723,7 @@ function validateCandidate(candidate: SkillCandidate, providerName: string): voi
   if (candidate.description.length === 0) {
     throw new Error(`skill provider "${providerName}" returned skill "${candidate.name}" without a description`)
   }
+  validateLocalizedDescription(candidate.localizedDescription, `skill provider "${providerName}" returned skill "${candidate.name}"`)
   validateInvocation(candidate.invocation, `skill provider "${providerName}" returned skill "${candidate.name}"`)
   if (candidate.whenToUse !== undefined && typeof candidate.whenToUse !== 'string') {
     throw new TypeError(`skill provider "${providerName}" returned skill "${candidate.name}" with a non-string whenToUse`)
@@ -742,7 +748,30 @@ function validateCandidate(candidate: SkillCandidate, providerName: string): voi
 function validateRuntimeSkill(skill: SkillRegistration): void {
   if (!SKILL_NAME.test(skill.name)) throw new Error(`invalid skill name "${skill.name}"`)
   if (skill.description.length === 0) throw new Error(`skill "${skill.name}" requires a description`)
+  validateLocalizedDescription(skill.localizedDescription, `runtime skill "${skill.name}"`)
   validateInvocation(skill.invocation, `runtime skill "${skill.name}"`)
+}
+
+/**
+ * Validate an optional per-locale description map: fixed locale keys and
+ * non-empty string values only. The base `description` is always required and
+ * stays the model-facing default, so the map is strictly additive.
+ * @param value - the map or `undefined`.
+ * @param subject - diagnostic prefix naming the owning skill.
+ */
+function validateLocalizedDescription(value: unknown, subject: string): void {
+  if (value === undefined) return
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${subject} localizedDescription must be an object`)
+  }
+  for (const [locale, text] of Object.entries(value)) {
+    if (locale !== 'zh' && locale !== 'ru') {
+      throw new TypeError(`${subject} localizedDescription has unsupported locale "${locale}"`)
+    }
+    if (typeof text !== 'string' || text.length === 0) {
+      throw new TypeError(`${subject} localizedDescription.${locale} must be a non-empty string`)
+    }
+  }
 }
 
 /** Validate a definition loaded from a provider-controlled parser or remote source. */
@@ -759,6 +788,7 @@ function validateDefinition(skill: SkillDefinition): void {
   if (!SKILL_NAME.test(name)) throw new Error(`loaded skill has invalid name "${name}"`)
   if (typeof description !== 'string') throw new TypeError(`loaded skill "${name}" description must be a string`)
   if (description.length === 0) throw new Error(`loaded skill "${name}" requires a description`)
+  validateLocalizedDescription(skill.localizedDescription, `loaded skill "${name}"`)
   validateInvocation(invocation, `loaded skill "${name}"`)
   if (whenToUse !== undefined && typeof whenToUse !== 'string') throw new TypeError(`loaded skill "${name}" whenToUse must be a string`)
   if (typeof source !== 'string') throw new TypeError(`loaded skill "${name}" source must be a string`)
@@ -768,10 +798,11 @@ function validateDefinition(skill: SkillDefinition): void {
 }
 
 function toSummary(skill: SkillDefinition | SkillCandidate): SkillSummary {
-  const { name, description, whenToUse, invocation, source, provider, resourceBase } = skill
+  const { name, description, localizedDescription, whenToUse, invocation, source, provider, resourceBase } = skill
   return {
     name,
     description,
+    ...localizedDescription !== undefined ? { localizedDescription } : {},
     ...whenToUse !== undefined ? { whenToUse } : {},
     invocation,
     source,

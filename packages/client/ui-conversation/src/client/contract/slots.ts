@@ -13,33 +13,41 @@ import type {
 import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type { ComposerBlock } from '../input/blocks.ts'
+import type { ComposerBlock } from '../contract/blocks.ts'
 import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
-} from '../input/contract.ts'
+} from '../contract/input.ts'
 import type { createChatStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
 
-/** Browser-owned image that has not crossed the durable host boundary. */
+/** Browser-owned attachment that has not crossed the durable host boundary. */
 export interface ComposerAttachment {
-  kind: 'image'
+  /** Image drafts render a thumbnail preview; file drafts (any format) render a chip. */
+  kind: 'image' | 'file'
   id: DraftAttachmentId
   file: File
-  previewUrl: string
+  /** Object URL of the original bytes; present for images only. */
+  previewUrl?: string
 }
 
 /** Input state handed to the optional attachment presentation plugin. */
 export interface ComposerAttachmentsOwnerProps {
   /** Browser-owned draft images in input order. */
   attachments: readonly ComposerAttachment[]
-  /** Whether a document-level file drop may add images now. */
+  /** Browser-owned draft files (any format) in input order. */
+  files: readonly ComposerAttachment[]
+  /** Whether a document-level file drop may add attachments now. */
   canAcceptDrop: boolean
   /** Add one dropped batch through the composer's validation path. */
   onAddImages: (files: readonly File[]) => void
+  /** Add one dropped file batch (non-image formats) to the composer draft. */
+  onAddFiles: (files: readonly File[]) => void
   /** Remove one draft image through the conversation service. */
   onRemoveImage: (id: DraftAttachmentId) => void
+  /** Remove one draft file through the conversation service. */
+  onRemoveFile: (id: DraftAttachmentId) => void
   /** Display-ready limits for the drop invitation. */
   dropLimits?: { readonly count: number; readonly size: string } | undefined
 }
@@ -317,16 +325,43 @@ export interface InputZone {
 }
 
 /**
- * View-slot owner share: the cross-view inspect handoff (otherwise views need
- * nothing from the render site — sessionId and the snapshot hook arrive as
- * framework-standard props; tool rows go through each view's own declared
- * toolview hole).
+ * One keyed dispatch of a final Chat node through the shared node seat
+ * ('conversation.chat.node'). The seat is declared once by the session body
+ * entry and handed to every conversation view as an owner callback, so Chat
+ * and Execution render the same node renderers through one dispatch site
+ * without each view re-declaring the child slot (slots allow one declarer).
+ * @param owner - the node renderer's owner currency plus the final node.
+ * @param options - keyed dispatch key, per-occurrence hook context, and the
+ * unknown-kind fallback.
+ * @returns the rendered node row.
+ */
+export type RenderChatNode = (
+  owner: ChatNodeOwnerProps & { node: ChatNode },
+  options: { entryKey: string; hookContext: string; fallback?: ReactNode },
+) => ReactNode
+
+/**
+ * View-slot owner share: the cross-view inspect handoff and the shared node
+ * render callbacks. The session body (the sole renderer of this slot)
+ * supplies both callbacks for every view; views that do not render
+ * conversation nodes simply never call them.
  */
 export interface ConvViewOwnerProps {
   /** One-shot inspect request from another view (chat's Inspect button); null when idle. */
   inspect?: { callId: CallId } | null
   /** Acknowledge the inspect request once applied (clears the store field). */
   onInspectDone?: () => void
+  /**
+   * Dispatch one final Chat node through the shared node seat. Supplied by
+   * the session body; views that render conversation nodes use it instead of
+   * declaring the seat themselves.
+   */
+  renderChatNode: RenderChatNode
+  /**
+   * Render a historical image group through the attachment seat. Supplied by
+   * the session body, which owns the seat declaration.
+   */
+  renderMessageImages: RenderMessageImages
 }
 
 /**
@@ -476,6 +511,8 @@ export interface ConversationSessionInjected {
   releaseSessionImages: (sessionId: SessionId) => void
   /** Bind the input machine's draft persistence mirror to the session store. */
   bindDraftMirror: (write: (text: string) => void) => () => void
+  /** Resolve a session-authorized historical image (the node seat's loader). */
+  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
 }
 
 /** Business callbacks injected into the strict session header seat. */
@@ -539,6 +576,12 @@ export interface ComposerBarInjected {
   removeImage: ((id: DraftAttachmentId) => void) | undefined
   /** Resolve ordered input ids to browser-owned draft images. */
   draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  /** Mint browser-owned draft files (any format) and append their ids; null = attached, string = rejection reason. */
+  addFiles: ((files: readonly File[]) => string | null) | undefined
+  /** Release one draft file and remove its id from session input. */
+  removeFile: ((id: DraftAttachmentId) => void) | undefined
+  /** Resolve ordered input ids to browser-owned draft files. */
+  draftFiles: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
   /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
   resolveSubmitMode: (
     running: boolean,
@@ -630,10 +673,10 @@ export type ConversationSlotProps =
   & InjectFace<ConversationInjected>
   & PropsLocale<'conversation'>
 
-/** Full strict-session body props: per-session store, view ring, and draft mirror. */
+/** Full strict-session body props: per-session store, the view ring, the shared node-seat render seats, and the draft mirror. */
 export type ConversationSessionSlotProps =
   PropsRuntime<'conversation.session'>
-  & PropsRenderSlots<'conversation.view'>
+  & PropsRenderSlots<'conversation.view' | 'conversation.chat.node' | 'conversation.message.images'>
   & PropsStore<ChatStore>
   & ConversationSessionInjected
 
@@ -734,8 +777,6 @@ export interface ChatViewInjected {
    */
   openFile: (path: string) => Promise<void>
   loadOlder: () => void
-  /** Resolve a session-authorized historical image for inline display. */
-  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */
   inspectCall: (callId: CallId) => void
   /**
@@ -760,11 +801,19 @@ export interface ChatViewInjected {
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
-/** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
+/** Full chat-view component props: runtime (with the shared node-seat owner callbacks) & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
+
+/**
+ * Full execution-view component props: the same surface as the chat view —
+ * same shared node-seat owner callbacks, same shared store, and the same
+ * injected callbacks — because both views are registered from this package
+ * with identical declarations. The alias documents the execution view's
+ * contract without re-deriving the shares.
+ */
+export type ExecutionViewSlotProps = ChatViewSlotProps
 
 /** Full props of the attachment plugin's composer entry. */
 export type ComposerAttachmentsProps =

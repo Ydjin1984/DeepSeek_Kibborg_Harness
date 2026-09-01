@@ -12,7 +12,7 @@ import {
   fixtureUserPrompts, launchWebScaffold, seedSession, watchConsole, webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/details-session-lifecycle', import.meta.url))
 const HANDLES_EXPECTED = join(SNAPSHOT_DIR, 'handles.expected.md')
@@ -95,6 +95,9 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await input.fill(PROMPT)
     await input.press('Enter')
     await settled
+    // The Execution view is the conversation default; the turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
 
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
@@ -143,6 +146,9 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     }, { timeout: 5_000 }).toBe('true')
     const seeded = ungroupedSection.locator('[role="treeitem"]').nth(1)
     await seeded.click()
+    // The seeded session has its own view default (Execution); switch it to
+    // Chat before the transcript assertions.
+    await selectChatView(page)
     await page.getByText('DONE', { exact: true }).waitFor({ timeout: 15_000 })
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
     expect(tripwire.pageErrors).toEqual([])

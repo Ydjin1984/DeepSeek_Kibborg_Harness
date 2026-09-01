@@ -214,6 +214,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       openDocument(request: RpcRequest<{ agentPreset: string }>) {
         return Promise.resolve({ rpcId: request.rpcId, result: { ok: true as const, value: { opened: true as const } } })
       },
+      openComposition(request: RpcRequest<{ agentPreset: string }>) {
+        return Promise.resolve({ rpcId: request.rpcId, result: { ok: true as const, value: { opened: true as const } } })
+      },
       remove(request: RpcRequest<{ agentPreset: string }>) {
         return Promise.resolve({ rpcId: request.rpcId, result: { ok: true as const, value: {} } })
       },
@@ -221,6 +224,87 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
     skills: {
       async list(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { skills: [{ name: 'commit-helper', description: 'Git commits', modelInvocable: true }] } } }
+      },
+      async listManaged(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { skills: [] } } }
+      },
+      async read(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async save(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              result: {
+                name: request.payload.name,
+                scope: request.payload.scope,
+                path: `/skills/${request.payload.name}/SKILL.md`,
+                created: true,
+                version: 'v1',
+                security: { status: 'valid', findings: [] },
+              },
+            },
+          },
+        }
+      },
+      async remove(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async restore(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async permanentDelete(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async trash(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { entries: [] } } }
+      },
+      async setEnabled(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async versions(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { versions: [] } } }
+      },
+      async rollback(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { activeVersion: request.payload.version } } }
+      },
+      async validate(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ok: true } } }
+      },
+      async securityCheck(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { status: 'valid', findings: [] } } }
+      },
+      async benchmarkStart(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { run: { id: 'bench-1', skillName: request.payload.name, status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 } } } }
+      },
+      async benchmarkPoll(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { run: { id: request.payload.runId, skillName: 'demo-skill', status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 } } } }
+      },
+      async benchmarkCancel(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { run: { id: request.payload.runId, skillName: 'demo-skill', status: 'cancelled', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 } } } }
+      },
+      async benchmarkBatchStart(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              runs: request.payload.names.map((name, index) => ({
+                id: `bench-${index}`,
+                skillName: name,
+                status: 'running',
+                phase: 'preparing',
+                progress: { case: 0, total: 0 },
+                createdAt: 0,
+              })),
+            },
+          },
+        }
+      },
+      async autoImprove(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { run: { id: 'bench-ai', skillName: request.payload.name, status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 } } } }
       },
     },
     goals: {
@@ -280,6 +364,18 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       },
       async discoverModels(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { models: [] } } }
+      },
+      async oauthLoginStart(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { loginId: 'stub', provider: 'stub', userCode: 'ABCD-EFGH', verificationUri: 'https://stub', loginLabel: 'stub' } } }
+      },
+      async oauthLoginWait(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async oauthLoginCancel(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async oauthLogout(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
       },
     },
     events: {
@@ -386,6 +482,8 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
       .toEqual({ ok: true, value: { agentPreset: 'mine' } })
     expect((await c.agentPresets.openDocument({ agentPreset: 'mine' })).result)
       .toEqual({ ok: true, value: { opened: true } })
+    expect((await c.agentPresets.openComposition({ agentPreset: 'mine' })).result)
+      .toEqual({ ok: true, value: { opened: true } })
     expect((await c.agentPresets.remove({ agentPreset: 'mine' })).result).toEqual({ ok: true, value: {} })
   })
 
@@ -428,6 +526,48 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
     const c = client()
     const skills = await c.skills.list({ sessionId: 's' as never })
     expect(skills.result).toEqual({ ok: true, value: { skills: [{ name: 'commit-helper', description: 'Git commits', modelInvocable: true }] } })
+  })
+
+  it('round-trips the skill-manager lifecycle through the wire form', async () => {
+    const c = client()
+    const listed = await c.skills.listManaged({ sessionId: 's' as never })
+    expect(listed.result).toMatchObject({ ok: true, value: { skills: [] } })
+    const read = await c.skills.read({ sessionId: 's' as never, name: 'demo-skill' })
+    expect(read.result).toMatchObject({ ok: true })
+    const saved = await c.skills.save({ sessionId: 's' as never, name: 'demo-skill', content: '---\nname: x\ndescription: d\n---\n\nbody\n', scope: 'project' })
+    expect(saved.result).toMatchObject({ ok: true, value: { result: { name: 'demo-skill', created: true } } })
+    const removed = await c.skills.remove({ sessionId: 's' as never, name: 'demo-skill' })
+    expect(removed.result).toEqual({ ok: true, value: {} })
+    const restored = await c.skills.restore({ sessionId: 's' as never, name: 'demo-skill' })
+    expect(restored.result).toEqual({ ok: true, value: {} })
+    const deleted = await c.skills.permanentDelete({ sessionId: 's' as never, name: 'demo-skill' })
+    expect(deleted.result).toEqual({ ok: true, value: {} })
+    const trash = await c.skills.trash({ sessionId: 's' as never })
+    expect(trash.result).toMatchObject({ ok: true, value: { entries: [] } })
+    const toggled = await c.skills.setEnabled({ sessionId: 's' as never, name: 'demo-skill', enabled: false })
+    expect(toggled.result).toEqual({ ok: true, value: {} })
+    const versions = await c.skills.versions({ sessionId: 's' as never, name: 'demo-skill' })
+    expect(versions.result).toMatchObject({ ok: true, value: { versions: [] } })
+    const rolled = await c.skills.rollback({ sessionId: 's' as never, name: 'demo-skill', version: 'v1' })
+    expect(rolled.result).toMatchObject({ ok: true, value: { activeVersion: 'v1' } })
+    const validated = await c.skills.validate({ content: '---\nname: x\ndescription: d\n---\n\nbody\n' })
+    expect(validated.result).toMatchObject({ ok: true, value: { ok: true } })
+    const checked = await c.skills.securityCheck({ content: '---\nname: x\ndescription: d\n---\n\nbody\n' })
+    expect(checked.result).toMatchObject({ ok: true, value: { status: 'valid' } })
+    const started = await c.skills.benchmarkStart({ sessionId: 's' as never, name: 'demo-skill', taskModel: { provider: 'p', model: 'm' } })
+    expect(started.result).toMatchObject({ ok: true, value: { run: { status: 'running' } } })
+    const polled = await c.skills.benchmarkPoll({ runId: 'bench-1' })
+    expect(polled.result).toMatchObject({ ok: true, value: { run: { id: 'bench-1' } } })
+    const cancelled = await c.skills.benchmarkCancel({ runId: 'bench-1' })
+    expect(cancelled.result).toMatchObject({ ok: true, value: { run: { status: 'cancelled' } } })
+    const batch = await c.skills.benchmarkBatchStart({
+      sessionId: 's' as never,
+      names: ['demo-skill'],
+      taskModel: { provider: 'p', model: 'm' },
+    })
+    expect(batch.result).toMatchObject({ ok: true, value: { runs: [{ skillName: 'demo-skill', status: 'running' }] } })
+    const improved = await c.skills.autoImprove({ sessionId: 's' as never, name: 'demo-skill', taskModel: { provider: 'p', model: 'm' } })
+    expect(improved.result).toMatchObject({ ok: true, value: { run: { status: 'running' } } })
   })
 
   it('lets host.pickDirectory finish after the 30-second default unary deadline', async () => {

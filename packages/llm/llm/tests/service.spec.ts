@@ -554,6 +554,16 @@ describe('LlmRuntime', () => {
     await expect(ctx.llm.resolveModelInfo('missing', 'm')).rejects.toMatchObject({ code: 'NO_ADAPTER' })
   })
 
+  it('preserves input modalities through advisory model listing', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    const model = { provider: 'catalog', id: 'fast', name: 'Fast', inputModalities: ['text', 'image'] as const }
+    ctx.llm.registerAdapter(['catalog'], new CatalogAdapter({ id: 'catalog', name: 'Catalog' }, [model]))
+    await expect(ctx.llm.listModels('catalog')).resolves.toEqual([{
+      provider: 'catalog', id: 'fast', name: 'Fast', inputModalities: ['text', 'image'],
+    }])
+  })
+
   it.each([
     [{ provider: 1, id: 'model', name: 'Model' }, 'non-string provider'],
     [{ provider: 'other', id: 'model', name: 'Model' }, 'mismatched provider'],

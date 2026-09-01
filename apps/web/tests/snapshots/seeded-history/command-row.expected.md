@@ -6,6 +6,7 @@
     - img
   - tablist:
     - tab "Chat" [selected]
+    - tab "Execution"
     - tab "Trajectory"
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. 7/25 {{clock}}"
 - button "Copy":
@@ -49,6 +50,8 @@
 - button "Commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

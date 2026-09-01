@@ -396,6 +396,10 @@ describe('WebSearchCardController', () => {
 
     expect(state()).toMatchObject({
       baseURL: { text: 'https://search.test/v1', overridden: false },
+      model: { text: '', overridden: false },
+      apiVersion: { text: '', overridden: false },
+      maxTokens: { text: '', overridden: false },
+      maxUses: { text: '', overridden: false },
       apiKey: { text: '', overridden: false },
     })
   })
@@ -525,7 +529,7 @@ describe('WebSearchCardController', () => {
     expect(controller.inject().hooks.webSearchCard.getSnapshot().apiKeyConfigured).toBe(false)
   })
 
-  it('saves the endpoint and the search budget together', async () => {
+  it('saves the endpoint, the model, and the token budget together', async () => {
     const host = stubSettingsScope<WebSearchSettings>()
     acceptWrites(host)
     const credentials = credentialsApi(true)
@@ -534,11 +538,20 @@ describe('WebSearchCardController', () => {
     const face = controller.inject()
 
     face.edit('baseURL', 'https://other.test')
+    face.edit('apiVersion', '2024-01-01')
+    face.edit('model', 'kibborg-brain')
+    face.edit('maxTokens', '2048')
     face.edit('maxUses', '3')
     face.save()
-    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(5) })
 
-    expect(host.set.mock.calls).toEqual([['baseURL', 'https://other.test'], ['maxUses', 3]])
+    expect(host.set.mock.calls).toEqual([
+      ['baseURL', 'https://other.test'],
+      ['apiVersion', '2024-01-01'],
+      ['model', 'kibborg-brain'],
+      ['maxTokens', 2048],
+      ['maxUses', 3],
+    ])
     expect(credentials.set).not.toHaveBeenCalled()
   })
 })

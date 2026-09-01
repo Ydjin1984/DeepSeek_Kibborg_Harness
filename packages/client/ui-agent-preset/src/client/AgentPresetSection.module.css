@@ -135,9 +135,15 @@
 }
 
 .cardName {
+  min-width: 0;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
+  /* The badges are nowrap, so a long localized name must yield to them
+     instead of pushing the in-use badge past the card's edge. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .badge,
@@ -238,7 +244,12 @@
   color: var(--dsw-alias-bg-layer-3);
   font-size: 11px;
   line-height: 17px;
-  white-space: nowrap;
+  /* Long localized tooltips (Russian in particular) must wrap instead of
+     clipping against the panel's overflow; keep them readable and inside
+     the panel bounds. */
+  max-width: 280px;
+  white-space: normal;
+  text-align: center;
   opacity: 0;
   pointer-events: none;
   transition: opacity .12s;

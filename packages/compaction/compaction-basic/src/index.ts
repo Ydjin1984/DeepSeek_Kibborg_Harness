@@ -16,12 +16,15 @@ import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+// Type-only: resolves the optional projection registry Context declaration.
+import type {} from '@deepseek-ai/dsh-session-projection'
 import {
   resolveCompactSpec,
   resolveConfig,
   resolveTargetPolicy,
   TargetPressureConfigError,
 } from './config.ts'
+import { compactProjectionDefinition } from './projection.ts'
 import {
   assertNoActiveCompaction,
   compactSurfaceRegion,
@@ -126,6 +129,13 @@ export class BasicCompactionEngine extends CompactionEngine {
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
     this.config = resolveConfig(config)
+
+    // Projection registration is an optional child: compositions without the
+    // generic registry (headless) keep the engine's standalone read shape.
+    ctx.inject(['sessionProjections'], (projectionCtx) => {
+      projectionCtx.sessionProjections.register(compactProjectionDefinition(this.config))
+    })
+
     if (this.config.auto) this._registerAutomaticCompaction()
   }
 

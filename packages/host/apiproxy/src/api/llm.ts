@@ -29,6 +29,16 @@ export interface ConfigurableProviderView {
    * surface must treat absence as "unknown", not as "shipped".
    */
   declared?: boolean
+  /**
+   * Device-code OAuth this adapter offers for the route. Absent when the
+   * Models page should not show a subscription sign-in.
+   */
+  oauth?: {
+    /** Button label, e.g. "Sign in with SuperGrok or X Premium". */
+    loginLabel: string
+    /** Credential reference holding the OAuth JSON for this route. */
+    credentialRef: string
+  }
 }
 
 /** Llm-domain unary methods (the map keys llm.* of RpcMethodMap). */
@@ -74,6 +84,56 @@ export interface LlmApi {
     }>,
     signal?: AbortSignal,
   ): Promise<RpcResponse<{ models: DiscoveredModelView[] }>>
+
+  /**
+   * Start device-code OAuth for one catalog route. Returns the user code and
+   * verification URL immediately; {@link oauthLoginWait} stores tokens after
+   * the user approves. Privileged: the Host talks to the issuer.
+   */
+  oauthLoginStart(
+    request: RpcRequest<{ settingsNs: string; provider: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<OAuthDeviceChallengeView>>
+
+  /**
+   * Wait for an in-flight OAuth login to finish. Caller-paced: device-code
+   * approval can outlive the default unary deadline.
+   */
+  oauthLoginWait(
+    request: RpcRequest<{ settingsNs: string; loginId: string }>,
+    signal?: AbortSignal,
+  ): Promise<RpcResponse<{}>>
+
+  /**
+   * Cancel an in-flight OAuth login. Unknown ids succeed as a no-op.
+   */
+  oauthLoginCancel(
+    request: RpcRequest<{ settingsNs: string; loginId: string }>,
+  ): Promise<RpcResponse<{}>>
+
+  /**
+   * Forget the stored OAuth credential for one route. The settings profile is
+   * left in place.
+   */
+  oauthLogout(
+    request: RpcRequest<{ settingsNs: string; provider: string }>,
+  ): Promise<RpcResponse<{}>>
+}
+
+/** Wire view of one OAuth device-code challenge. */
+export interface OAuthDeviceChallengeView {
+  /** Opaque id for wait/cancel. */
+  loginId: string
+  /** Provider route this login authenticates. */
+  provider: string
+  /** Short code the user confirms on the verification page. */
+  userCode: string
+  /** HTTPS verification URL. */
+  verificationUri: string
+  /** Device-code lifetime in seconds, when the issuer supplied one. */
+  expiresInSeconds?: number
+  /** Button/dialog label. */
+  loginLabel: string
 }
 
 /** Wire view of one model an interrogated endpoint advertises. */

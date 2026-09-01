@@ -21,7 +21,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/skill-user-invoke', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
@@ -112,6 +112,9 @@ describe.skipIf(MODE === 'record')('web e2e: user-explicit skill invocation thro
     const settled = scaffold.whenTurnSettled()
     await composer.fill(`/${SKILL_NAME} ${ARGS_TEXT}`)
     await composer.press('Enter')
+    // The Execution view is the conversation default; the turn's first content
+    // is visible now, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     // The gesture stays an ordinary user bubble (decorated /name token plus
     // the trailing text), ahead of the injected context.

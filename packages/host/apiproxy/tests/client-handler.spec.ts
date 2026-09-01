@@ -89,13 +89,34 @@ function scriptedApi(overrides: {
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       archiveSession: r => ok(r, { archivedSessionIds: [r.payload.sessionId] }),
     },
-    skills: { list: r => ok(r, { skills: [] }), ...overrides.skills },
+    skills: {
+      list: r => ok(r, { skills: [] }),
+      listManaged: r => ok(r, { skills: [] }),
+      read: err,
+      save: err,
+      remove: err,
+      restore: err,
+      permanentDelete: err,
+      trash: err,
+      setEnabled: err,
+      versions: err,
+      rollback: err,
+      validate: err,
+      securityCheck: err,
+      benchmarkStart: err,
+      benchmarkPoll: err,
+      benchmarkCancel: err,
+      benchmarkBatchStart: err,
+      autoImprove: err,
+      ...overrides.skills,
+    },
     agentPresets: {
       list: r => ok(r, { presets: [], authorable: false, hasDocument: false }),
       select: r => ok(r, { agentPreset: r.payload.agentPreset }),
       read: r => ok(r, { agentPreset: r.payload.agentPreset, trust: 'user' as const, content: '' }),
       copy: r => ok(r, { agentPreset: r.payload.agentPreset }),
       openDocument: r => ok(r, { opened: true as const }),
+      openComposition: r => ok(r, { opened: true as const }),
       remove: r => ok(r, {}),
       ...overrides.agentPresets,
     },
@@ -126,6 +147,10 @@ function scriptedApi(overrides: {
       providers: r => ok(r, { providers: [] }),
       models: r => ok(r, { groups: [], failures: [] }),
       discoverModels: err,
+      oauthLoginStart: err,
+      oauthLoginWait: err,
+      oauthLoginCancel: err,
+      oauthLogout: err,
       ...overrides.llm,
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
@@ -753,6 +778,13 @@ describe('config unary surface', () => {
         providers: record('llm.providers', r => ok(r, { providers: [providerRow] })),
         models: record('llm.models', r => ok(r, { groups: [group], failures: [] })),
         discoverModels: record('llm.discoverModels', r => ok(r, { models: [{ id: 'acme-large', contextWindow: 65536 }] })),
+        oauthLoginStart: record('llm.oauthLoginStart', r => ok(r, {
+          loginId: 'login-1', provider: 'xai', userCode: 'ABCD-EFGH',
+          verificationUri: 'https://auth.x.ai/device', loginLabel: 'Sign in with SuperGrok or X Premium',
+        })),
+        oauthLoginWait: record('llm.oauthLoginWait', r => ok(r, {})),
+        oauthLoginCancel: record('llm.oauthLoginCancel', r => ok(r, {})),
+        oauthLogout: record('llm.oauthLogout', r => ok(r, {})),
       },
     })
     const c = client(api)
@@ -785,11 +817,26 @@ describe('config unary surface', () => {
       apiKey: 'probe-key',
     })
     expect(discovered.result).toEqual({ ok: true, value: { models: [{ id: 'acme-large', contextWindow: 65536 }] } })
+    const started = await c.llm.oauthLoginStart({ settingsNs: 'llm-pi-ai', provider: 'xai' })
+    expect(started.result).toEqual({
+      ok: true,
+      value: {
+        loginId: 'login-1', provider: 'xai', userCode: 'ABCD-EFGH',
+        verificationUri: 'https://auth.x.ai/device', loginLabel: 'Sign in with SuperGrok or X Premium',
+      },
+    })
+    expect((await c.llm.oauthLoginWait({ settingsNs: 'llm-pi-ai', loginId: 'login-1' })).result)
+      .toEqual({ ok: true, value: {} })
+    expect((await c.llm.oauthLoginCancel({ settingsNs: 'llm-pi-ai', loginId: 'login-1' })).result)
+      .toEqual({ ok: true, value: {} })
+    expect((await c.llm.oauthLogout({ settingsNs: 'llm-pi-ai', provider: 'xai' })).result)
+      .toEqual({ ok: true, value: {} })
 
     expect(seen.map(call => call.method)).toEqual([
       'settings.describe', 'settings.openDocument', 'settings.update', 'settings.replace', 'settings.mutate',
       'credentials.describe', 'credentials.set', 'credentials.unset',
       'llm.providers', 'llm.models', 'llm.discoverModels',
+      'llm.oauthLoginStart', 'llm.oauthLoginWait', 'llm.oauthLoginCancel', 'llm.oauthLogout',
     ])
     expect(seen[2]?.payload).toEqual({ ns: 'llm-deepseek', patch: { baseURL: 'https://next' } })
     expect(seen[4]?.payload)

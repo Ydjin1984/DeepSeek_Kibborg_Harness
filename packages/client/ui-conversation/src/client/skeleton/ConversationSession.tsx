@@ -1,10 +1,11 @@
 /** Strict per-session header/body content inserted into the resident conversation layout. */
 
-import { useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import type { SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ChatNode } from '../contract/chat-nodes.ts'
 import type {
-  ConversationSessionHeaderSlotProps, ConversationSessionSlotProps,
+  ConversationSessionHeaderSlotProps, ConversationSessionSlotProps, RenderChatNode, RenderMessageImages,
 } from '../contract/slots.ts'
 import type { ViewTab } from '../contract/views.ts'
 import css from './ConversationRoot.module.css'
@@ -15,18 +16,29 @@ export type ConversationSessionProps = ConversationSessionSlotProps
 /** Full props composed from the strict session header contract. */
 export type ConversationSessionHeaderProps = ConversationSessionHeaderSlotProps
 
+/** The keyed node dispatch owner: node-renderer currency plus the final node. */
+type RoutedChatNodeOwner = {
+  [Kind in ChatNode['kind']]: import('../contract/slots.ts').ChatNodeOwnerProps & { readonly node: ChatNode<Kind> }
+}[ChatNode['kind']]
+
 interface Breadcrumb {
   readonly id: SessionId
   readonly displayTitle: string
 }
 
-const DEFAULT_VIEW_ID = 'chat'
+/** Default active conversation view: the execution trace timeline; stale
+ *  persisted selections fall back to it, and Chat stays one tab away. */
+const DEFAULT_VIEW_ID = 'execution'
 
-/** Resolve by id and keep stale persisted selections on the stable Chat fallback. */
+/** Resolve by id; stale persisted selections fall back to the default view,
+ *  then the stable Chat tab, then the first registered tab (benches without
+ *  the Execution view still open on Chat). */
 function resolveActiveView(tabs: readonly ViewTab[], selectedId: string | null): ViewTab | undefined {
   const requestedId = selectedId ?? DEFAULT_VIEW_ID
   return tabs.find(view => view.id === requestedId)
     ?? tabs.find(view => view.id === DEFAULT_VIEW_ID)
+    ?? tabs.find(view => view.id === 'chat')
+    ?? tabs[0]
 }
 
 function deriveAncestry(list: SessionListState, id: SessionId): readonly Breadcrumb[] {
@@ -131,13 +143,17 @@ export function ConversationSessionHeader({
 
 /**
  * Renders the active Session view inside the resident scrollport and keeps
- * the input draft mirrored while blank Hero chrome is visible.
- * @param props - Strict Session input/store, view ledger, and render shares.
+ * the input draft mirrored while blank Hero chrome is visible. The session
+ * body owns the shared Chat-node seat declarations and hands their render
+ * callbacks to every view through the view owner share, so Chat and
+ * Execution dispatch the same node renderers without each re-declaring the
+ * child slots (slots allow one declarer per key).
+ * @param props - Strict Session input/store, view ledger, render, and locale shares.
  * @returns the active view area, or null while the Session remains blank.
  */
 export function ConversationSession({
   sessionId, useSession, useInput, inputActions, useStore, actions,
-  renderSlot, views, bindDraftMirror, releaseSessionImages,
+  renderSlot, views, bindDraftMirror, releaseSessionImages, loadImage,
 }: ConversationSessionProps) {
   useSyncExternalStore(views.subscribe, views.version)
   const tabs = views.list()
@@ -162,12 +178,31 @@ export function ConversationSession({
     releaseSessionImages(sessionId)
   }, [releaseSessionImages, sessionId])
 
+  // The shared node-seat dispatcher: routes a final Chat node to its keyed
+  // renderer (ui-tool rows, markdown, commands) with the per-occurrence
+  // turn-data hook context. The wide node union is narrowed by the keyed
+  // dispatch at runtime, mirroring the chat row seat.
+  const renderChatNode = useCallback<RenderChatNode>((owner, options) => {
+    const kind = owner.node.kind
+    return renderSlot('conversation.chat.node', owner as RoutedChatNodeOwner, {
+      entryKey: kind,
+      hookContext: options.hookContext,
+      fallback: options.fallback,
+    })
+  }, [renderSlot])
+  const renderMessageImages = useCallback<RenderMessageImages>(
+    imageOwner => renderSlot('conversation.message.images', { ...imageOwner, loadImage }),
+    [loadImage, renderSlot],
+  )
+
   if (blank && composerPhase === 'blank') return null
   return (
     <div className={css.viewArea}>
       {active !== undefined && renderSlot('conversation.view', {
         inspect,
         onInspectDone: () => { actions.setInspect(null) },
+        renderChatNode,
+        renderMessageImages,
       }, { only: active.id })}
     </div>
   )

@@ -1,46 +1,51 @@
-# The `standard` agent preset: the full coding agent, mounted once per process.
+# Пресет агента `standard`: полноценный кодирующий агент, подключается один раз на процесс.
 #
-# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
-# standing scope; every session naming it joins by scope parentage, so the
-# tools and prompt sections registered here cover each joined agent while a
-# session's own state stays keyed per Session/Agent inside the plugins. The
-# host composition (`base.cordis.yml` + `web.cordis.yml`) keeps everything a
-# preset must not own: the registries themselves, the sandbox and approval
-# stack, persistence, and the model route.
+# Этот файл — композиция ПЛОСКОСТИ АГЕНТА. Реестр подключает её ОДИН раз под
+# постоянной областью; каждая сессия, назвавшая пресет, присоединяется по
+# родительству области, поэтому зарегистрированные здесь инструменты и разделы
+# промпта охватывают каждого присоединившегося агента, а собственное состояние
+# сессии остаётся привязанным к Session/Agent внутри плагинов. Хост-композиция
+# (`base.cordis.yml` + `web.cordis.yml`) хранит всё, чем пресет владеть не
+# должен: сами реестры, стек песочницы и подтверждений, персистентность и
+# маршрут модели.
 #
-# A service row here MUST sit inside a group carrying an `isolate` realm.
-# Without one it publishes into the root realm, where it is process-global —
-# another preset publishing the same name collides, and a host reader would
-# resolve one preset's instance for every session; `dsh-agent-presets` rejects
-# that at mount. `true` means an entry-local realm: this standing mount's own
-# private instance, apart from every other preset's. (A shared label does NOT
-# pool instances — `provide()` throws on the second registration under the
-# same realm symbol; labels join REALMS, and are not what this file needs.)
+# Строка-сервис здесь ОБЯЗАНА находиться внутри группы с областью `isolate`.
+# Без неё она публикуется в корневую область, где глобальна для процесса:
+# другой пресет, публикующий то же имя, столкнётся, а читатель хоста разрешил
+# бы экземпляр одного пресета для каждой сессии; `dsh-agent-presets` отклоняет
+# это при подключении. `true` означает область уровня записи: приватный
+# экземпляр этого постоянного подключения, отдельный от всех остальных
+# пресетов. (Общая метка НЕ объединяет экземпляры — `provide()` бросает ошибку
+# при второй регистрации под тем же символом области; метки объединяют REALMS,
+# и это файлу не нужно.)
 
-# ── identity ────────────────────────────────────────────────────────────────
+# ── идентичность ────────────────────────────────────────────────────────────
 
-# The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# Собственная персона пресета, заменяющая дефолтную персону развёртывания для
+# этого агента. `{{model}}` и `{{cwd}}` разрешаются из собственного маршрута
+# и рабочей области агента.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
     text: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      Ты — кодирующий агент на основе модели {{model}}. Твоя рабочая директория — {{cwd}}.
+
+      Всегда отвечай на русском языке, независимо от языка запроса.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
   config:
     maxBytes: 65536
 
-# ── shell ───────────────────────────────────────────────────────────────────
+# ── оболочка ────────────────────────────────────────────────────────────────
 
-# `shell-env` stays in the HOST composition: `apps/cli/src/web.ts` injects it to
-# publish `DSH_WEB_URL`/`DSH_WEB_MODE`, and a host row that injects a service is
-# the criterion for host-plane ownership — injection resolves before any session
-# exists, so there is no agent to key by. Behind a preset realm those variables
-# never reached the model's shell at all. Both shell tools consume the host
-# registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
-# host-plane too.
+# `shell-env` остаётся в ХОСТ-композиции: `apps/cli/src/web.ts` внедряет его,
+# чтобы публиковать `DSH_WEB_URL`/`DSH_WEB_MODE`, а хостовая строка, внедряющая
+# сервис, и есть критерий принадлежности плоскости хоста — внедрение разрешается
+# до появления любой сессии, поэтому по ней нет агента для привязки. За областью
+# пресета эти переменные вообще не дошли бы до оболочки модели. Оба инструмента
+# оболочки потребляют хост-реестр отсюда; их исполнители
+# (`bash-sandbox`/`pwsh-sandbox`) тоже на плоскости хоста.
 - id: tool-bash
   name: '@deepseek-ai/dsh-tool-bash'
   disabled: !!js process.platform === 'win32'
@@ -49,10 +54,10 @@
   name: '@deepseek-ai/dsh-tool-pwsh'
   disabled: !!js process.platform !== 'win32'
 
-# ── filesystem ──────────────────────────────────────────────────────────────
+# ── файловая система ────────────────────────────────────────────────────────
 
-# Both register into the host `tools` registry and provide nothing, so
-# they need no realm. The `fs` service and its policy stay in the host.
+# Обе строки регистрируются в хост-реестр `tools` и ничего не предоставляют,
+# поэтому им не нужна область. Сервис `fs` и его политика остаются на хосте.
 - id: tool-fs
   name: '@deepseek-ai/dsh-tool-fs'
 
@@ -61,46 +66,49 @@
   config:
     sampleOverCapGlobResults: false
 
-# ── background jobs ────────────────────────────────────────────────────────
+# ── фоновые задачи ──────────────────────────────────────────────────────────
 
-# Only the model-facing controls. The task REGISTRY stays on the host plane:
-# its producers sit outside any realm this file could put it in — `tool-bash`
-# above resolves it with `ctx.get`, and an entry-local realm here is invisible
-# to every sibling row, so `run_in_background` would answer "background jobs
-# unavailable" while these controls sat in the catalog. The registry is keyed by
-# owning agent anyway, so one host instance serves every session. What a preset
-# chooses is whether its agent can collect and stop background work at all.
+# Только элементы управления, видимые модели. РЕЕСТР задач остаётся на
+# плоскости хоста: его производители находятся вне любой области, которую мог бы
+# создать этот файл, — `tool-bash` выше разрешает его через `ctx.get`, а область
+# уровня записи здесь невидима ни одной соседней строке, поэтому
+# `run_in_background` отвечал бы «фоновые задачи недоступны», пока эти элементы
+# управления сидели в каталоге. Реестр и так привязан к владеющему агенту, так
+# что один хост-экземпляр обслуживает каждую сессию. Что выбирает пресет — это
+# может ли его агент собирать и останавливать фоновую работу вообще.
 - id: tool-jobs
   name: '@deepseek-ai/dsh-tool-jobs'
 
-# ── skills ──────────────────────────────────────────────────────────────────
+# ── навыки ──────────────────────────────────────────────────────────────────
 
-# The skill REGISTRY lives in the host composition and is layered per scope:
-# these rows register into THIS preset's layer of it, so they need no realm.
-# `skill-filesystem` contributes local-root discovery for agents on this preset, and
-# `tool-skill` gives them the catalog and loader; the merged catalog also
-# carries whatever the deployment registered globally (repository plugins).
+# РЕЕСТР навыков живёт в хост-композиции и наслаивается по областям: эти строки
+# регистрируются в ЕГО слой для ЭТОГО пресета, поэтому им не нужна область.
+# `skill-filesystem` вносит обнаружение локальных корней для агентов этого
+# пресета, а `tool-skill` даёт им каталог и загрузчик; объединённый каталог
+# также несёт то, что развёртывание зарегистрировало глобально (репозиторные
+# плагины).
 - id: skill-filesystem
   name: '@deepseek-ai/dsh-skill-filesystem'
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 
-# ── goals ───────────────────────────────────────────────────────────────────
+# ── цели ────────────────────────────────────────────────────────────────────
 
-# Only the model-facing tool. The goal SERVICE, its session driver, and the
-# `/goal` command stay on the host plane: the Gateway serves the goal domain as
-# Remote endpoints whose receiver comes from a generated descriptor, so it
-# resolves `goals` on the host and an entry-local realm here would hide it. The
-# registry is keyed by session anyway, so one host instance serves every
-# session. What a preset chooses is whether its agent can call the goal tool.
+# Только инструмент, видимый модели. СЕРВИС целей, его драйвер сессии и команда
+# `/goal` остаются на плоскости хоста: Gateway обслуживает домен целей как
+# Remote-эндпоинты, чей приёмник берётся из сгенерированного дескриптора,
+# поэтому он разрешает `goals` на хосте, и область уровня записи здесь скрыла бы
+# его. Реестр и так привязан к сессии, поэтому один хост-экземпляр обслуживает
+# каждую сессию. Что выбирает пресет — это может ли его агент вызывать
+# инструмент целей.
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 
-# ── plan mode ───────────────────────────────────────────────────────────────
+# ── режим планирования ──────────────────────────────────────────────────────
 
-# Plan state is per-agent by nature, so an entry-local realm is not a
-# workaround here — it is the correct lifetime.
+# Состояние плана по своей природе принадлежит агенту, поэтому область уровня
+# записи здесь не обходной путь — это правильное время жизни.
 - id: planning
   name: cordis:group
   group: true
@@ -111,29 +119,30 @@
       name: '@deepseek-ai/dsh-plan-mode'
       config:
         section: |
-              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+              Ты в режиме планирования. Оставайся в нём, пока exit_plan_mode не выполнится успешно или пользователь не переключит режим сессии. Повелительная формулировка о внесении изменений означает спланировать реализацию, а не выполнить её. Согласие пользователя в разговоре — включая ответ, подтверждающий заданный тобой вопрос, — ничего не утверждает и не завершает режим планирования; впиши подтверждённое решение в план и отправь его через exit_plan_mode.
 
-              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+              Сначала исследуй. Используй неизменяющие чтения, поиски, статический анализ и проверки, чтобы обосновать план реальным репозиторием. Не редактируй и не создавай файлы, не меняй конфигурацию, не запускай форматтеры или генерацию кода, переписывающую отслеживаемые файлы, не коммить и не выполняй план иным образом. Предпочитай существующие функции и паттерны новой механике.
 
-              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+              Каталог инструментов остаётся прежним между режимами ради стабильности кэша запросов. Эти правила режима планирования имеют приоритет над любыми более поздними описаниями инструментов или указаниями, предлагающими использовать изменяющие инструменты; те остаются в списке, чтобы каталог инструментов не менялся. Не используй todo_write для отслеживания фазы планирования: он отслеживает реализацию после одобренного плана, а сам план принадлежит exit_plan_mode.
 
-              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+              Разрешай обнаруживаемые факты осмотром. Используй ask_user_question только для решений, принадлежащих пользователю, или существенной неоднозначности, которую осмотр разрешить не может. Не спрашивай пользователя, где находится код или как работает текущее поведение, если можешь выяснить это сам.
 
-              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+              Сделай план исчерпывающим по решениям: укажи цель и критерии успеха; сгруппируй изменения реализации по подсистемам; укажи изменения публичного API, схемы и потока данных; покрой крайние случаи, сценарии отказа, тесты, критерии приёмки и явные допущения. Пусть он будет достаточно кратким для ревью и достаточно подробным, чтобы другой инженер реализовал его без принятия проектных решений.
 
-              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+              Когда будешь готов, вызови exit_plan_mode с полным планом в markdown, начиная с заголовка # title. Сделай exit_plan_mode единственным и финальным вызовом инструмента в этом ответе ассистента: он представляет план на утверждение, а реализация начинается только позже, после утверждения. Не вставляй финальный план обычным ответом и не спрашивай «продолжать?» прозой или через ask_user_question. Если ревью отклонит план, учти замечания и представь его снова. Если канал ревью недоступен или прерван, оставайся в режиме планирования и попроси пользователя переключить режим вручную; не переходи к реализации.
 
-# ── compaction ──────────────────────────────────────────────────────────────
+# ── сжатие ──────────────────────────────────────────────────────────────────
 
-# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
-# share this realm rather than sit outside it.
+# `compaction-basic` читает `toolResultPrune` через `ctx.get`, поэтому прунер
+# должен разделять эту область, а не находиться вне её.
 #
-# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
-# plane, and the rows here resolve that one instance. It takes no configuration,
-# keys every fold by Session, and owns the context-meter projection units the
-# browser reads for every session — behind a realm those units would come and go
-# with whichever presets happen to be mounted. What a preset chooses is whether
-# its agent compacts at all, which is `compaction-basic` below.
+# `tokenMeter` намеренно НЕ в этой области: счётчик остаётся на плоскости ХОСТА,
+# и строки здесь разрешают именно тот экземпляр. Он не принимает конфигурацию,
+# привязывает каждый свёрнутый ход к Session и владеет единицами проекции
+# контекстного счётчика, которые браузер читает для каждой сессии — за областью
+# эти единицы появлялись бы и исчезали вместе с тем, какие пресеты смонтированы.
+# Что выбирает пресет — это сжимается ли его агент вообще, чем и занимается
+# `compaction-basic` ниже.
 - id: compaction
   name: cordis:group
   group: true
@@ -154,23 +163,24 @@
         headChars: 4096
         tailChars: 1024
 
-# ── delegation and workflows ────────────────────────────────────────────────
+# ── делегирование и рабочие процессы ───────────────────────────────────────
 
-# The `subagents` registry and its spawn/fork backends live in the HOST
-# composition: the registry is a process singleton whose cross-session queries
-# the api-proxy serves to the browser, and a provider name may only be
-# registered once. This preset contributes the delegation TOOLS, which resolve
-# that host registry.
+# Реестр `subagents` и его бэкенды spawn/fork живут в ХОСТ-композиции: реестр —
+# это синглтон процесса, чьи межсессионные запросы api-proxy обслуживает для
+# браузера, а имя провайдера может быть зарегистрировано только один раз. Этот
+# пресет вносит инструменты делегирования, которые разрешают тот хост-реестр.
 #
-# `workflows` is different — nothing outside an agent reads it — so every row
-# that reaches it shares one entry-local realm here, and a consumer left
-# outside would resolve a host registry this preset does not populate.
+# `workflows` устроен иначе — за пределами агента его никто не читает — поэтому
+# все строки, которые до него добираются, разделяют одну область уровня записи
+# здесь, а потребитель вне области разрешал бы хост-реестр, который этот пресет
+# не наполняет.
 #
-# `tool-subagent-report` is host-plane for the same reason as the registry,
-# not because a preset may not want it: it registers a CONTINUABLE SETUP on
-# that singleton rather than a tool this agent calls, and the setup list is
-# not scope-aware — one copy per mounted preset means every child gets
-# `report` registered once per live session, which throws on the second.
+# `tool-subagent-report` находится на плоскости хоста по той же причине, что и
+# реестр, а не потому, что пресет может не хотеть его: он регистрирует
+# CONTINUABLE SETUP на этом синглтоне, а не инструмент, который агент вызывает,
+# и список setup не учитывает области — по одной копии на смонтированный пресет
+# означает, что каждый ребёнок получает `report`, зарегистрированный по разу на
+# живую сессию, что бросает ошибку при второй регистрации.
 - id: delegation
   name: cordis:group
   group: true
@@ -197,10 +207,10 @@
         toolName: subagent_fork
         backgroundMode: continuable
 
-    # Production dsh does not install these optional providers. Install the
-    # matching Bundle in this Profile and restart the Host, then copy this
-    # preset and remove `disabled` from the matching tool row. Host availability
-    # alone grants no tool.
+    # Продакшн-dsh не ставит эти опциональные провайдеры. Установи
+    # соответствующий Bundle в этом Профиле и перезапусти Хост, затем скопируй
+    # этот пресет и убери `disabled` у соответствующей строки инструмента.
+    # Наличие на хосте само по себе не даёт инструмент.
     - id: tool-subagent-codex
       name: '@deepseek-ai/dsh-tool-subagent'
       disabled: true
@@ -233,7 +243,7 @@
         subagentProvider: spawn
         maxRounds: 64
 
-# ── remaining model-facing rows ─────────────────────────────────────────────
+# ── остальные строки, видимые модели ────────────────────────────────────────
 
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
@@ -243,8 +253,8 @@
   config:
     allowParallelInProgress: true
 
-# The `web` service and its search provider stay in the host composition; only
-# the model-facing tool is per-session.
+# Сервис `web` и его поисковый провайдер остаются в хост-композиции; только
+# инструмент, видимый модели, принадлежит сессии.
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:

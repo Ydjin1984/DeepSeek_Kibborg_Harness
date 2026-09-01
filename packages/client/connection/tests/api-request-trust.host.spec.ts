@@ -1,7 +1,8 @@
 /** Behavior of the /api browser-trust fence (rebinding + cross-site defense). */
 
 import { describe, expect, it } from 'vitest'
-import { assertTrustedAuthority, isTrustedApiRequest } from '../src/api-request-trust.ts'
+import { isLoopbackPeer, isTrustedApiRequest } from '../src/api-request-trust.ts'
+import { assertTrustedAuthority } from '../src/api-request-trust.ts'
 
 function request(headers: Record<string, string | undefined>): { headers: Record<string, string | undefined> } {
   return { headers }
@@ -104,5 +105,32 @@ describe('isTrustedApiRequest', () => {
     expect(isTrustedApiRequest(request({ ...markers, host: 'bad host' }), [])).toBe(false)
     expect(isTrustedApiRequest(request({ ...markers, host: '127.0.0.999' }), [])).toBe(false)
     expect(isTrustedApiRequest(request({ ...markers, host: '128.0.0.1' }), [])).toBe(false)
+  })
+
+  it('binds loopback-pinned gates to the socket peer: a forged loopback Host from a remote peer is refused', () => {
+    // Headers are client-controlled; the TCP peer is not. A remote client may
+    // write Host: 127.0.0.1, but its socket cannot originate on loopback.
+    expect(isTrustedApiRequest(request({ host: '127.0.0.1:3080' }), [], '192.168.1.5')).toBe(false)
+    expect(isTrustedApiRequest(request({ host: 'localhost:3080' }), [], '10.0.0.7')).toBe(false)
+    // A genuine local browser arrives from a loopback peer.
+    expect(isTrustedApiRequest(request({ host: '127.0.0.1:3080' }), [], '127.0.0.1')).toBe(true)
+    expect(isTrustedApiRequest(request({ host: '[::1]:3080' }), [], '::1')).toBe(true)
+    expect(isTrustedApiRequest(request({ host: '127.0.0.1:3080' }), [], '::ffff:127.0.0.1')).toBe(true)
+    // Unknown peer (non-TCP transport): the header fence alone stands.
+    expect(isTrustedApiRequest(request({ host: '127.0.0.1:3080' }), [])).toBe(true)
+  })
+
+  it('never applies the peer fence to trusted-host grants: LAN peers stay legitimate there', () => {
+    const headers = { host: '192.168.1.5:3080', origin: 'http://192.168.1.5:3080' }
+    expect(isTrustedApiRequest(request(headers), ['192.168.1.5'], '192.168.1.5')).toBe(true)
+  })
+
+  it('classifies loopback peer addresses in their node:http spellings', () => {
+    for (const loopback of ['127.0.0.1', '127.8.9.10', '::1', '::ffff:127.0.0.1', '::ffff:127.0.0.9']) {
+      expect(isLoopbackPeer(loopback)).toBe(true)
+    }
+    for (const remote of ['192.168.1.5', '10.0.0.7', '172.16.0.2', '::ffff:192.168.1.5', '2001:db8::1']) {
+      expect(isLoopbackPeer(remote)).toBe(false)
+    }
   })
 })

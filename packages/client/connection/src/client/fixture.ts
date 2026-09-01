@@ -2508,6 +2508,11 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const userText = content.map(b => (b.type === 'text' ? b.text : '')).join('')
         const durable: ContentBlock[] = content.map((block) => {
           if (block.type === 'text') return block
+          if (block.type === 'file') {
+            // The fixture host mirrors the real admission surface: a file part
+            // becomes a model-visible text descriptor.
+            return { type: 'text', text: `[fixture attached file: ${block.name}]` }
+          }
           const attachment: ImageAttachmentRef = {
             attachmentId: `fixture:${randomUuid()}` as AttachmentIdType,
             mediaType: block.mediaType,
@@ -2856,6 +2861,18 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { opened: true as const })
       },
+      openComposition: (request) => {
+        const { agentPreset } = request.payload
+        const existing = fixturePresets.get(agentPreset)
+        if (existing === undefined || existing.trust === 'system') {
+          return err(request, {
+            code: 'agent-preset-read-only',
+            message: `agent preset "${agentPreset}" ships with the deployment`,
+            details: { agentPreset, reason: 'it ships with the deployment' },
+          })
+        }
+        return ok(request, { opened: true as const })
+      },
       remove: (request) => {
         const { agentPreset } = request.payload
         const existing = fixturePresets.get(agentPreset)
@@ -2880,6 +2897,129 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             { name: 'fixture-demo', description: 'fixture 技能样本', whenToUse: '仅供 UI 目录渲染验收', modelInvocable: true },
             { name: 'fixture-user-only', description: 'fixture 仅用户技能样本', modelInvocable: false },
           ],
+        })
+      },
+      listManaged: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, { skills: [] })
+      },
+      read: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {})
+      },
+      save: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {
+          result: {
+            name: request.payload.name,
+            scope: request.payload.scope,
+            path: `/fixture/skills/${request.payload.name}/SKILL.md`,
+            created: true,
+            version: 'v1',
+            security: { status: 'valid', findings: [] },
+          },
+        })
+      },
+      remove: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {})
+      },
+      restore: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {})
+      },
+      permanentDelete: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {})
+      },
+      trash: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, { entries: [] })
+      },
+      setEnabled: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {})
+      },
+      versions: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, { versions: [] })
+      },
+      rollback: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, { activeVersion: request.payload.version })
+      },
+      validate: _request => ok(_request, { ok: true }),
+      securityCheck: _request => ok(_request, { status: 'valid', findings: [] }),
+      benchmarkStart: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {
+          run: {
+            id: 'fixture-bench',
+            skillName: request.payload.name,
+            status: 'running',
+            phase: 'preparing',
+            progress: { case: 0, total: 0 },
+            createdAt: 0,
+          },
+        })
+      },
+      benchmarkPoll: request => ok(request, {
+        run: {
+          id: request.payload.runId,
+          skillName: 'fixture-demo',
+          status: 'running',
+          phase: 'preparing',
+          progress: { case: 0, total: 0 },
+          createdAt: 0,
+        },
+      }),
+      benchmarkCancel: request => ok(request, {
+        run: {
+          id: request.payload.runId,
+          skillName: 'fixture-demo',
+          status: 'cancelled',
+          phase: 'preparing',
+          progress: { case: 0, total: 0 },
+          createdAt: 0,
+        },
+      }),
+      autoImprove: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {
+          run: {
+            id: 'fixture-ai',
+            skillName: request.payload.name,
+            status: 'running',
+            phase: 'preparing',
+            progress: { case: 0, total: 0 },
+            createdAt: 0,
+          },
+        })
+      },
+      benchmarkBatchStart: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, {
+          runs: request.payload.names.map((name, index) => ({
+            id: `fixture-bench-${index}`,
+            skillName: name,
+            status: 'running',
+            phase: 'preparing',
+            progress: { case: 0, total: 0 },
+            createdAt: 0,
+          })),
         })
       },
     },
@@ -3055,6 +3195,16 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       discoverModels: request => ok(request, {
         models: fixtureModelGroups().flatMap(group => group.models.map(model => ({ id: model.id, name: model.name }))),
       }),
+      oauthLoginStart: request => ok(request, {
+        loginId: 'fx-login',
+        provider: request.payload.provider,
+        userCode: 'ABCD-EFGH',
+        verificationUri: 'https://auth.x.ai/device',
+        loginLabel: 'Sign in with SuperGrok or X Premium',
+      }),
+      oauthLoginWait: request => ok(request, {}),
+      oauthLoginCancel: request => ok(request, {}),
+      oauthLogout: request => ok(request, {}),
     },
     respond(message: ClientResponse): Promise<RpcReceipt> {
       // Same routing discipline as the host: rpcId first, then the payload's
@@ -3204,11 +3354,29 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
       case 'skill.list': return this.api.skills.list(request)
+      case 'skill.listManaged': return this.api.skills.listManaged(request)
+      case 'skill.read': return this.api.skills.read(request)
+      case 'skill.save': return this.api.skills.save(request)
+      case 'skill.remove': return this.api.skills.remove(request)
+      case 'skill.restore': return this.api.skills.restore(request)
+      case 'skill.permanentDelete': return this.api.skills.permanentDelete(request)
+      case 'skill.trash': return this.api.skills.trash(request)
+      case 'skill.setEnabled': return this.api.skills.setEnabled(request)
+      case 'skill.versions': return this.api.skills.versions(request)
+      case 'skill.rollback': return this.api.skills.rollback(request)
+      case 'skill.validate': return this.api.skills.validate(request)
+      case 'skill.securityCheck': return this.api.skills.securityCheck(request)
+      case 'skill.benchmarkStart': return this.api.skills.benchmarkStart(request)
+      case 'skill.benchmarkPoll': return this.api.skills.benchmarkPoll(request)
+      case 'skill.benchmarkCancel': return this.api.skills.benchmarkCancel(request)
+      case 'skill.benchmarkBatchStart': return this.api.skills.benchmarkBatchStart(request)
+      case 'skill.autoImprove': return this.api.skills.autoImprove(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)
       case 'agentPreset.read': return this.api.agentPresets.read(request)
       case 'agentPreset.copy': return this.api.agentPresets.copy(request)
       case 'agentPreset.openDocument': return this.api.agentPresets.openDocument(request, new AbortController().signal)
+      case 'agentPreset.openComposition': return this.api.agentPresets.openComposition(request, new AbortController().signal)
       case 'agentPreset.remove': return this.api.agentPresets.remove(request)
       case 'goal.create': return this.api.goals.create(request)
       case 'goal.edit': return this.api.goals.edit(request)
@@ -3227,6 +3395,10 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'llm.providers': return this.api.llm.providers(request)
       case 'llm.models': return this.api.llm.models(request)
       case 'llm.discoverModels': return this.api.llm.discoverModels(request, signal)
+      case 'llm.oauthLoginStart': return this.api.llm.oauthLoginStart(request, signal)
+      case 'llm.oauthLoginWait': return this.api.llm.oauthLoginWait(request, signal)
+      case 'llm.oauthLoginCancel': return this.api.llm.oauthLoginCancel(request)
+      case 'llm.oauthLogout': return this.api.llm.oauthLogout(request)
     }
   }
 

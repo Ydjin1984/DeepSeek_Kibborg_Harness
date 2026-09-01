@@ -14,7 +14,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/goal-multi-turn-actions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -147,6 +147,9 @@ describe('web e2e: Goal keeps one assistant action row per completed turn', () =
     await launch()
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-multi-turn-actions'))
     await runGoal(120_000)
+    // The two Goal turns rendered visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     expect(sessionEvents.flatMap(event => event.type === 'turn/end' ? [event.data.turn] : []))
       .toEqual([1, 2])

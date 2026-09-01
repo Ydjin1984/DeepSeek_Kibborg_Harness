@@ -15,7 +15,7 @@ import {
   launchWebScaffold, watchConsole,
   webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const BASE_FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
 const AVAILABLE_CHILD_EXPECTED = fileURLToPath(new URL('./snapshots/subagent-conversation/ui.expected.md', import.meta.url))
@@ -98,6 +98,10 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await parentInput.fill(PARENT_PROMPT)
     await parentInput.press('Enter')
     expect(await parentSettled).toBe(parent.id)
+    // The parent prompt rendered visible content; the Execution view is the
+    // conversation default, so switch to Chat before the chat-flow assertions
+    // (the preference persists through the reload below).
+    await selectChatView(page)
 
     const started = await scaffold.ctx.subagents.startContinuable({
       provider: 'spawn',
@@ -329,6 +333,9 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     onTestFailed(() => saveFailureShot(page, 'web-e2e-subagent-open'))
     await page.getByRole('button', { name: '3 subagents' }).click()
     await page.getByRole('treeitem', { name: new RegExp(LABEL) }).click()
+    // The child session has visible content; its own view defaults to
+    // Execution, so switch it to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await expect.poll(
       () => page.getByText(INITIAL_PROMPT, { exact: true }).count(),
       { timeout: 15_000 },
@@ -405,6 +412,9 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
       MODE,
     )
     await nestedRow.click()
+    // The grandchild session has visible content; its own view defaults to
+    // Execution, so switch it to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await page.getByText('The parent session is offline; reopen it to continue sending messages.').waitFor()
     // The offline banner renders from the descriptor alone, so it says nothing
     // about the transcript below it. The golden pins that transcript, and
@@ -431,6 +441,9 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     await parentSession.click()
     await page.getByRole('button', { name: '3 subagents' }).click()
     await page.getByRole('treeitem', { name: new RegExp(ONE_SHOT_LABEL) }).click()
+    // The one-shot session has visible content; its own view defaults to
+    // Execution, so switch it to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await page.getByText('One-shot tasks do not accept follow-ups; review the full execution record here.').waitFor()
     expect(scaffold.ctx.agents.get(oneShotId)).toBeUndefined()
   })

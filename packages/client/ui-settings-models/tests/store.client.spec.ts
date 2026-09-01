@@ -51,6 +51,10 @@ function api(overrides: {
     llm: {
       providers: overrides.providers ?? (() => Promise.resolve(ok({ providers: DIRECTORY }))),
       models: () => Promise.resolve(ok({ groups: [], failures: [] })),
+      oauthLoginStart: () => Promise.resolve(fail('unused')),
+      oauthLoginWait: () => Promise.resolve(fail('unused')),
+      oauthLoginCancel: () => Promise.resolve(fail('unused')),
+      oauthLogout: () => Promise.resolve(fail('unused')),
     },
     settings: {
       describe: overrides.describeSettings ?? (() => Promise.resolve(ok({ writable: true, hasDocument: false, namespaces: NAMESPACES }))),

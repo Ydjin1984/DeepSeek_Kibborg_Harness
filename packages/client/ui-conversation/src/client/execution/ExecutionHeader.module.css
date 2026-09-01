@@ -1,0 +1,343 @@
+/* ExecutionHeader: task status strip — title row (title, run-state chip,
+   counters, collapse toggle) over the extended region (current action, plan
+   strip, files strip). */
+
+.root {
+  flex: none;
+  padding: 10px 20px 10px 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.statusChip[data-status='running'] {
+  border-color: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.statusChip[data-status='running']::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  animation: dsh-execution-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dsh-execution-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.statusChip[data-status='success'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.statusChip[data-status='error'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.statusChip[data-status='warning'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.counts {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.extended {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.actionIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.actionText {
+  min-width: 0;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.actionText:hover {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+button.actionText:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.strip {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.stripHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stripHeader:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.stripHeader:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.stripLead {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.stripTitle {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.stripMeta {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.stripChevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--dsw-alias-label-caption);
+}
+
+.planList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 2px 10px 8px;
+  list-style: none;
+}
+
+.planItem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.planGlyph {
+  flex: none;
+  width: 14px;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.planDone {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.planActive {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.planPending {
+  color: var(--dsw-alias-label-caption);
+}
+
+.planContent {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.filesList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 2px 6px 8px;
+  list-style: none;
+}
+
+.fileRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fileRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.fileRow:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.fileStatus {
+  flex: none;
+  width: 14px;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.fileStatus[data-status='added'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.fileStatus[data-status='deleted'] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.fileStatus[data-status='modified'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.filePath {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileCounts {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  margin-left: auto;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.add {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.del {
+  color: var(--dsw-alias-state-error-primary);
+}

@@ -22,3 +22,13 @@ export const en = {
   'openDocument.error': 'Could not open configuration file',
   'general.nav': 'General',
 } satisfies Record<SettingsKey, string>
+
+/** Russian dictionary, checked complete against the zh key set. */
+export const ru = {
+  'trigger': 'Настройки',
+  'title': 'Настройки',
+  'close': 'Закрыть',
+  'openDocument': 'Открыть файл конфигурации',
+  'openDocument.error': 'Не удалось открыть файл конфигурации',
+  'general.nav': 'Общие',
+} satisfies Record<SettingsKey, string>

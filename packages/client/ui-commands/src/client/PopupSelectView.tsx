@@ -92,6 +92,8 @@ export function PopupSelectView({ popup, t }: PopupSelectViewProps) {
         popup.move(-1)
         return
       case 'Enter':
+        // IME composition: Enter confirms the composition, not the selection.
+        if (ev.nativeEvent.isComposing) return
         ev.preventDefault()
         void popup.select(state.active)
         return

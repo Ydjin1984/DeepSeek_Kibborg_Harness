@@ -4,3 +4,4 @@
     - img "已挂载"
     - text: 已启用
     - img
+  - button "停用"

@@ -5,7 +5,7 @@
  * the source behavior contract driven directly on the captured source with
  * real ClientSessionContext projections — sessionId addressing, the
  * session-keyed catalog cache (single-flight per key, scope-birth warm
- * prewarm, connection/reset clear), startsWith filtering, RPC-failure
+ * prewarm, connection/reset clear), substring filtering, RPC-failure
  * rejection, pick → plain-text outcome (the plain-text-reference decision:
  * .agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md),
  * the synchronous
@@ -23,7 +23,13 @@ import type { ClientSessionContext, InputTriggerSource } from '@deepseek-ai/dsh-
 import { apply, inject } from '../src/client/index.ts'
 import { SkillRow as SkillToolRow } from '../src/client/SkillRow.tsx'
 
-type SkillRow = { name: string; description: string; whenToUse?: string; modelInvocable?: boolean }
+type SkillRow = {
+  name: string
+  description: string
+  localizedDescription?: { zh?: string; ru?: string }
+  whenToUse?: string
+  modelInvocable?: boolean
+}
 type ListResult =
   | { ok: true; value: { skills: SkillRow[] } }
   | { ok: false; error: { code: string; message: string; details: object } }
@@ -58,6 +64,7 @@ function providePresentation(ctx: Context): PresentationCapture {
     },
     // Minimal bound-translate fake: zh dictionary lookup, key passthrough on miss.
     bind: () => (key: string) => key === 'menu.userOnly' ? '仅用户' : key,
+    getLocale: () => ({ active: 'zh' as const, locales: [], revision: 0 }),
   })
   return capture
 }
@@ -128,6 +135,8 @@ describe('apply', () => {
           'row.running': '正在加载 skill',
           'row.failed': 'skill 加载失败',
           'row.stopped': 'skill 加载已中止',
+          'row.title': 'Skill',
+          'row.inspect': '检查',
           'row.instructions': '说明',
           'menu.userOnly': '仅用户',
         },
@@ -135,8 +144,19 @@ describe('apply', () => {
           'row.running': 'Loading skill',
           'row.failed': 'Skill load failed',
           'row.stopped': 'Skill load stopped',
+          'row.title': 'Skill',
+          'row.inspect': 'Inspect',
           'row.instructions': 'Instructions',
           'menu.userOnly': 'user-only',
+        },
+        ru: {
+          'row.running': 'Загрузка skill',
+          'row.failed': 'Не удалось загрузить skill',
+          'row.stopped': 'Загрузка skill прервана',
+          'row.title': 'Skill',
+          'row.inspect': 'Проверить',
+          'row.instructions': 'Инструкции',
+          'menu.userOnly': 'только пользователь',
         },
       },
     }])
@@ -170,7 +190,7 @@ describe('apply', () => {
 })
 
 describe('candidates: sessionId addressing', () => {
-  it('lists via {sessionId} and filters by startsWith(query)', async () => {
+  it('lists via {sessionId} and filters by case-insensitive name substring', async () => {
     const { list, payloads } = countingList()
     const { source } = await bench(list)
     const items = await source.candidates(proj('s1'), req('co'))
@@ -179,6 +199,34 @@ describe('candidates: sessionId addressing', () => {
     expect(items).toEqual([
       { name: 'commit-helper', description: 'commit flow' },
       { name: 'code-review', description: 'review flow' },
+    ])
+  })
+
+  it('matches a query anywhere in the name, not only as a prefix', async () => {
+    const { source } = await bench(listOk(CATALOG))
+    // `eploy` sits inside `deploy`; a prefix-only filter would miss it.
+    expect(await source.candidates(proj('s1'), req('eploy'))).toEqual([
+      { name: 'deploy', description: 'deploy flow' },
+    ])
+    expect(await source.candidates(proj('s1'), req('VIEW'))).toEqual([
+      { name: 'code-review', description: 'review flow' },
+    ])
+    expect(await source.candidates(proj('s1'), req('zzz'))).toEqual([])
+  })
+
+  it("prefers the active locale's localized description when the skill carries one", async () => {
+    const rows: SkillRow[] = [
+      {
+        name: 'code-review',
+        description: 'review flow',
+        localizedDescription: { zh: '审查流程', ru: 'поток ревью' },
+        modelInvocable: true,
+      },
+    ]
+    const { source } = await bench(listOk(rows))
+    // The bench's locale fake reports active zh.
+    expect(await source.candidates(proj('s1'), req(''))).toEqual([
+      { name: 'code-review', description: '审查流程' },
     ])
   })
 

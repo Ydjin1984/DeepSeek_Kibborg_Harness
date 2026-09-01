@@ -46,12 +46,15 @@ describe('web e2e: agent-preset authoring is a host-side copy', () => {
 
   /** Tokenize the lane-owned preset root after general aria normalization. */
   function withPresetRoot(snapshot: string): string {
-    const rootSuffix = `/${userRoot.split('/').pop()!}`
+    // Windows renders the lane-owned root with backslashes, so match the
+    // basename regardless of the host's separator and rejoin with `/`.
+    const name = userRoot.split(/[\\/]/).pop()!
     return snapshot.split('\n').map((line) => {
-      const rootStart = line.indexOf(rootSuffix)
+      const rootStart = line.lastIndexOf(name)
       if (rootStart === -1) return line
       const pathStart = line.lastIndexOf(' ', rootStart) + 1
-      return `${line.slice(0, pathStart)}{{presetRoot}}${line.slice(rootStart + rootSuffix.length)}`
+      const remainder = line.slice(rootStart + name.length).replace(/\\/g, '/')
+      return `${line.slice(0, pathStart)}{{presetRoot}}${remainder}`
     }).join('\n')
   }
 

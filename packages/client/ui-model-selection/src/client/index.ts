@@ -24,7 +24,7 @@ import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
-import { en, zh, type ModelKey } from './locales.ts'
+import { en, ru, zh, type ModelKey } from './locales.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -106,9 +106,9 @@ export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots',
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-model-selection: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), 'ui-model-selection: dictionaries')
 
-  // Non-slot faces (the command description, the popup option builder) read
+  // Non-slot faces (the composer-block reason, the popup option builder) read
   // through the bound translate; the seat component reads the standard seat.
   const t = ctx.locale.bind(NS)
 
@@ -116,16 +116,17 @@ export function apply(ctx: ClientContext): void {
   // a locale change reaches the next publish.
   ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
 
-  // Entry 1: the /model popupSelect over the shared directory. The command
-  // description is registry-held text: it reads t() once at registration and
-  // refreshes only on re-registration, not on locale change.
+  // Entry 1: the /model popupSelect over the shared directory. The menu row
+  // copy (name + description) is owned by ui-commands' `command` dictionaries;
+  // the raw English description here is the fallback for a locale without a
+  // `menu.model.description` entry.
   ctx.inject(['commandUi', 'modelDirectories'], (scope: ClientContext) => {
     const command = scope.get('commandUi') as CommandUiContract
     const models = scope.modelDirectories
     const sessions = scope.sessions
     scope.effect(() => command.register({
       name: 'model',
-      description: t('command.description'),
+      description: 'Select the model for this conversation',
       available: session => sessions.subagentAddress(session.sessionId) === undefined,
       ui: {
         kind: 'popupSelect',

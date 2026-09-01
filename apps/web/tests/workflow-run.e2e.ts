@@ -15,7 +15,7 @@ import {
   type WebScaffold,
 } from './scaffold.ts'
 import {
-  connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot,
+  connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot, selectChatView,
 } from './support.ts'
 
 const MODE = webSnapshotMode()
@@ -74,6 +74,9 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     const input = page.locator('textarea').first()
     await input.fill(prompt)
     await input.press('Enter')
+    // The Execution view is the conversation default; the turn's first content
+    // is visible now, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
 
     const workflow = page.locator('[data-workflow-run][data-run-status="running"]')
     await workflow.waitFor({ timeout: 30_000 })
@@ -155,6 +158,9 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     await page.setViewportSize({ width: 1280, height: 800 })
 
     await member.click()
+    // The opened child session has its own view default (Execution); switch
+    // it to Chat before the transcript assertions.
+    await selectChatView(page)
     await page.getByText(CHILD_PROMPT, { exact: true }).waitFor({ timeout: 15_000 })
 
     const sessions = page.getByRole('tree', { name: 'Sessions' })

@@ -60,11 +60,11 @@ describe('apply wiring', () => {
   it('registers the chat view and its keyed business-node seat', async () => {
     const b = await bench()
     const entries = b.slots.entries('conversation.view')
-    expect(entries.map(e => e.options.id)).toEqual(['chat'])
+    expect(entries.map(e => e.options.id)).toEqual(['chat', 'execution'])
     // Label is a locale thunk resolving through the zh dictionary.
     expect(resolveSlotLabel(entries[0]?.options.label)).toBe('对话')
     expect(entries[0]?.options.order).toBe(0)
-    // Declaring is claiming: the chat entry's registration put the hole on
+    // Declaring is claiming: the session body's registration put the hole on
     // the ledger with the contract's kind/scope.
     const nodeSlot = b.slots.spec('conversation.chat.node')
     expect(nodeSlot).toMatchObject({ kind: 'keyed', scope: 'session' })

@@ -151,6 +151,10 @@ describe('hand-declared providers', () => {
     expect(directory.filter(entry => entry.declared).map(entry => entry.provider))
       .toEqual(['acme-gateway'])
     expect(directory.find(entry => entry.provider === 'deepseek')?.declared).toBe(false)
+    expect(directory.find(entry => entry.provider === 'xai')?.oauth).toEqual({
+      loginLabel: 'Sign in with SuperGrok or X Premium',
+      credentialRef: 'XAI_OAUTH',
+    })
   })
 
   it('sizes a model the catalog cannot describe from the route\u2019s own fallbacks', () => {
@@ -1192,6 +1196,10 @@ describe('configurable-provider directory', () => {
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'openai-codex'],
       declared: false,
+      oauth: {
+        loginLabel: 'OpenAI (ChatGPT Plus/Pro)',
+        credentialRef: 'OPENAI_CODEX_OAUTH',
+      },
     })
   })
 })

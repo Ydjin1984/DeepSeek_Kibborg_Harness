@@ -202,9 +202,11 @@ describe('FileMutationRow diff card', () => {
       callView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
       resultView: { card: 'diff', title: 'Write notes/new.txt', diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture' }] },
     }), 'write')} />)
-    // The footer counts live inside the collapsed diff card.
+    // The footer counts live inside the collapsed diff card. The copy rides
+    // the conversation locale seat (diff.footer), so the zh seat renders the
+    // zh footer.
     toggleRow(view)
-    expect(view.getByText('└ +1 -0 · 1 file')).toBeTruthy()
+    expect(view.getByText('└ +1 -0 · 1 个文件')).toBeTruthy()
   })
 
   it('reflects the run state on its leading slot', () => {
@@ -338,6 +340,9 @@ describe('DetailsPanel diff Output section', () => {
           addImages: () => true,
           removeImage: () => {},
           pruneImages: () => {},
+          addFiles: () => null,
+          removeFile: () => {},
+          pruneFiles: () => {},
           submit: () => {},
         }}
         useProjection={(() => undefined)}

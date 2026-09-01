@@ -40,9 +40,28 @@ import {
   workspaceListValueSchema,
   workspaceRenameValueSchema,
 } from '../api/workspace.schema.ts'
-import { skillListValueSchema } from '../api/skills.schema.ts'
 import {
-  agentPresetCopyValueSchema, agentPresetListValueSchema, agentPresetOpenDocumentValueSchema,
+  skillAutoImproveValueSchema,
+  skillBenchmarkBatchStartValueSchema,
+  skillBenchmarkCancelValueSchema,
+  skillBenchmarkPollValueSchema,
+  skillBenchmarkStartValueSchema,
+  skillListManagedValueSchema,
+  skillListValueSchema,
+  skillPermanentDeleteValueSchema,
+  skillReadValueSchema,
+  skillRemoveValueSchema,
+  skillRestoreValueSchema,
+  skillRollbackValueSchema,
+  skillSaveValueSchema,
+  skillSecurityCheckValueSchema,
+  skillSetEnabledValueSchema,
+  skillTrashValueSchema,
+  skillValidateValueSchema,
+  skillVersionsValueSchema,
+} from '../api/skills.schema.ts'
+import {
+  agentPresetCopyValueSchema, agentPresetListValueSchema, agentPresetOpenCompositionValueSchema, agentPresetOpenDocumentValueSchema,
   agentPresetReadValueSchema, agentPresetRemoveValueSchema, agentPresetSelectValueSchema,
 } from '../api/agent-presets.schema.ts'
 import {
@@ -60,7 +79,11 @@ import {
 import {
   credentialsDescribeValueSchema, credentialsSetValueSchema, credentialsUnsetValueSchema,
 } from '../api/credentials.schema.ts'
-import { llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
+import {
+  llmDiscoverModelsValueSchema, llmModelsValueSchema, llmOauthLoginCancelValueSchema,
+  llmOauthLoginStartValueSchema, llmOauthLoginWaitValueSchema, llmOauthLogoutValueSchema,
+  llmProvidersValueSchema,
+} from '../api/llm.schema.ts'
 import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
@@ -123,6 +146,23 @@ export interface IApiClient {
   }
   skills: {
     list(payload: RequestPayload<'skill.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.list'>>>
+    listManaged(payload: RequestPayload<'skill.listManaged'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.listManaged'>>>
+    read(payload: RequestPayload<'skill.read'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.read'>>>
+    save(payload: RequestPayload<'skill.save'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.save'>>>
+    remove(payload: RequestPayload<'skill.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.remove'>>>
+    restore(payload: RequestPayload<'skill.restore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.restore'>>>
+    permanentDelete(payload: RequestPayload<'skill.permanentDelete'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.permanentDelete'>>>
+    trash(payload: RequestPayload<'skill.trash'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.trash'>>>
+    setEnabled(payload: RequestPayload<'skill.setEnabled'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.setEnabled'>>>
+    versions(payload: RequestPayload<'skill.versions'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.versions'>>>
+    rollback(payload: RequestPayload<'skill.rollback'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.rollback'>>>
+    validate(payload: RequestPayload<'skill.validate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.validate'>>>
+    securityCheck(payload: RequestPayload<'skill.securityCheck'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.securityCheck'>>>
+    benchmarkStart(payload: RequestPayload<'skill.benchmarkStart'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.benchmarkStart'>>>
+    benchmarkPoll(payload: RequestPayload<'skill.benchmarkPoll'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.benchmarkPoll'>>>
+    benchmarkCancel(payload: RequestPayload<'skill.benchmarkCancel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.benchmarkCancel'>>>
+    benchmarkBatchStart(payload: RequestPayload<'skill.benchmarkBatchStart'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.benchmarkBatchStart'>>>
+    autoImprove(payload: RequestPayload<'skill.autoImprove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.autoImprove'>>>
   }
   agentPresets: {
     list(payload: RequestPayload<'agentPreset.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.list'>>>
@@ -130,6 +170,7 @@ export interface IApiClient {
     read(payload: RequestPayload<'agentPreset.read'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.read'>>>
     copy(payload: RequestPayload<'agentPreset.copy'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.copy'>>>
     openDocument(payload: RequestPayload<'agentPreset.openDocument'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.openDocument'>>>
+    openComposition(payload: RequestPayload<'agentPreset.openComposition'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.openComposition'>>>
     remove(payload: RequestPayload<'agentPreset.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.remove'>>>
   }
   events: {
@@ -160,6 +201,10 @@ export interface IApiClient {
     providers(payload: RequestPayload<'llm.providers'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.providers'>>>
     models(payload: RequestPayload<'llm.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.models'>>>
     discoverModels(payload: RequestPayload<'llm.discoverModels'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.discoverModels'>>>
+    oauthLoginStart(payload: RequestPayload<'llm.oauthLoginStart'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthLoginStart'>>>
+    oauthLoginWait(payload: RequestPayload<'llm.oauthLoginWait'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthLoginWait'>>>
+    oauthLoginCancel(payload: RequestPayload<'llm.oauthLoginCancel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthLoginCancel'>>>
+    oauthLogout(payload: RequestPayload<'llm.oauthLogout'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.oauthLogout'>>>
   }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
@@ -199,11 +244,29 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
   'workspace.archiveSession': workspaceArchiveSessionValueSchema,
   'skill.list': skillListValueSchema,
+  'skill.listManaged': skillListManagedValueSchema,
+  'skill.read': skillReadValueSchema,
+  'skill.save': skillSaveValueSchema,
+  'skill.remove': skillRemoveValueSchema,
+  'skill.restore': skillRestoreValueSchema,
+  'skill.permanentDelete': skillPermanentDeleteValueSchema,
+  'skill.trash': skillTrashValueSchema,
+  'skill.setEnabled': skillSetEnabledValueSchema,
+  'skill.versions': skillVersionsValueSchema,
+  'skill.rollback': skillRollbackValueSchema,
+  'skill.validate': skillValidateValueSchema,
+  'skill.securityCheck': skillSecurityCheckValueSchema,
+  'skill.benchmarkStart': skillBenchmarkStartValueSchema,
+  'skill.benchmarkPoll': skillBenchmarkPollValueSchema,
+  'skill.benchmarkCancel': skillBenchmarkCancelValueSchema,
+  'skill.benchmarkBatchStart': skillBenchmarkBatchStartValueSchema,
+  'skill.autoImprove': skillAutoImproveValueSchema,
   'agentPreset.list': agentPresetListValueSchema,
   'agentPreset.select': agentPresetSelectValueSchema,
   'agentPreset.read': agentPresetReadValueSchema,
   'agentPreset.copy': agentPresetCopyValueSchema,
   'agentPreset.openDocument': agentPresetOpenDocumentValueSchema,
+  'agentPreset.openComposition': agentPresetOpenCompositionValueSchema,
   'agentPreset.remove': agentPresetRemoveValueSchema,
   'goal.create': goalCreateValueSchema,
   'goal.edit': goalEditValueSchema,
@@ -222,6 +285,10 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.providers': llmProvidersValueSchema,
   'llm.models': llmModelsValueSchema,
   'llm.discoverModels': llmDiscoverModelsValueSchema,
+  'llm.oauthLoginStart': llmOauthLoginStartValueSchema,
+  'llm.oauthLoginWait': llmOauthLoginWaitValueSchema,
+  'llm.oauthLoginCancel': llmOauthLoginCancelValueSchema,
+  'llm.oauthLogout': llmOauthLogoutValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -455,6 +522,23 @@ export abstract class AbstractApiClient implements IApiClient {
 
   readonly skills: IApiClient['skills'] = {
     list: (payload, signal) => this.callUnary('skill.list', payload, signal),
+    listManaged: (payload, signal) => this.callUnary('skill.listManaged', payload, signal),
+    read: (payload, signal) => this.callUnary('skill.read', payload, signal),
+    save: (payload, signal) => this.callUnary('skill.save', payload, signal),
+    remove: (payload, signal) => this.callUnary('skill.remove', payload, signal),
+    restore: (payload, signal) => this.callUnary('skill.restore', payload, signal),
+    permanentDelete: (payload, signal) => this.callUnary('skill.permanentDelete', payload, signal),
+    trash: (payload, signal) => this.callUnary('skill.trash', payload, signal),
+    setEnabled: (payload, signal) => this.callUnary('skill.setEnabled', payload, signal),
+    versions: (payload, signal) => this.callUnary('skill.versions', payload, signal),
+    rollback: (payload, signal) => this.callUnary('skill.rollback', payload, signal),
+    validate: (payload, signal) => this.callUnary('skill.validate', payload, signal),
+    securityCheck: (payload, signal) => this.callUnary('skill.securityCheck', payload, signal),
+    benchmarkStart: (payload, signal) => this.callUnary('skill.benchmarkStart', payload, signal),
+    benchmarkPoll: (payload, signal) => this.callUnary('skill.benchmarkPoll', payload, signal),
+    benchmarkCancel: (payload, signal) => this.callUnary('skill.benchmarkCancel', payload, signal),
+    benchmarkBatchStart: (payload, signal) => this.callUnary('skill.benchmarkBatchStart', payload, signal),
+    autoImprove: (payload, signal) => this.callUnary('skill.autoImprove', payload, signal),
   }
 
   // Annotated like every sibling, and load-bearing rather than cosmetic:
@@ -468,6 +552,7 @@ export abstract class AbstractApiClient implements IApiClient {
     read: (payload, signal) => this.callUnary('agentPreset.read', payload, signal),
     copy: (payload, signal) => this.callUnary('agentPreset.copy', payload, signal),
     openDocument: (payload, signal) => this.callUnary('agentPreset.openDocument', payload, signal),
+    openComposition: (payload, signal) => this.callUnary('agentPreset.openComposition', payload, signal),
     remove: (payload, signal) => this.callUnary('agentPreset.remove', payload, signal),
   }
 
@@ -498,6 +583,12 @@ export abstract class AbstractApiClient implements IApiClient {
     providers: (payload, signal) => this.callUnary('llm.providers', payload, signal),
     models: (payload, signal) => this.callUnary('llm.models', payload, signal),
     discoverModels: (payload, signal) => this.callUnary('llm.discoverModels', payload, signal),
+    oauthLoginStart: (payload, signal) => this.callUnary('llm.oauthLoginStart', payload, signal),
+    oauthLoginWait: (payload, signal) => this.callUnary(
+      'llm.oauthLoginWait', payload, signal, 'caller-signal-only',
+    ),
+    oauthLoginCancel: (payload, signal) => this.callUnary('llm.oauthLoginCancel', payload, signal),
+    oauthLogout: (payload, signal) => this.callUnary('llm.oauthLogout', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {

@@ -18,7 +18,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/plan-review', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -79,6 +79,9 @@ describe('web e2e: plan review takeover round trip', () => {
     // waitFor is race-free.
     const card = page.locator('[data-plan-review-key]')
     await card.waitFor({ timeout: MODE === 'record' ? 120_000 : 30_000 })
+    // The Execution view is the conversation default; the turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     // The plan-review request must NOT land on the generic question flow.
     expect(await page.locator('[data-question-key]').count()).toBe(0)
     await expect.poll(() => card.getByText('Plan review').count(), { timeout: 10_000 }).toBeGreaterThan(0)

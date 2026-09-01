@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** Model-list editing, endpoint interrogation, and hand-declared provider creation. */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
@@ -98,6 +98,10 @@ function scriptedFace(options: {
       }))),
       models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
       discoverModels: discover,
+      oauthLoginStart: vi.fn(),
+      oauthLoginWait: vi.fn(),
+      oauthLoginCancel: vi.fn(),
+      oauthLogout: vi.fn(),
     },
     settings: {
       describe: vi.fn(() => Promise.resolve(ok({ writable: true, namespaces: [namespace] }))),
@@ -1402,5 +1406,214 @@ describe('API key field', () => {
     await waitFor(() => { expect(mutate).toHaveBeenCalledOnce() })
     await waitFor(() => { expect(load).toHaveBeenCalledOnce() })
     expect(screen.queryByText(en.customTitle)).toBeNull()
+  })
+})
+
+describe('provider OAuth sign-in', () => {
+  const OAUTH = { loginLabel: 'Sign in with SuperGrok', credentialRef: 'XAI_OAUTH' }
+
+  function oauthFace() {
+    const oauthLoginStart = vi.fn(() => Promise.resolve(ok({
+      loginId: 'login-1', provider: 'xai', userCode: 'WDJB-MJHT',
+      verificationUri: 'https://auth.x.ai/activate', loginLabel: 'Sign in with SuperGrok',
+    })))
+    const oauthLoginWait = vi.fn(() => Promise.resolve(ok({})))
+    const oauthLoginCancel = vi.fn(() => Promise.resolve(ok({})))
+    const oauthLogout = vi.fn(() => Promise.resolve(ok({})))
+    const face = {
+      llm: {
+        providers: vi.fn(() => Promise.resolve(ok({ providers: [] }))),
+        models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
+        oauthLoginStart,
+        oauthLoginWait,
+        oauthLoginCancel,
+        oauthLogout,
+      },
+      settings: { describe: vi.fn(() => Promise.resolve(ok({ writable: true, namespaces: [] }))) },
+      credentials: {
+        describe: vi.fn((payload: { refs: string[] }) => Promise.resolve(ok({
+          credentials: Object.fromEntries(payload.refs.map(ref => [ref, { configured: false, writable: true }])),
+        }))),
+      },
+    }
+    return { face, oauthLoginStart, oauthLoginWait, oauthLoginCancel, oauthLogout }
+  }
+
+  async function mountOAuthEditor(face: ReturnType<typeof oauthFace>['face']) {
+    const { ProviderEditor } = await import('../src/client/ProviderEditor.tsx')
+    const onClose = vi.fn()
+    const providers = { xai: {} }
+    const view = render(<ProviderEditor
+      provider="xai"
+      displayName="xai"
+      oauth={OAUTH}
+      namespace={piAiNamespace(providers)}
+      schema={settingsSchema}
+      settingsPath={['providers', 'xai']}
+      api={face as never}
+      t={t}
+      readOnly={false}
+      onClose={onClose}
+    />)
+    return { onClose, unmount: view.unmount }
+  }
+
+  it('runs the device-code flow and closes with changed on success', async () => {
+    const wire = oauthFace()
+    let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    const { onClose } = await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+
+    await waitFor(() => { expect(wire.oauthLoginStart).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', provider: 'xai' }) })
+    await waitFor(() => {
+      expect(screen.getByText(en.oauthOpenLink)).toBeTruthy()
+      expect(screen.getByText('WDJB-MJHT')).toBeTruthy()
+    })
+    expect(wire.oauthLoginWait).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', loginId: 'login-1' })
+    if (finishWait === undefined) throw new Error('wait did not start')
+    const resolveWait = finishWait
+    await act(async () => { resolveWait(ok({})) })
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledWith(true)
+    })
+  })
+
+  it('shows a failure line when starting the flow is rejected', async () => {
+    const wire = oauthFace()
+    wire.oauthLoginStart.mockResolvedValueOnce(fail('no OAuth route', 'NO_OAUTH'))
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText('no OAuth route')).toBeTruthy() })
+    expect(screen.queryByText(en.oauthOpenLink)).toBeNull()
+  })
+
+  it('shows a failure line when the wait rejects', async () => {
+    const wire = oauthFace()
+    wire.oauthLoginWait.mockResolvedValueOnce(fail('verification failed', 'OAUTH_LOGIN_FAILED'))
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText('verification failed')).toBeTruthy() })
+  })
+
+  it('signs out of a configured subscription', async () => {
+    const wire = oauthFace()
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText(en.oauthSignedIn)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en.oauthSignOut }))
+    await waitFor(() => { expect(wire.oauthLogout).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', provider: 'xai' }) })
+    await waitFor(() => { expect(screen.getByRole('button', { name: OAUTH.loginLabel })).toBeTruthy() })
+  })
+
+  it('cancels an in-flight challenge', async () => {
+    const wire = oauthFace()
+    let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText(en.oauthOpenLink)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en.oauthCancel }))
+    expect(wire.oauthLoginCancel).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', loginId: 'login-1' })
+    expect(screen.queryByText(en.oauthOpenLink)).toBeNull()
+    if (finishWait === undefined) throw new Error('wait did not start')
+    finishWait(ok({}))
+  })
+
+  it('shows a failure line when the logout is rejected', async () => {
+    const wire = oauthFace()
+    wire.oauthLogout.mockResolvedValueOnce(fail('logout failed', 'OAUTH_LOGOUT_FAILED'))
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText(en.oauthSignedIn)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en.oauthSignOut }))
+    await waitFor(() => { expect(screen.getByText('logout failed')).toBeTruthy() })
+    // Still signed in: the failure did not clear the configured state.
+    expect(screen.getByText(en.oauthSignedIn)).toBeTruthy()
+  })
+
+  it('shows a failure line when the logout transport rejects', async () => {
+    const wire = oauthFace()
+    wire.oauthLogout.mockRejectedValueOnce(new Error('transport down'))
+    await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText(en.oauthSignedIn)).toBeTruthy() })
+    fireEvent.click(screen.getByRole('button', { name: en.oauthSignOut }))
+    await waitFor(() => { expect(screen.getByText('transport down')).toBeTruthy() })
+  })
+
+  it('cancels the in-flight login when the editor unmounts', async () => {
+    const wire = oauthFace()
+    let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    const { unmount } = await mountOAuthEditor(wire.face)
+    fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
+    await waitFor(() => { expect(screen.getByText(en.oauthOpenLink)).toBeTruthy() })
+    unmount()
+    expect(wire.oauthLoginCancel).toHaveBeenCalledWith({ settingsNs: 'llm-pi-ai', loginId: 'login-1' })
+    if (finishWait === undefined) throw new Error('wait did not start')
+    finishWait(ok({}))
+  })
+})
+
+describe('provider OAuth directory entries', () => {
+  it('opens an OAuth-bearing row editor and an add card carrying the oauth face', async () => {
+    const providers = {
+      openai: { apiKeyEnv: 'OPENAI_API_KEY', baseURL: 'https://proxy.example/v1' },
+      xai: {},
+      dormant: {},
+    }
+    // The catalog declares all three; the section config holds only the
+    // actively-serving routes, so `dormant` is a setup candidate (addable),
+    // not a configured row.
+    const namespace = piAiNamespace({ openai: providers.openai, xai: providers.xai })
+    const oauth = { loginLabel: 'Sign in with SuperGrok', credentialRef: 'XAI_OAUTH' }
+    const face = {
+      llm: {
+        providers: vi.fn(() => Promise.resolve(ok({
+          providers: [
+            { provider: 'openai', displayName: 'openai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'openai'], active: true },
+            { provider: 'xai', displayName: 'xai', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'xai'], active: true, oauth },
+            { provider: 'dormant', displayName: 'dormant', settingsNs: 'llm-pi-ai', settingsPath: ['providers', 'dormant'], active: false, oauth },
+          ],
+        }))),
+        models: vi.fn(() => Promise.resolve(ok({ groups: [], failures: [] }))),
+        oauthLoginStart: vi.fn(),
+        oauthLoginWait: vi.fn(),
+        oauthLoginCancel: vi.fn(),
+        oauthLogout: vi.fn(),
+      },
+      settings: { describe: vi.fn(() => Promise.resolve(ok({ writable: true, namespaces: [namespace] }))) },
+      credentials: {
+        describe: vi.fn((payload: { refs: string[] }) => Promise.resolve(ok({
+          credentials: Object.fromEntries(payload.refs.map(ref => [ref, { configured: false, writable: true }])),
+        }))),
+      },
+    }
+    const controller = new ModelsSettingsStore(
+      face as unknown as WireFace, settingsSchema, new SettingsDescribeMirror(face as never))
+    await controller.load()
+    render(<ModelsSection
+      controller={controller}
+      useSnapshot={bindSnapshotSelector(controller.store)}
+      api={face as never}
+      schema={settingsSchema}
+      t={t}
+    />)
+
+    // The configured xai row opens an editor whose oauth face renders the
+    // sign-in button (targetOf + renderProviderEditor carry the oauth field).
+    const row = screen.getByText('xai').closest('li')
+    if (row === null) throw new Error('no xai row')
+    fireEvent.click(within_(row, en.edit))
+    expect(screen.getByRole('button', { name: 'Sign in with SuperGrok' })).toBeTruthy()
+    fireEvent.click(within_(row, en.edit))
+
+    // The add card selects the first addable (unconfigured) provider — dormant
+    // — whose oauth face also renders, covering the add-card oauth spread.
+    fireEvent.click(screen.getByRole('button', { name: en.add }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Sign in with SuperGrok' })).toBeTruthy()
+    })
   })
 })

@@ -12,6 +12,8 @@
 
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
+执行视图（`id: 'execution'`）是视图环的默认标签页：基于同一会话快照的专业 trace 时间线。它把每个最终 Chat node 投影为规范化 `ExecutionEvent`（type、category、status、标题字段、diff 计数、duration），每个事件渲染一行带图标／时钟／类型徽标的时间线行，并把 trace 折叠进 sticky 页头（会话标题、运行状态、计数器、当前动作、计划、改动文件）加工具栏（自由文本搜索、分类 chips、全部展开／全部折叠）。事件列表是带实测行高、follow-scroll、跳至最新与空状态的窗口化虚拟列表。follow-scroll 让钉在底部的读者在新事件到来以及实测高度增长（含行内展开）时始终停在最底部；向上滚动会解除钉住，滚回最底部则重新钉住。由于视图选用编辑器 overlay，列表把悬浮编辑器 seat 的实时高度（`--dsh-composer-height`，由骨架的 seat observer 发布，另加一个间隙）预留为底部 padding，因此 trace 尾部恰好停在输入卡片上方，跳至最新胶囊也一并避开它；Chat 的输入遮罩淡出不受影响。node seat 声明（`'conversation.chat.node'`、`'conversation.message.images'`）位于会话主体配置项上——slot 允许每个 key 只有一个声明者——主体通过 `'conversation.view'` owner share 把 `renderChatNode`／`renderMessageImages` 交给每个视图，因此 Chat 与 Execution 通过同一个分发点派发同一批 node renderer（ui-tool 行、markdown、命令）。
+
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.md)。
 
 会话页头会在标题旁渲染会话作用域的 `'conversation.session.header.actions'` 列表，并在最右侧渲染独立的 `'conversation.session.header.utilities'` 列表。会话上下文和谱系控件保留在 `actions` 中；可选的会话工具不会改变它们的顺序或位置。编辑器链的 currency 包含当前对话 `session`；ui-subagent 会选取 one-shot 或 parent 不可用的已寻址会话，并按原因显示只读文案，而普通 InputBar 会让所有已寻址 child 仅保留 Send，因为继续执行服务不公开逐 Activation 取消操作，`session.cancel` 也会绕过其所有权。

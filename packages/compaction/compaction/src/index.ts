@@ -10,6 +10,11 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
+// Type-only: pulls the session-projection root into this program so the
+// `SessionProjectionMap` merge in ./projection.ts resolves to an in-program
+// source file instead of a cross-project redirect (the token-meter/goal
+// pattern; a bare augmentation target errors under project references).
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type { CompactionResult } from './types.ts'
 
 export type { CompactionResult } from './types.ts'

@@ -22,10 +22,10 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 // api-remotes import already places it in every client program.
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarProps } from '../contract/slots.ts'
-import { deriveDecorations } from '../input/decorations.ts'
-import type { DraftDecorations } from '../input/decorations.ts'
+import { deriveDecorations } from '../contract/decorations.ts'
+import type { DraftDecorations } from '../contract/decorations.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
-import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
+import { ReferenceIcon } from '../contract/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
@@ -38,6 +38,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  addFiles, removeFile, draftFiles,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -65,7 +66,11 @@ export function InputBar({
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
   )
-  const empty = draft.trim() === '' && attachments.length === 0
+  const files = useMemo(
+    () => input === undefined || draftFiles === undefined ? [] : draftFiles(input.fileIds),
+    [draftFiles, input?.fileIds],
+  )
+  const empty = draft.trim() === '' && attachments.length === 0 && files.length === 0
   // Transient error banner (machine notices, image-intake rejections, and
   // prompt failures): the seq keys the Toast so an identical repeated message
   // restarts the hold-then-fade cycle instead of reusing the faded one.
@@ -147,7 +152,10 @@ export function InputBar({
     if (attachments.length !== input.imageIds.length) {
       inputActions.pruneImages(attachments.map(attachment => attachment.id))
     }
-  }, [attachments, input?.imageIds, inputActions])
+    if (files.length !== input.fileIds.length) {
+      inputActions.pruneFiles(files.map(file => file.id))
+    }
+  }, [attachments, files, input?.imageIds, input?.fileIds, inputActions])
 
   // A native Safari edit that shortens the draft may leave the previous
   // soft-wrap layout behind after the mirror shrinks. The native-change signal
@@ -413,7 +421,14 @@ export function InputBar({
       .filter(item => item.kind === 'file')
       .map(item => item.getAsFile())
       .filter((file): file is File => file !== null)
-    if (files.length > 0) intakeImages(files)
+    if (files.length > 0) {
+      // Clipboard files route by declared type: images keep the image
+      // validation path, everything else attaches as a file draft (any format).
+      const images = files.filter(isImageFile)
+      const others = files.filter(file => !isImageFile(file))
+      if (images.length > 0) intakeImages(images)
+      if (others.length > 0) intakeFiles(others)
+    }
     const text = e.clipboardData.getData('text/plain')
     if (text === '') {
       if (files.length > 0) e.preventDefault()
@@ -464,7 +479,23 @@ export function InputBar({
     if (rejected !== null) showToast(rejected)
   }, [addImages, attachments, imageLimits, showToast, t])
 
-  const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
+  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || addFiles !== undefined)
+
+  /** Whether a browser file is an image by the projected deployment policy. */
+  const isImageFile = (file: File): boolean => imageLimits === undefined
+    ? /^image\//u.test(file.type)
+    : (imageLimits.mediaTypes as readonly string[]).includes(file.type)
+
+  /**
+   * File-draft intake (any format): the host enforces its caps authoritatively
+   * at submit; the minting path cannot reject, so a refusal here only means
+   * the machine was mid-admission (the paperclip is disabled in that span).
+   */
+  const intakeFiles = useCallback((batch: readonly File[]): void => {
+    if (addFiles === undefined || batch.length === 0) return
+    const rejected = addFiles(batch)
+    if (rejected !== null) showToast(rejected)
+  }, [addFiles, showToast])
 
   const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
     // Any caret/selection gesture ends a live paste attempt (the machine
@@ -634,9 +665,12 @@ export function InputBar({
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {
           attachments,
+          files,
           canAcceptDrop,
           onAddImages: intakeImages,
+          onAddFiles: intakeFiles,
           onRemoveImage: (id) => { removeImage?.(id) },
+          onRemoveFile: (id) => { removeFile?.(id) },
           dropLimits: imageLimits === undefined ? undefined : {
             count: imageLimits.maxImagesPerMessage,
             size: imageSizeText(imageLimits.maxImageBytes),

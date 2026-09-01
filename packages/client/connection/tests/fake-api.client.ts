@@ -188,12 +188,46 @@ export class FakeApiClient implements IApiClient {
       this.record('agentPreset.copy', payload, Promise.resolve(ok({ agentPreset: payload.agentPreset }))),
     openDocument: (payload: { agentPreset: string }) =>
       this.record('agentPreset.openDocument', payload, Promise.resolve(ok({ opened: true as const }))),
+    openComposition: (payload: { agentPreset: string }) =>
+      this.record('agentPreset.openComposition', payload, Promise.resolve(ok({ opened: true as const }))),
     remove: (payload: { agentPreset: string }) =>
       this.record('agentPreset.remove', payload, Promise.resolve(ok({}))),
   }
 
   readonly skills: IApiClient['skills'] = {
     list: (payload: unknown) => this.record('skill.list', payload, this.onSkillList(payload)),
+    listManaged: payload => this.record('skill.listManaged', payload, Promise.resolve(ok({ skills: [] }))),
+    read: payload => this.record('skill.read', payload, Promise.resolve(ok({}))),
+    save: payload => this.record('skill.save', payload, Promise.resolve(ok({
+      result: { name: '', scope: 'project', path: '', created: false, version: 'v1', security: { status: 'valid', findings: [] } },
+    }))),
+    remove: payload => this.record('skill.remove', payload, Promise.resolve(ok({}))),
+    restore: payload => this.record('skill.restore', payload, Promise.resolve(ok({}))),
+    permanentDelete: payload => this.record('skill.permanentDelete', payload, Promise.resolve(ok({}))),
+    trash: payload => this.record('skill.trash', payload, Promise.resolve(ok({ entries: [] }))),
+    setEnabled: payload => this.record('skill.setEnabled', payload, Promise.resolve(ok({}))),
+    versions: payload => this.record('skill.versions', payload, Promise.resolve(ok({ versions: [] }))),
+    rollback: payload => this.record('skill.rollback', payload, Promise.resolve(ok({ activeVersion: 'v1' }))),
+    validate: payload => this.record('skill.validate', payload, Promise.resolve(ok({ ok: true }))),
+    securityCheck: payload => this.record('skill.securityCheck', payload, Promise.resolve(ok({ status: 'valid', findings: [] }))),
+    benchmarkStart: payload => this.record('skill.benchmarkStart', payload, Promise.resolve(ok({
+      run: { id: 'fake-run', skillName: '', status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 },
+    }))),
+    benchmarkPoll: payload => this.record('skill.benchmarkPoll', payload, Promise.resolve(ok({
+      run: { id: 'fake-run', skillName: '', status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 },
+    }))),
+    benchmarkCancel: payload => this.record('skill.benchmarkCancel', payload, Promise.resolve(ok({
+      run: { id: 'fake-run', skillName: '', status: 'cancelled', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 },
+    }))),
+    benchmarkBatchStart: payload => this.record('skill.benchmarkBatchStart', payload, Promise.resolve(ok({
+      runs: (payload as { names: string[] }).names.map((name, index) => ({
+        id: `fake-run-${index}`, skillName: name, status: 'running', phase: 'preparing',
+        progress: { case: 0, total: 0 }, createdAt: 0,
+      })),
+    }))),
+    autoImprove: payload => this.record('skill.autoImprove', payload, Promise.resolve(ok({
+      run: { id: 'fake-run', skillName: '', status: 'running', phase: 'preparing', progress: { case: 0, total: 0 }, createdAt: 0 },
+    }))),
   }
 
   readonly goals: IApiClient['goals'] = {
@@ -223,6 +257,13 @@ export class FakeApiClient implements IApiClient {
     providers: payload => this.record('llm.providers', payload, Promise.resolve(ok({ providers: [] }))),
     models: payload => this.record('llm.models', payload, Promise.resolve(ok({ groups: [], failures: [] }))),
     discoverModels: payload => this.record('llm.discoverModels', payload, Promise.resolve(ok({ models: [] }))),
+    oauthLoginStart: payload => this.record('llm.oauthLoginStart', payload, Promise.resolve(ok({
+      loginId: 'login-1', provider: payload.provider, userCode: 'ABCD',
+      verificationUri: 'https://auth.x.ai/device', loginLabel: 'Sign in',
+    }))),
+    oauthLoginWait: payload => this.record('llm.oauthLoginWait', payload, Promise.resolve(ok({}))),
+    oauthLoginCancel: payload => this.record('llm.oauthLoginCancel', payload, Promise.resolve(ok({}))),
+    oauthLogout: payload => this.record('llm.oauthLogout', payload, Promise.resolve(ok({}))),
   }
 
   /** When true, streams never fire onOpen (misbehaving-carrier material for the handshake timeout guard). */

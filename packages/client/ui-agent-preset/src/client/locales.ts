@@ -3,7 +3,7 @@
 /** Locale keys these surfaces render. */
 export type AgentPresetSettingsKey =
   | 'title' | 'description' | 'loading' | 'error' | 'userTrust' | 'seatHint' | 'headerHint'
-  | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view'
+  | 'nav' | 'sectionIntro' | 'builtIn' | 'setDefault' | 'view' | 'edit'
   | 'presetStandardName' | 'presetStandardDescription'
   | 'presetCodeName' | 'presetCodeDescription'
   | 'presetMinimalName' | 'presetMinimalDescription'
@@ -34,6 +34,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   builtIn: 'Built-in',
   setDefault: 'Set as default',
   view: 'View',
+  edit: 'Edit',
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
@@ -98,6 +99,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   builtIn: '内置',
   setDefault: '设为默认',
   view: '查看',
+  edit: '编辑',
   presetStandardName: '标准模式',
   presetStandardDescription: '功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。',
   presetCodeName: 'PTC 模式',
@@ -139,6 +141,73 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleteDescription: '预设目录将被删除。已在其上运行的会话不受影响；新会话将无法再选择它。',
   deleteConfirm: '删除',
   deleting: '正在删除…',
+}
+
+/** Russian copy. */
+export const ru: Record<AgentPresetSettingsKey, string> = {
+  title: 'Пресет агента',
+  description: 'Применяется к сессиям, которые вы начнёте дальше. Уже запущенные сессии сохраняют пресет, с которым стартовали.',
+  loading: 'Загрузка пресетов…',
+  error: 'Не удалось загрузить пресеты агента.',
+  userTrust: 'Свой',
+  seatHint: 'Пресет агента для сессии, которую вы собираетесь начать',
+  headerHint: 'Пресет агента этой сессии, зафиксированный при старте',
+  nav: 'Пресеты агента',
+  sectionIntro:
+    'Пресет — это состав плагинов агента одной сессии: инструменты, промпт и возможности. '
+    + 'Скопируйте существующий и сделайте своим или попросите агента создать его в режиме Creator.',
+  builtIn: 'Встроенный',
+  setDefault: 'Сделать по умолчанию',
+  view: 'Просмотр',
+  edit: 'Редактировать',
+  presetStandardName: 'Стандартный режим',
+  presetStandardDescription:
+    'Полноценный кодирующий агент с правкой файлов, оболочкой, поиском по файлам и вебу, навыками, планированием, целями, субагентами и рабочими процессами.',
+  presetCodeName: 'Режим PTC',
+  presetCodeDescription:
+    'Все возможности стандартного режима: инструменты доступны через Code Mode SDK, чтобы модель объединяла многошаговые операции в одной программе TypeScript.',
+  presetMinimalName: 'Минимальный режим',
+  presetMinimalDescription:
+    'Кодирующий агент с двумя инструментами: постоянный bash и str_replace_editor.',
+  presetCordisName: 'Режим Creator',
+  presetCordisDescription:
+    'Для создания своих пресетов агента: все возможности стандартного режима плюс инспекция среды выполнения, эксперименты с плагинами и подсказки по авторству пресетов.',
+  duplicate: 'Дублировать',
+  duplicateUnavailable: 'В этом развёртывании нет каталога пресетов с правом записи',
+  delete: 'Удалить',
+  presetId: 'Идентификатор',
+  presetIdPlaceholder: 'my-agent',
+  displayName: 'Имя',
+  displayNamePlaceholder: 'Показывается в списке; если пусто, используется идентификатор',
+  inUse: 'Используется',
+  builtInGroup: 'Встроенные',
+  customGroup: 'Свои',
+  noDescription: 'Нет описания.',
+  brokenBadge: 'Не удалось загрузить',
+  brokenNoCopy: 'Пресет, который не загрузился, нельзя дублировать',
+  copyOf: 'Скопировано из',
+  composition: 'Состав (agent.cordis.yml)',
+  cancel: 'Отмена',
+  close: 'Закрыть',
+  retry: 'Повторить',
+  copyTitle: 'Дублировать пресет',
+  copyIntro:
+    'Весь пресет копируется на этой машине. Идентификатор становится именем каталога и потом не меняется; '
+    + 'остальное правится в файлах самого пресета.',
+  create: 'Создать',
+  creating: 'Создание…',
+  creatorDraft: 'Набросать свой пресет в режиме Creator',
+  openLocation: 'Открыть папку',
+  showLocation: 'Показать расположение',
+  revealedPathLabel: 'Файлы пресета:',
+  idRequired: 'Укажите идентификатор пресета.',
+  idInvalid: 'Используйте строчные буквы, цифры и дефисы, начиная с буквы или цифры.',
+  idTaken: 'Пресет с таким идентификатором уже есть.',
+  deleteTitle: 'Удалить этот пресет?',
+  deleteDescription:
+    'Каталог пресета будет удалён. Сессии, которые уже на нём работают, продолжат работу; новые сессии выбрать его не смогут.',
+  deleteConfirm: 'Удалить',
+  deleting: 'Удаление…',
 }
 
 /** Preset roster fields needed to resolve Web display copy. */

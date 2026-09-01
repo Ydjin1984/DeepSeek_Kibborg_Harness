@@ -62,3 +62,21 @@ export const en: Record<TrajectoryKey, string> = {
   'toolbar.search': 'Search trajectory',
   'toolbar.searchPlaceholder': 'Search',
 }
+
+/** Russian dictionary. */
+export const ru: Record<TrajectoryKey, string> = {
+  'view.trajectory': 'Траектория',
+  'toolbar.aria': 'Панель траектории',
+  'toolbar.duration': 'Длительность',
+  'toolbar.useActualDuration': 'Использовать фактическую длительность',
+  'toolbar.useEqualWidth': 'Использовать одинаковую ширину операций',
+  'toolbar.actualTime': 'Фактическое время',
+  'toolbar.turns': 'Ходы',
+  'toolbar.expandTurns': 'Развернуть ходы',
+  'toolbar.collapseTurns': 'Свернуть ходы',
+  'toolbar.calls': 'Вызовы',
+  'toolbar.expandCalls': 'Развернуть вызовы',
+  'toolbar.collapseCalls': 'Свернуть вызовы',
+  'toolbar.search': 'Поиск по траектории',
+  'toolbar.searchPlaceholder': 'Поиск',
+}

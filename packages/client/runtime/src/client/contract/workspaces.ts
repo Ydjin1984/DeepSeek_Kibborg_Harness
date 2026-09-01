@@ -7,7 +7,7 @@
  * widening what features may do to the workspaces domain.
  */
 import type { DirectoryListing, SessionId, WorkspaceId, WorkspaceView } from '@deepseek-ai/dsh-api-remotes/client'
-import type { WorkspaceListState } from '../workspaces/service.ts'
+import type { WorkspaceListState } from './workspaces-state.ts'
 import type { ObservableSnapshot } from './store.ts'
 
 /** The workspaces-service face injected as `ctx.workspaces`. */

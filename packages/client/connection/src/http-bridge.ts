@@ -22,6 +22,32 @@ export interface FetchHandler {
 }
 
 /**
+ * Socket peer the bridged request arrived from, attached by
+ * {@link bridge}. The peer is OS-reported (never client-controlled), so
+ * loopback-pinned gates can tell a local browser from a remote client that
+ * forged a loopback Host header. Undefined on non-TCP transports.
+ */
+export const REQUEST_PEER: unique symbol = Symbol('dsh-request-peer')
+
+/** Read the socket peer {@link bridge} attached to a request. */
+export function requestPeer(request: Request): string | undefined {
+  return (request as Request & { [REQUEST_PEER]?: string })[REQUEST_PEER]
+}
+
+/**
+ * Socket peer of a node:http request, tolerant of socket-less test doubles,
+ * non-TCP transports, and @types/node variance. The peer feeds the
+ * loopback-pinned trust gate; when it is unknown the header fence alone
+ * stands.
+ * @param req - the node:http request (read structurally, never by type identity).
+ */
+export function socketPeer(req: { socket?: unknown }): string | undefined {
+  const socket = req.socket as { remoteAddress?: unknown } | undefined
+  const address = socket?.remoteAddress
+  return typeof address === 'string' ? address : undefined
+}
+
+/**
  * Bridge one node:http request to the fetch-shaped handler (client close
  * aborts; SSE bodies stream out chunk by chunk).
  * @param req - incoming node:http request (fully read before dispatch).
@@ -72,6 +98,10 @@ export async function bridge(
     ...chunks.length > 0 ? { body: Buffer.concat(chunks) } : {},
     signal: abort.signal,
   })
+  const peer = socketPeer(req)
+  if (peer !== undefined) {
+    ;(request as Request & { [REQUEST_PEER]?: string })[REQUEST_PEER] = peer
+  }
   const response = await apiHandler.fetch(request)
   res.writeHead(response.status, Object.fromEntries(response.headers.entries()))
   if (response.body === null) {

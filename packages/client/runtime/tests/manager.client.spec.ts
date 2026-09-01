@@ -336,11 +336,15 @@ describe('subagent catalogs', () => {
       summary(S1),
       summary(S2, { parentSessionId: S1, origin: 'subagent' }),
     ] as never[] }))
-    api.onSubagentList = () => Promise.resolve(ok({
-      entries: [{
-        kind: 'child', id: S2, mode: 'continuable', label: 'worker',
-        activity: 'running', hasChildren: false,
-      }] as never[],
+    // The catalog answers only for the real parent; a refresh of the child's
+    // own catalog (selectSubagent hydrates descendants) returns no rows.
+    api.onSubagentList = payload => Promise.resolve(ok({
+      entries: (payload as { parentSessionId: SessionId }).parentSessionId === S1
+        ? [{
+          kind: 'child', id: S2, mode: 'continuable', label: 'worker',
+          activity: 'running', hasChildren: false,
+        }] as never[]
+        : [],
       parentAvailable: true,
     }))
     const manager = new SessionManager(api, fakeRemote())
@@ -402,6 +406,85 @@ describe('subagent catalogs', () => {
         address: { parentSessionId: S1, childSessionId: S2, mode: 'continuable' },
       },
     })
+  })
+
+  it('opens the live window of a running catalog child so its frames are consumed off-screen', async () => {
+    const api = new FakeApiClient()
+    api.onList = () => Promise.resolve(ok({ items: [
+      summary(S1),
+      summary(S2, { parentSessionId: S1, origin: 'subagent', running: true }),
+    ] as never[] }))
+    api.onSubagentList = () => Promise.resolve(ok({
+      entries: [{
+        kind: 'child', id: S2, mode: 'continuable', label: 'worker',
+        activity: 'running', hasChildren: false,
+      }] as never[],
+      parentAvailable: true,
+    }))
+    const manager = new SessionManager(api, fakeRemote())
+    await manager.refreshList()
+    await manager.refreshSubagents(S1)
+    // The running child's window opened eagerly, routed through the addressed
+    // subagent transport without any user selection.
+    expect(api.callsOf('subagent.history')).toEqual([
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+    ])
+    expect(api.callsOf('session.history')).toEqual([])
+    expect(manager.get(S2).getSnapshot().subagent).toEqual({
+      address: { parentSessionId: S1, childSessionId: S2, mode: 'continuable' },
+      parentAvailable: true,
+    })
+  })
+
+  it('opens a running child window from its status frame when the catalog has not loaded', async () => {
+    const api = new FakeApiClient()
+    api.onList = () => Promise.resolve(ok({ items: [
+      summary(S1),
+      summary(S2, { parentSessionId: S1, origin: 'subagent' }),
+    ] as never[] }))
+    api.onSubagentList = () => Promise.resolve(ok({
+      entries: [{
+        kind: 'child', id: S2, mode: 'continuable', label: 'worker',
+        activity: 'running', hasChildren: false,
+      }] as never[],
+      parentAvailable: true,
+    }))
+    const manager = new SessionManager(api, fakeRemote())
+    await manager.refreshList()
+    // The mode is unknown before the catalog lands: the status frame schedules
+    // the parent refresh, whose completion opens the window authoritatively.
+    manager.handleHostEnvelope({
+      rpcId: 'child-running' as never,
+      payload: { type: 'host/session-status', sessionId: S2, running: true },
+    })
+    await manager.refreshSubagents(S1)
+    expect(api.callsOf('subagent.history')).toEqual([
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+    ])
+  })
+
+  it('opens a running catalogued child window immediately from its status frame', async () => {
+    const api = new FakeApiClient()
+    api.onSubagentList = () => Promise.resolve(ok({
+      entries: [{
+        kind: 'child', id: S2, mode: 'continuable', label: 'worker',
+        activity: 'inactive', hasChildren: false,
+      }] as never[],
+      parentAvailable: true,
+    }))
+    const manager = new SessionManager(api, fakeRemote())
+    await manager.refreshSubagents(S1)
+    const listCalls = api.callsOf('subagent.list').length
+    // The catalog knows the child (mode + address), so the running flip opens
+    // the window without another catalog read.
+    manager.handleHostEnvelope({
+      rpcId: 'child-running' as never,
+      payload: { type: 'host/session-status', sessionId: S2, running: true },
+    })
+    expect(api.callsOf('subagent.history')).toEqual([
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+    ])
+    expect(api.callsOf('subagent.list')).toHaveLength(listCalls)
   })
 
   it('refetches debounced membership only while the parent catalog is open', async () => {

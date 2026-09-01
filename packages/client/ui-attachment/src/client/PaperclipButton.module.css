@@ -1,0 +1,33 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+/* Ghost twin of the composer's + button (28px round tool); the primary
+   selector circle stays with the command menu trigger next to it. */
+.trigger {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The picker input stays out of the tab order and the layout. */
+.fileInput {
+  display: none;
+}

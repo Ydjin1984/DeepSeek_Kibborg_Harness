@@ -88,6 +88,28 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
 }
 
 /**
+ * Select the Chat conversation view. The Execution view is the conversation
+ * default, while these smoke lanes assert the chat flow, so a scenario
+ * switches once its session has visible content (the header tab ring only
+ * renders for an active session, so blank-session connects cannot switch).
+ * Waits for the tab to appear and clicks it; selecting the already active
+ * tab is a no-op.
+ * @param page - the page under test.
+ * @param timeoutMs - how long to wait for the tab ring to appear.
+ */
+export async function selectChatView(page: Page, timeoutMs = 30_000): Promise<void> {
+  const chatTab = page.getByRole('tab', { name: 'Chat' })
+  await chatTab.waitFor({ timeout: timeoutMs })
+  if (await chatTab.getAttribute('aria-selected') === 'true') return
+  await chatTab.click()
+  await page.waitForFunction(() => {
+    const tab = [...document.querySelectorAll('[role="tab"]')]
+      .find(el => el.textContent?.trim() === 'Chat')
+    return tab?.getAttribute('aria-selected') === 'true'
+  }, { timeout: 10_000 })
+}
+
+/**
  * {@link connectFreshWorkspace} over a page that advertises
  * {@link ZH_BROWSER_LOCALE}: the English helper's anchors assume the locale
  * most other scenarios boot, so a scenario that deliberately keeps zh needs

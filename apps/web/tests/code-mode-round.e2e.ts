@@ -18,7 +18,7 @@ import {
   captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('./snapshots/code-mode-round/session.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/code-mode-round/ui.expected.md', import.meta.url))
@@ -69,6 +69,9 @@ describe('web e2e: Code Mode round renders nested sub-calls', () => {
     await input.fill(PROMPT)
     await input.press('Enter')
     const sessionId = await settled
+    // The Execution view is the conversation default; the drive turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }

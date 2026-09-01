@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-08-31T17:54:01.095Z",
+  "updatedAt": "2026-08-31T20:58:21.246Z",
+  "activeVersion": "v5",
+  "versions": [
+    {
+      "id": "v1",
+      "createdAt": "2026-08-31T17:54:01.095Z",
+      "reason": "Initial",
+      "source": "initial"
+    },
+    {
+      "id": "v2",
+      "createdAt": "2026-08-31T18:11:47.351Z",
+      "reason": "Created by Skill Creator",
+      "source": "creator"
+    },
+    {
+      "id": "v3",
+      "createdAt": "2026-08-31T18:15:04.466Z",
+      "reason": "Rollback to v1",
+      "source": "rollback"
+    },
+    {
+      "id": "v4",
+      "createdAt": "2026-08-31T18:54:25.563Z",
+      "reason": "Auto Improve iteration 1",
+      "source": "auto-improve"
+    },
+    {
+      "id": "v5",
+      "createdAt": "2026-08-31T19:15:13.695Z",
+      "reason": "Saved from Skills Manager",
+      "source": "manual"
+    }
+  ],
+  "benchmarks": {
+    "v3": {
+      "runId": "bench-ac48ed57-23bf-474e-83e4-6063bd29d1e6",
+      "at": "2026-08-31T19:11:17.423Z",
+      "version": "v3",
+      "taskModel": {
+        "provider": "kibborg",
+        "model": "Kibborg_Flash_v5.7"
+      },
+      "evaluatorModel": {
+        "provider": "kibborg",
+        "model": "Kibborg_Flash_v5.7"
+      },
+      "baselineScore": 37,
+      "skillScore": 35,
+      "improvementPercent": -5.4,
+      "verdict": "worse",
+      "baselineTokens": {
+        "input": 2824,
+        "output": 522,
+        "total": 3346
+      },
+      "skillTokens": {
+        "input": 2824,
+        "output": 812,
+        "total": 3636
+      },
+      "baselineTimeMs": 3619.4,
+      "skillTimeMs": 4882.8,
+      "baselineToolCalls": 0,
+      "skillToolCalls": 0
+    },
+    "v4": {
+      "runId": "bench-5640585c-bcdf-4a34-bf3c-308e8e0309ed",
+      "at": "2026-08-31T18:56:51.085Z",
+      "version": "v3",
+      "taskModel": {
+        "provider": "kibborg",
+        "model": "Kibborg_Flash_v5.7"
+      },
+      "evaluatorModel": {
+        "provider": "kibborg",
+        "model": "Kibborg_Flash_v5.7"
+      },
+      "baselineScore": 57.7,
+      "skillScore": 55.7,
+      "improvementPercent": -3.5,
+      "verdict": "worse",
+      "baselineTokens": {
+        "input": 1606,
+        "output": 3163,
+        "total": 4769
+      },
+      "skillTokens": {
+        "input": 1606,
+        "output": 663,
+        "total": 2269
+      },
+      "baselineTimeMs": 32368.3,
+      "skillTimeMs": 7580.7,
+      "baselineToolCalls": 0,
+      "skillToolCalls": 0
+    },
+    "v5": {
+      "runId": "bench-b165971b-647f-439e-a56c-4b779fbfeb83",
+      "at": "2026-08-31T20:58:21.226Z",
+      "version": "v5",
+      "taskModel": {
+        "provider": "deepseek-official",
+        "model": "deepseek-v4-flash"
+      },
+      "evaluatorModel": {
+        "provider": "deepseek-official",
+        "model": "deepseek-v4-flash"
+      },
+      "baselineScore": 40,
+      "skillScore": 29,
+      "improvementPercent": -27.5,
+      "verdict": "worse",
+      "baselineTokens": {
+        "input": 1541,
+        "output": 6651,
+        "total": 8192
+      },
+      "skillTokens": {
+        "input": 389,
+        "output": 9204,
+        "total": 9593
+      },
+      "baselineTimeMs": 12669.4,
+      "skillTimeMs": 17494.2,
+      "baselineToolCalls": 0,
+      "skillToolCalls": 0
+    }
+  }
+}

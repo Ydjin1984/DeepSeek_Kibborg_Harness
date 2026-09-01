@@ -103,6 +103,10 @@ async function bench() {
           calls.push(`openDocument:${payload.agentPreset}`)
           return Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: { opened: true as const } } })
         },
+        openComposition: (payload: { agentPreset: string }) => {
+          calls.push(`openComposition:${payload.agentPreset}`)
+          return Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: { opened: true as const } } })
+        },
         remove: () => Promise.resolve({ rpcId: 'r', result: { ok: true as const, value: {} } }),
         select: (payload: { agentPreset: string }) => {
           calls.push(`select:${payload.agentPreset}`)

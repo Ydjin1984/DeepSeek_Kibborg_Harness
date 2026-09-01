@@ -13,7 +13,7 @@ import { WelcomeNotice } from '../src/client/WelcomeNotice.tsx'
 import type { WelcomeNoticeProps } from '../src/client/WelcomeNotice.tsx'
 import { decodeWelcomeSection, WelcomeNoticeStore } from '../src/client/welcome-store.ts'
 import type { WelcomeSection } from '../src/client/welcome-store.ts'
-import { en, zh } from '../src/client/locales.ts'
+import { en, ru, zh } from '../src/client/locales.ts'
 import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_COPY, WELCOME_NOTICE_SETTINGS_NAMESPACE,
   WELCOME_NOTICE_VERSION,
@@ -86,7 +86,7 @@ function mount(
 }
 
 describe('WelcomeNotice', () => {
-  it('uses the exact owner copy in both GUI locales', () => {
+  it('uses the exact owner copy in every GUI locale', () => {
     expect(WELCOME_NOTICE_COPY.en).toEqual({
       title: 'Internal Testing Notice',
       body: "DeepSeek Harness 0.1 remains in testing for Harness developers. Many areas need further improvement, and we welcome feedback from the developer community. DeepSeek Harness's core plugins and foundational APIs will continue to evolve rapidly over the coming months.\n\nWe look forward to exploring the limits of intelligence with developers around the world, building on open-source, open, reusable, and composable infrastructure. We welcome Harness developers everywhere to join the DSH plugin ecosystem.",
@@ -94,6 +94,7 @@ describe('WelcomeNotice', () => {
     })
     expect(en.welcomeBody).toBe(WELCOME_NOTICE_COPY.en.body)
     expect(zh.welcomeBody).toBe(WELCOME_NOTICE_COPY.zh.body)
+    expect(ru.welcomeBody).toBe(WELCOME_NOTICE_COPY.ru.body)
   })
 
   it('renders one blocking modal action and focuses the title', async () => {

@@ -18,6 +18,12 @@ Choose **Add provider**, select a provider such as Anthropic or OpenAI, enter it
 
 Providers with native authentication need their native credentials instead. Bedrock, Vertex, Azure, and Codex use AWS credentials and a region, an ADC project, an `api-version`, and OAuth respectively; filling only the API-key field does not configure them.
 
+## Sign in with SuperGrok
+
+Choose **Add provider**, select **xai**, and use **Sign in with SuperGrok or X Premium** instead of an API key. The Host starts a device-code login at `auth.x.ai`; approve it in the browser. Tokens stay in `$DSH_HOME/.credentials.yaml` under `XAI_OAUTH` and never touch Grok CLI's `~/.grok/auth.json`. Usage bills the SuperGrok or X Premium allowance, not the xAI API meter. The conversation still runs the Harness agent loop and Harness tools; xAI is only the model.
+
+An API key on the same xai card still wins when present. Sign out forgets the OAuth credential and leaves the provider row.
+
 ## Add a custom provider
 
 Choose **Add a custom provider** for a company gateway, self-hosted server, or provider absent from the installed catalog. Supply a lowercase Provider ID, base URL, API protocol, credential, and at least one model.

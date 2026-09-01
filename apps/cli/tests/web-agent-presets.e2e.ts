@@ -30,15 +30,15 @@ const CODEX_PACKAGE_DIR = join(REPO_ROOT, 'packages/subagent/subagent-codex')
 const CLAUDE_CODE_PACKAGE_DIR = join(REPO_ROOT, 'packages/subagent/subagent-claude-code')
 /** The installation anchor whose dependency surface the preset module fallback mirrors. */
 const INSTALL_ANCHOR = join(REPO_ROOT, 'apps/cli/package.json')
-const MINIMAL_PROMPT = 'You are a helpful software engineer assistant.'
-const MINIMAL_BASH_DESCRIPTION = `Run commands in a bash shell
-* When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
-* You don't have access to the internet via this tool.
-* You do have access to a mirror of common linux and python packages via apt and pip.
-* State is persistent across command calls and discussions with the user.
-* To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
-* Please avoid commands that may produce a very large amount of output.
-* Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.`
+const MINIMAL_PROMPT = 'Ты — полезный ассистент-инженер-программист. Всегда отвечай на русском языке.'
+const MINIMAL_BASH_DESCRIPTION = `Запуск команд в оболочке bash
+* При вызове этого инструмента содержимое параметра "command" НЕ нужно экранировать XML.
+* Через этот инструмент у тебя нет доступа в интернет.
+* У тебя есть доступ к зеркалу распространённых пакетов linux и python через apt и pip.
+* Состояние сохраняется между вызовами команд и обсуждениями с пользователем.
+* Чтобы просмотреть конкретный диапазон строк файла, например строки 10-25, попробуй 'sed -n 10,25p /path/to/the/file'.
+* Избегай команд, которые могут выдать очень большой объём вывода.
+* Запускай долгоживущие команды в фоне, например 'sleep 10 &' или запускай сервер в фоне.`
 
 /**
  * Boot the shipped Web composition, minus the rows that would bind a port,

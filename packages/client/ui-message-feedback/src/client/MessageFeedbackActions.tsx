@@ -71,6 +71,9 @@ export function MessageFeedbackActions({ messageId, ensure, rate, toggle, clearN
   const alive = useRef(true)
   useEffect(() => () => { alive.current = false }, [])
 
+  /** Same-render fence for the rating toggle (see {@link onRate}). */
+  const pendingRef = useRef(false)
+
   /** Bumped whenever an editing session ends, so a late save can tell it is stale. */
   const noteGeneration = useRef(0)
 
@@ -95,14 +98,26 @@ export function MessageFeedbackActions({ messageId, ensure, rate, toggle, clearN
   }, [])
 
   const onRate = useCallback((next: MessageFeedbackRating) => {
+    // Same-render fence: two rapid clicks on Like/Dislike would otherwise
+    // enqueue toggle + toggle, which the controller serializes into
+    // like-then-retract — the rating visibly vanishes.
+    if (pendingRef.current) return
+    pendingRef.current = true
     setPending(true)
     setRowFailure(null)
     // The controller decides retract-vs-replace from the committed item, so a
     // click that lands before the first list read still toggles the stored
     // value instead of this render's empty view.
     closeNote()
-    void toggle(messageId, next).then(settleRating)
-  }, [closeNote, messageId, settleRating, toggle])
+    void toggle(messageId, next).then((result) => {
+      pendingRef.current = false
+      settleRating(result)
+    }, (error: unknown) => {
+      pendingRef.current = false
+      settleRating({ ok: false, error: { code: 'generic' } })
+      console.error(`ui-message-feedback: rate failed: ${String(error)}`)
+    })
+  }, [closeNote, messageId, pendingRef, settleRating, toggle])
 
   // The rating is a parameter because only the note editor's render site can
   // prove one is recorded; that removes an unreachable undefined guard here.

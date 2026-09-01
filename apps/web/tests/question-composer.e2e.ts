@@ -18,7 +18,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/question-composer', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -75,6 +75,9 @@ describe('web e2e: resident question composer round trip', () => {
     // answered, so a plain waitFor is race-free.
     const composer = page.locator('[data-question-key]')
     await composer.waitFor({ timeout: MODE === 'record' ? 120_000 : 30_000 })
+    // The Execution view is the conversation default; the turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     await expect.poll(() => composer.getByText('Which color do you prefer?').count(), { timeout: 10_000 }).toBeGreaterThan(0)
 
     const selectedRow = page.locator('[role="treeitem"][aria-selected="true"]')

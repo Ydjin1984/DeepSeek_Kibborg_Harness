@@ -10,6 +10,9 @@
     - button "Plugins":
       - img
       - text: Plugins
+    - button "Skills":
+      - img
+      - text: Skills
     - button "Agent presets":
       - img
       - text: Agent presets

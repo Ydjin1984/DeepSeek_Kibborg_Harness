@@ -100,6 +100,13 @@ function harness(options: {
             }],
         }))
       },
+      oauthLoginStart: () => Promise.resolve(ok({
+        loginId: 'login-1', provider: 'xai', userCode: 'ABCD',
+        verificationUri: 'https://auth.x.ai/device', loginLabel: 'Sign in',
+      })),
+      oauthLoginWait: () => Promise.resolve(ok({})),
+      oauthLoginCancel: () => Promise.resolve(ok({})),
+      oauthLogout: () => Promise.resolve(ok({})),
     },
     settings: {
       describe: () => Promise.resolve(ok({

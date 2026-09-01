@@ -21,7 +21,7 @@
  * see instead of rebuilding the whole subtree from a partial descriptor.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CredentialView, IApiClient, SettingsNamespaceView, SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import {
@@ -57,6 +57,11 @@ export interface ProviderEditorProps {
    * override every one of them and the card does not offer it.
    */
   declared?: boolean
+  /**
+   * Device-code OAuth this adapter offers for the route. When set, the card
+   * shows subscription sign-in beside the API-key field.
+   */
+  oauth?: { loginLabel: string; credentialRef: string }
   /** The owning namespace view (schema, layers, secrets). */
   namespace: SettingsNamespaceView
   /** Settings-owned synchronous schema and immutable path operations. */
@@ -156,6 +161,15 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const [draft, setDraft] = useState<Record<string, unknown>>(() => draftAt(schema, namespace, settingsPath))
   const [keyDraft, setKeyDraft] = useState('')
   const [keyState, setKeyState] = useState<CredentialView | undefined>(undefined)
+  const [oauthState, setOauthState] = useState<CredentialView | undefined>(undefined)
+  const [oauthChallenge, setOauthChallenge] = useState<{
+    loginId: string
+    userCode: string
+    verificationUri: string
+    loginLabel: string
+  } | undefined>(undefined)
+  const [oauthBusy, setOauthBusy] = useState(false)
+  const oauthLoginIdRef = useRef<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   // A settings success advances both retry baselines immediately. Keeping the
@@ -183,19 +197,30 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   useEffect(() => {
     let stale = false
     setKeyState(undefined)
+    setOauthState(undefined)
     // The key state is a placeholder hint, not a precondition for editing:
     // neither a business rejection nor a transport failure may reach the
     // browser as an unhandled rejection, so the card simply renders without
     // the "already configured" hint.
-    void api.credentials.describe({ refs: [keyRef] }).then(
+    const refs = [keyRef, ...props.oauth === undefined ? [] : [props.oauth.credentialRef]]
+    void api.credentials.describe({ refs }).then(
       (response) => {
         if (stale || !response.result.ok) return
         setKeyState(response.result.value.credentials[keyRef])
+        if (props.oauth !== undefined) {
+          setOauthState(response.result.value.credentials[props.oauth.credentialRef])
+        }
       },
       () => undefined,
     )
     return () => { stale = true }
-  }, [api.credentials, keyRef])
+  }, [api.credentials, keyRef, props.oauth])
+
+  useEffect(() => () => {
+    const loginId = oauthLoginIdRef.current
+    if (loginId === undefined) return
+    void api.llm.oauthLoginCancel({ settingsNs: namespace.ns, loginId })
+  }, [api.llm, namespace.ns])
 
   const stringAt = (source: unknown, key: string): string | undefined => {
     const value = schema.getPath(source, [key])
@@ -337,6 +362,132 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     return pinned ?? schema.nodeAtPath(root, [...settingsPath, 'models'])?.meta.default
   }
 
+  const startOauth = async (): Promise<void> => {
+    if (props.oauth === undefined) return
+    setOauthBusy(true)
+    setFailure(undefined)
+    try {
+      const started = await api.llm.oauthLoginStart({
+        settingsNs: namespace.ns,
+        provider: props.provider,
+      })
+      if (!started.result.ok) {
+        setFailure(started.result.error.message)
+        return
+      }
+      const challenge = started.result.value
+      oauthLoginIdRef.current = challenge.loginId
+      setOauthChallenge(challenge)
+      window.open(challenge.verificationUri, '_blank', 'noopener,noreferrer')
+      const waited = await api.llm.oauthLoginWait({
+        settingsNs: namespace.ns,
+        loginId: challenge.loginId,
+      })
+      oauthLoginIdRef.current = undefined
+      setOauthChallenge(undefined)
+      if (!waited.result.ok) {
+        setFailure(waited.result.error.message)
+        return
+      }
+      setOauthState({ configured: true, writable: true })
+      props.onClose(true)
+    } catch (error) {
+      setFailure(messageOf(error))
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
+  const cancelOauth = (): void => {
+    const loginId = oauthLoginIdRef.current
+    if (loginId !== undefined) {
+      void api.llm.oauthLoginCancel({ settingsNs: namespace.ns, loginId })
+      oauthLoginIdRef.current = undefined
+    }
+    setOauthChallenge(undefined)
+    setOauthBusy(false)
+  }
+
+  const logoutOauth = async (): Promise<void> => {
+    if (props.oauth === undefined) return
+    setOauthBusy(true)
+    setFailure(undefined)
+    try {
+      const response = await api.llm.oauthLogout({
+        settingsNs: namespace.ns,
+        provider: props.provider,
+      })
+      if (!response.result.ok) {
+        setFailure(response.result.error.message)
+        return
+      }
+      setOauthState({ configured: false, writable: true })
+    } catch (error) {
+      setFailure(messageOf(error))
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
+  /** Subscription sign-in controls for a catalog route that offers OAuth. */
+  const oauthPanel = (): ReactNode => {
+    if (props.oauth === undefined) return null
+    const signedIn = oauthState?.configured === true
+    return (
+      <div className={styles['oauth']}>
+        {signedIn
+          ? (
+            <>
+              <p className={styles['oauthStatus']}>{t('oauthSignedIn')}</p>
+              <button
+                type="button"
+                className={styles['secondaryButton']}
+                disabled={disabled || oauthBusy}
+                onClick={() => { void logoutOauth() }}
+              >
+                {t('oauthSignOut')}
+              </button>
+            </>
+          )
+          : oauthChallenge === undefined
+            ? (
+              <button
+                type="button"
+                className={styles['secondaryButton']}
+                disabled={disabled || oauthBusy}
+                onClick={() => { void startOauth() }}
+              >
+                {oauthBusy ? t('oauthSigningIn') : props.oauth.loginLabel}
+              </button>
+            )
+            : (
+              <>
+                <p className={styles['oauthStatus']}>
+                  {t('oauthWaiting')}
+                  {' '}
+                  <strong className={styles['oauthCode']}>{oauthChallenge.userCode}</strong>
+                </p>
+                <a
+                  className={styles['oauthLink']}
+                  href={oauthChallenge.verificationUri}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t('oauthOpenLink')}
+                </a>
+                <button
+                  type="button"
+                  className={styles['secondaryButton']}
+                  onClick={cancelOauth}
+                >
+                  {t('oauthCancel')}
+                </button>
+              </>
+            )}
+      </div>
+    )
+  }
+
   /**
    * The curated fields of one known adapter family. The family arrives
    * narrowed so the per-family branches below are total: an unknown namespace
@@ -387,6 +538,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
           />
           {shownKeyFailure === undefined ? null : <p className={styles['error']}>{t(shownKeyFailure)}</p>}
         </div>
+        {props.oauth === undefined || props.credentialOnly === true ? null : oauthPanel()}
         {props.credentialOnly === true ? null : <details className={styles['customized']}>
           <summary className={styles['customizedSummary']}>{t('customized')}</summary>
           <div className={styles['customizedBody']}>

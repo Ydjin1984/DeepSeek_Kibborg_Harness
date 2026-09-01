@@ -25,7 +25,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
+import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot, selectChatView } from './support.ts'
 
 const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./snapshots/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
 
@@ -549,6 +549,9 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     // The first send must keep the session tree mounted; a near-empty body
     // reveals a duplicate runtime bundle with incompatible scope tags.
     await page.waitForFunction(() => document.body.innerText.length > 50, undefined, { timeout: 15_000 })
+    // The Execution view is the conversation default; the turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     expect(pageErrors).toEqual([])
     await page.waitForFunction(
       expected => document.title !== expected && document.title.endsWith(` — ${expected}`),

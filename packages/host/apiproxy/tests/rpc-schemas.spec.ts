@@ -418,15 +418,21 @@ describe('skills domain schemas', () => {
     expect(() => skillListRequestSchema.parse({})).toThrow()
     expect(skillListValueSchema.parse({ skills: [] }).skills).toEqual([])
     const value = skillListValueSchema.parse({ skills: [
-      { name: 'commit-helper', description: 'Git commits', whenToUse: 'when committing', modelInvocable: true },
+      { name: 'commit-helper', description: 'Git commits', localizedDescription: { zh: '提交助手', ru: 'Помощник коммитов' }, whenToUse: 'when committing', modelInvocable: true },
       { name: 'bare', description: 'No guidance', modelInvocable: false },
     ] })
     expect(value.skills[0]?.whenToUse).toBe('when committing')
+    expect(value.skills[0]?.localizedDescription).toEqual({ zh: '提交助手', ru: 'Помощник коммитов' })
     expect(value.skills[1]?.whenToUse).toBeUndefined()
+    expect(value.skills[1]?.localizedDescription).toBeUndefined()
     expect(value.skills[1]?.modelInvocable).toBe(false)
     expect(() => skillEntrySchema.parse({ name: '', description: 'd', modelInvocable: true })).toThrow()
     // modelInvocable is required wire data: an entry without it fails.
     expect(() => skillEntrySchema.parse({ name: 'n', description: 'd' })).toThrow()
+    // Unknown locale keys are stripped at the wire; the host-side registry owns the strict contract.
+    expect(skillEntrySchema.parse({
+      name: 'n', description: 'd', modelInvocable: true, localizedDescription: { en: 'x' },
+    }).localizedDescription).toEqual({})
   })
 })
 

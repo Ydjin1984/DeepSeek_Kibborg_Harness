@@ -72,6 +72,13 @@ export interface RpcErrorDetailsMap {
   /** A credential write was refused (read-only shadowing layer or storage failure); the message is the seam's own text. */
   'credential-rejected': { ref: string }
   /**
+   * A skill-manager operation was refused (invalid name or content, name
+   * conflict, blocked security verdict, built-in protection, missing version,
+   * or unknown skill/run); the message is the manager's own text and the
+   * details carry the stable manager error code.
+   */
+  'skill-manager-error': { code: string; name?: string }
+  /**
    * Interrogating a draft provider endpoint did not produce a model listing:
    * no adapter family serves the namespace, the protocol has no listing this
    * build can read, or the endpoint was unreachable, refused the credential,
@@ -92,6 +99,12 @@ export interface RpcErrorDetailsMap {
   'subagent-not-resumable': { childSessionId: SessionId }
   'subagent-unauthorized': { childSessionId: SessionId }
   'subagent-delivery-unavailable': { childSessionId: SessionId }
+  /**
+   * An OAuth device-code login operation (start, wait, cancel, or logout)
+   * failed; the message is the seam's text and the details name the route
+   * and login identity the caller supplied.
+   */
+  'oauth-login-failed': { settingsNs: string; provider?: string; loginId?: string }
   'internal': {}
 }
 

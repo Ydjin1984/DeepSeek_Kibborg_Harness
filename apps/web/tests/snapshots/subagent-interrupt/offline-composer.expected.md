@@ -10,6 +10,7 @@
     - img
   - tablist:
     - tab "Chat" [selected]
+    - tab "Execution"
     - tab "Trajectory"
 - text: Explain event sourcing in one sentence. {{clock}}
 - button "Copy":
@@ -19,10 +20,11 @@
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
 - paragraph: partial
-- status: Deep diving...
+- status: Working on it…
 - textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
 - button "Commands" [disabled]:
   - img
 - 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Compact conversation history" [disabled]
 - button "Stop generating"
 - button "Send message" [disabled]

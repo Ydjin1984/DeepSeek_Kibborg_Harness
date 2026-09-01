@@ -1,6 +1,8 @@
 ---
 name: record-browser-gif
 description: Record browser or Web UI interaction demos as optimized GIFs using the available built-in browser, state-based frame capture, and deterministic encoding, then publish to a dedicated assets branch when the task includes attaching the GIF to a pull request. Use when asked to make, record, or generate a GIF that demonstrates a browser workflow, and for every pull request that changes product-user-visible GUI behavior, which MUST include a GIF recorded from the pull request's real server and model flow.
+description.zh: 使用内置浏览器、基于状态的帧捕获与确定性编码将浏览器或 Web UI 交互演示录制成优化 GIF，并在任务包含将 GIF 附到 pull request 时发布到专用 assets 分支。在要求制作、录制或生成演示浏览器工作流的 GIF 时使用，并用于每个改变产品可见 GUI 行为的 pull request——它必须包含从该 PR 真实服务器与模型流程录制的 GIF。
+description.ru: Записывайте демо взаимодействия с браузером или Web UI как оптимизированные GIF с помощью встроенного браузера, покадрового захвата по состоянию и детерминированного кодирования, затем публикуйте в выделенную ветку assets, когда задача включает прикрепление GIF к pull request. Используйте, когда просят сделать, записать или сгенерировать GIF, демонстрирующий рабочий процесс в браузере, и для каждого pull request, меняющего видимое пользователю поведение GUI, — он ОБЯЗАН включать GIF, записанный с реального сервера и потока модели этого PR.
 ---
 
 # Record Browser GIF

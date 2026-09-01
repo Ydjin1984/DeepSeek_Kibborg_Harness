@@ -5,11 +5,35 @@
     - text: Session log
     - img
   - tablist:
-    - tab "Chat" [selected]
+    - tab "Chat"
+    - tab "Execution" [selected]
     - tab "Trajectory"
+- region "Task execution":
+  - text: Inline code links Completed 1 turns · 1 steps · 0 tools · 0 files · 0 errors
+  - button "Collapse details" [expanded]:
+    - img
+  - text: No active task
+- searchbox "Search events…"
+- group "Filter events":
+  - button "All" [pressed]
+  - button "Analysis"
+  - button "Tools"
+  - button "Files"
+  - button "Terminal"
+  - button "Git"
+  - button "Errors"
+  - button "Success"
+- button "Expand all"
+- button "Collapse all"
+- button "{{clock}} User Show the local preview URL." [expanded]:
+  - time: {{clock}}
+  - text: User Show the local preview URL.
 - text: Show the local preview URL. {{clock}}
 - button "Copy":
   - img
+- 'button "{{clock}} Analysis ## Inline code links" [expanded]':
+  - time: {{clock}}
+  - text: "Analysis ## Inline code links"
 - heading "Inline code links" [level=2]
 - paragraph:
   - text: "Preview:"
@@ -27,19 +51,15 @@
   - text: "Unsafe:"
   - code: javascript:alert(1)
 - paragraph: INLINE_CODE_LINK_DONE
-- button "Copy":
-  - img
-- button "Good response":
-  - img
-- button "Bad response":
-  - img
-- button "Branch into a new conversation":
-  - img
-- text: {{clock}} Ran for {{duration}}
+- button "{{clock}} Completed Turn 1 complete {{duration}}":
+  - time: {{clock}}
+  - text: Completed Turn 1 complete {{duration}}
 - textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

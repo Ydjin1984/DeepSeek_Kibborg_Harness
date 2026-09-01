@@ -1,6 +1,8 @@
 ---
 name: dsh-code-review
 description: Use when reviewing a pull request in the deepseek-harness repo — orients the reviewer to this codebase's standards (AGENTS.md conventions, defensive patterns, ADRs, quality gates) and the review-specific checks that code alone can't show
+description.zh: 在 deepseek-harness 仓库中评审 pull request 时使用——帮助评审者了解本代码库的标准（AGENTS.md 约定、防御性模式、ADR、质量门禁）以及仅靠代码无法发现的评审专项检查
+description.ru: Используйте при ревью pull request в репозитории deepseek-harness — знакомит ревьюера со стандартами этой кодовой базы (соглашения AGENTS.md, защитные паттерны, ADR, шлюзы качества) и специфичными для ревью проверками, которые код сам по себе не показывает
 ---
 
 # Reviewing a DeepSeek-Harness PR

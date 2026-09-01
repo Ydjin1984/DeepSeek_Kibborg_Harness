@@ -14,6 +14,8 @@ import type {
   LlmFailure,
   LlmModelContext,
   LlmModelDiscoveryRequest,
+  LlmOAuthDeviceChallenge,
+  LlmOAuthLoginHandlers,
   LlmModelInfo,
   LlmResolvedModelInfo,
   LlmProviderInfo,
@@ -288,6 +290,7 @@ export class LlmRuntime extends Service {
     string,
     (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>
   >()
+  private oauthLogins = new Map<string, LlmOAuthLoginHandlers>()
 
   constructor(ctx: Context) {
     super(ctx, 'llm')
@@ -556,6 +559,82 @@ export class LlmRuntime extends Service {
       })
     }
     return models
+  }
+
+  /**
+   * Offer device-code OAuth login for the settings namespace this plugin owns.
+   * One offer per namespace (`INVALID_OAUTH`/`DUPLICATE_OAUTH`), disposed with
+   * the calling fiber.
+   * @param settingsNs - the namespace whose profiles this login serves.
+   * @param handlers - start/wait/cancel/logout for that namespace.
+   * @returns the disposer that withdraws the offer.
+   */
+  registerOAuthLogin(settingsNs: string, handlers: LlmOAuthLoginHandlers): () => void {
+    const dispose = this.ctx.effect(function* (this: LlmRuntime) {
+      if (settingsNs.length === 0) {
+        throw new LlmError('OAuth login needs a non-empty settings namespace', 'INVALID_OAUTH')
+      }
+      if (this.oauthLogins.has(settingsNs)) {
+        throw new LlmError(`OAuth login for "${settingsNs}" is already registered`, 'DUPLICATE_OAUTH')
+      }
+      this.oauthLogins.set(settingsNs, handlers)
+      yield () => {
+        this.oauthLogins.delete(settingsNs)
+      }
+    }.bind(this), 'llm.registerOAuthLogin()')
+    return () => void dispose()
+  }
+
+  /**
+   * Start device-code OAuth for one route in a namespace that registered login.
+   * @param settingsNs - namespace whose registered handlers serve this login.
+   * @param provider - provider route key.
+   * @param signal - cancels obtaining the device code.
+   * @returns the device challenge the UI must show.
+   */
+  startOAuthLogin(
+    settingsNs: string,
+    provider: string,
+    signal?: AbortSignal,
+  ): Promise<LlmOAuthDeviceChallenge> {
+    return this.oauthHandlers(settingsNs).start(provider, signal)
+  }
+
+  /**
+   * Wait for an in-flight OAuth login to store tokens and activate the route.
+   * @param settingsNs - namespace whose registered handlers serve this login.
+   * @param loginId - id from {@link startOAuthLogin}.
+   * @param signal - cancels the wait and the login.
+   */
+  waitOAuthLogin(settingsNs: string, loginId: string, signal?: AbortSignal): Promise<void> {
+    return this.oauthHandlers(settingsNs).wait(loginId, signal)
+  }
+
+  /**
+   * Cancel one in-flight OAuth login. Unknown ids are a no-op at the handler.
+   * @param settingsNs - namespace whose registered handlers serve this login.
+   * @param loginId - id from {@link startOAuthLogin}.
+   */
+  cancelOAuthLogin(settingsNs: string, loginId: string): void {
+    this.oauthHandlers(settingsNs).cancel(loginId)
+  }
+
+  /**
+   * Forget the stored OAuth credential for one route.
+   * @param settingsNs - namespace whose registered handlers serve this login.
+   * @param provider - provider route key.
+   */
+  logoutOAuth(settingsNs: string, provider: string): Promise<void> {
+    return this.oauthHandlers(settingsNs).logout(provider)
+  }
+
+  /** The OAuth handlers for one namespace, or `NO_OAUTH`. */
+  private oauthHandlers(settingsNs: string): LlmOAuthLoginHandlers {
+    const handlers = this.oauthLogins.get(settingsNs)
+    if (handlers === undefined) {
+      throw new LlmError(`no OAuth login is registered for "${settingsNs}"`, 'NO_OAUTH')
+    }
+    return handlers
   }
 
   /**

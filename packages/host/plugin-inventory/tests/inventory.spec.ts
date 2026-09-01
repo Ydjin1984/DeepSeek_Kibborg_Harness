@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context, type Plugin } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
+import type { PluginEntryId } from '../src/types.ts'
 import PluginInventoryGateway from '../src/index.ts'
 
 const contexts: Context[] = []
@@ -25,13 +26,14 @@ async function harness(): Promise<{
   await ctx.plugin(Loader)
   ctx.loader.builtins.active = activePlugin
   ctx.loader.builtins.pending = pendingPlugin
+  ctx.loader.builtins.include = activePlugin
   await ctx.plugin(PluginInventoryGateway)
   const inventory = ctx.get('pluginInventory') as PluginInventoryGateway
   return { ctx, inventory }
 }
 
 describe('PluginInventoryGateway', () => {
-  it('publishes one direct list method under the pluginInventory namespace', async () => {
+  it('publishes direct list and setEnabled methods under the pluginInventory namespace', async () => {
     const { inventory } = await harness()
     expect(inventory.typertRemote).toMatchObject({
       serviceKey: 'pluginInventory',
@@ -39,6 +41,7 @@ describe('PluginInventoryGateway', () => {
     })
     expect(remoteMethods(inventory)).toEqual([
       { method: 'list', invocation: { kind: 'direct' } },
+      { method: 'setEnabled', invocation: { kind: 'direct' } },
     ])
   })
 
@@ -85,5 +88,37 @@ describe('PluginInventoryGateway', () => {
 
     await ctx.loader.remove(pendingId)
     expect(inventory.list().entries.some(entry => entry.entryId === pendingId)).toBe(false)
+  })
+
+  it('setEnabled flips one entry and returns the fresh snapshot', async () => {
+    const { ctx, inventory } = await harness()
+    const activeId = await ctx.loader.create({ name: 'cordis:active' })
+    const branded = activeId as PluginEntryId
+
+    const disabled = await inventory.setEnabled(branded, false)
+    expect(disabled.entries.find(entry => entry.entryId === activeId)).toEqual({
+      entryId: activeId,
+      moduleName: 'cordis:active',
+      enabled: false,
+      fiberPhase: null,
+    })
+
+    const reenabled = await inventory.setEnabled(branded, true)
+    expect(reenabled.entries.find(entry => entry.entryId === activeId)).toEqual({
+      entryId: activeId,
+      moduleName: 'cordis:active',
+      enabled: true,
+      fiberPhase: 'active',
+    })
+  })
+
+  it('setEnabled refuses group rows and the bootstrap include', async () => {
+    const { ctx, inventory } = await harness()
+    const groupId = await ctx.loader.create({ name: 'cordis:active', group: true })
+    const includeId = await ctx.loader.create({ name: 'cordis:include' })
+
+    await expect(inventory.setEnabled(groupId as PluginEntryId, false)).rejects.toThrow(/group row/)
+    await expect(inventory.setEnabled(includeId as PluginEntryId, false)).rejects.toThrow(/bootstrap include/)
+    expect(inventory.list().entries.every(entry => entry.enabled)).toBe(true)
   })
 })

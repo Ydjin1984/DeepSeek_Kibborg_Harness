@@ -1,6 +1,8 @@
 ---
 name: dsh-pre-push-checks
 description: Use before pushing, force-pushing, marking ready for review, or claiming checks pass on a deepseek-harness branch, and immediately after gh stack sync publishes rewritten branches, to select the smallest tests and checks that cover the outgoing or just-published diff without reflexively running the full repository suite.
+description.zh: 在推送、强制推送、标记为可评审或声称 deepseek-harness 分支上的检查通过之前，以及 gh stack sync 发布重写分支之后立即使用，以选择覆盖即将推送或刚发布 diff 的最小测试与检查集，而不是机械地跑完整仓库套件。
+description.ru: Используйте перед push, force-push, отметкой «готово к ревью» или утверждением, что проверки на ветке deepseek-harness пройдены, а также сразу после публикации переписанных веток через gh stack sync, чтобы выбрать минимальный набор тестов и проверок, покрывающих исходящий или только что опубликованный diff, не запуская рефлекторно весь набор репозитория.
 ---
 
 # DSH Pre-Push Checks

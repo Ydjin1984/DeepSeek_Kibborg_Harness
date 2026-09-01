@@ -138,6 +138,9 @@ describe('render branch tails', () => {
           addImages: () => true,
           removeImage: () => {},
           pruneImages: () => {},
+          addFiles: () => null,
+          removeFile: () => {},
+          pruneFiles: () => {},
           submit: () => {},
         }}
         useStore={bindSnapshotSelector(chat)}
@@ -195,6 +198,9 @@ describe('render branch tails', () => {
           addImages: () => true,
           removeImage: () => {},
           pruneImages: () => {},
+          addFiles: () => null,
+          removeFile: () => {},
+          pruneFiles: () => {},
           submit: () => {},
         }}
         useStore={bindSnapshotSelector(chat)}

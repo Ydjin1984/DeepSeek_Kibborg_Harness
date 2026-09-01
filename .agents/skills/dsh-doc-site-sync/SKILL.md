@@ -1,6 +1,8 @@
 ---
 name: dsh-doc-site-sync
 description: Use when publishing, updating, moving, or removing DeepSeek Harness documentation website pages; editing website/docs.ts mappings or navigation; diagnosing a page missing from the VitePress site; fixing projected documentation links; or running the docs:dev, docs:check, and doc-sync workflow after website-content changes.
+description.zh: 在发布、更新、移动或删除 DeepSeek Harness 文档网站页面时使用；编辑 website/docs.ts 映射或导航；诊断 VitePress 站点中缺失的页面；修复投影文档链接；或在网站内容变更后运行 docs:dev、docs:check 与 doc-sync 工作流。
+description.ru: Используйте при публикации, обновлении, перемещении или удалении страниц сайта документации DeepSeek Harness; редактировании mapping'ов website/docs.ts или навигации; диагностике страницы, отсутствующей на сайте VitePress; исправлении спроецированных ссылок документации; или запуске рабочих процессов docs:dev, docs:check и doc-sync после изменений контента сайта.
 ---
 
 # Synchronizing the DeepSeek Harness Documentation Site

@@ -32,6 +32,8 @@ export interface ProviderRow {
   apiKeyEnv: string | undefined
   /** Credential state for {@link apiKeyEnv}, once described. */
   credential: CredentialView | undefined
+  /** Credential state for the route's OAuth JSON, once described. */
+  oauthCredential: CredentialView | undefined
 }
 
 /** Page snapshot. */
@@ -174,9 +176,13 @@ export class ModelsSettingsStore {
         removable,
         apiKeyEnv: apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
         credential: undefined,
+        oauthCredential: undefined,
       }
     })
-    const refs = [...new Set(rows.flatMap(row => row.apiKeyEnv === undefined ? [] : [row.apiKeyEnv]))]
+    const refs = [...new Set(rows.flatMap(row => [
+      ...row.apiKeyEnv === undefined ? [] : [row.apiKeyEnv],
+      ...row.entry.oauth === undefined ? [] : [row.entry.oauth.credentialRef],
+    ]))]
     let credentials: Record<string, CredentialView> = {}
     let credentialError: string | null = null
     if (refs.length > 0) {
@@ -202,6 +208,9 @@ export class ModelsSettingsStore {
         ...row.apiKeyEnv !== undefined && credentials[row.apiKeyEnv] !== undefined
           ? { credential: credentials[row.apiKeyEnv] }
           : {},
+        ...row.entry.oauth !== undefined && credentials[row.entry.oauth.credentialRef] !== undefined
+          ? { oauthCredential: credentials[row.entry.oauth.credentialRef] }
+          : {},
       }))
       s.namespaces = namespaces
     })
@@ -220,6 +229,7 @@ export class ModelsSettingsStore {
  */
 export function providerUsable(row: ProviderRow): boolean {
   if (!row.entry.active) return false
+  if (row.oauthCredential?.configured === true) return true
   if (row.apiKeyEnv === undefined) return true
   return row.credential?.configured === true
 }

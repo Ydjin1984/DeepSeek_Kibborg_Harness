@@ -135,7 +135,7 @@ describe('conversation slot inject API', () => {
     // Assembly has no session side effects: opening the event window belongs
     // to the runtime watch path, not the inject factory.
     expect(b.sessionFake.open).not.toHaveBeenCalled()
-    expect(injected.views.list().map(v => v.id)).toEqual(['chat'])
+    expect(injected.views.list().map(v => v.id)).toEqual(['chat', 'execution'])
 
     const chatView = b.chatViewApi(ROOT)
     chatView.injected.loadOlder()
@@ -334,11 +334,11 @@ describe('conversation slot inject API', () => {
     await Promise.resolve() // ledger notifications batch per microtask
     expect(listener).toHaveBeenCalled()
     expect(injected.views.version()).toBeGreaterThan(before)
-    expect(injected.views.list().map(v => v.id)).toEqual(['chat', 'chat2'])
+    expect(injected.views.list().map(v => v.id)).toEqual(['chat', 'execution', 'chat2'])
     // Label falls back to the id when a rider declares none.
     const off2 = b.slots.register(
       { name: 'conversation.view', id: 'bare', order: 6 } as never, (() => null) as never)
-    expect(injected.views.list().map(v => v.label)).toEqual(['对话', 'X', 'bare'])
+    expect(injected.views.list().map(v => v.label)).toEqual(['对话', '执行', 'X', 'bare'])
     off()
     off2()
     unsub()

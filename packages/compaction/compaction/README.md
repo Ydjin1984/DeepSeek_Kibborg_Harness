@@ -70,6 +70,10 @@ Subclass `CompactionEngine`, implement `compactIfNeeded`, `compactNow`, and `com
 
 `compactCheckpointSource()`, `CompactionCheckpointSource`, and `isCompactCheckpointSource()` are declared on the `@deepseek-ai/dsh-compaction/checkpoint` subpath and re-exported from the root, so host-side consumers keep reading them from the root. The constructor requires the owning `CompactionId`, preventing backends from writing an uncorrelated marker that the package invariant must reject. The leaf imports no cordis and declares no module augmentation (the [`dsh-commands/brand`](../../interaction/commands/README.md) shape), which is what lets a client or wire program name the checkpoint source: the package **root** cannot enter such a program at all, because it reaches `dsh-session`'s root and that `Context` merge declares the host `sessions` service against the client's own (`TS2717` — one program per side, per [development.md](../../../docs/development.md#typescript-project-layout)). The web client's transcript adapter pins its plugin literal to the leaf's source type, so renaming the plugin id there is a compile error here.
 
+## Browser-facing policy and status (`./projection` and `./client`)
+
+`CompactionProjection` and its `SessionProjectionMap` merge live on the `@deepseek-ai/dsh-compaction/projection` leaf, re-exported through `@deepseek-ai/dsh-compaction/client` for browser aggregates — the same no-cordis, no-augmentation-free-shape rule as `./checkpoint`, so a client program can name the `compaction` projection key without loading the host plugin's Context merges. `dsh-compaction-basic` registers the matching projection unit; the interface package only owns the vocabulary.
+
 ## Model Experience
 
 ### Conversation history, when a backend is invoked

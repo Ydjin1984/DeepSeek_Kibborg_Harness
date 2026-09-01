@@ -5,11 +5,35 @@
     - text: Session log
     - img
   - tablist:
-    - tab "Chat" [selected]
+    - tab "Chat"
+    - tab "Execution" [selected]
     - tab "Trajectory"
+- region "Task execution":
+  - text: CJK strong emphasis Completed 1 turns · 1 steps · 0 tools · 0 files · 0 errors
+  - button "Collapse details" [expanded]:
+    - img
+  - text: No active task
+- searchbox "Search events…"
+- group "Filter events":
+  - button "All" [pressed]
+  - button "Analysis"
+  - button "Tools"
+  - button "Files"
+  - button "Terminal"
+  - button "Git"
+  - button "Errors"
+  - button "Success"
+- button "Expand all"
+- button "Collapse all"
+- button "{{clock}} User Render adjacent CJK strong emphasis." [expanded]:
+  - time: {{clock}}
+  - text: User Render adjacent CJK strong emphasis.
 - text: Render adjacent CJK strong emphasis. {{clock}}
 - button "Copy":
   - img
+- 'button "{{clock}} Analysis ## CJK strong emphasis" [expanded]':
+  - time: {{clock}}
+  - text: "Analysis ## CJK strong emphasis"
 - heading "CJK strong emphasis" [level=2]
 - paragraph:
   - strong: 注意：
@@ -36,19 +60,15 @@
   - strong: Warning!
   - text: 继续
 - paragraph: CJK_STRONG_DONE
-- button "Copy":
-  - img
-- button "Good response":
-  - img
-- button "Bad response":
-  - img
-- button "Branch into a new conversation":
-  - img
-- text: {{clock}} Ran for {{duration}}
+- button "{{clock}} Completed Turn 1 complete {{duration}}":
+  - time: {{clock}}
+  - text: Completed Turn 1 complete {{duration}}
 - textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

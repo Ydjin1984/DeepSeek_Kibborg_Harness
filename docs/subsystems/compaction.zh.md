@@ -192,7 +192,7 @@ abstract compactRegion( start: number, end: number, agent: CompactionAgentContex
 
 Types: [CommandId](commands.md)
 
-Source: [`packages/compaction/compaction/src/index.ts:96`](../../packages/compaction/compaction/src/index.ts)
+Source: [`packages/compaction/compaction/src/index.ts:101`](../../packages/compaction/compaction/src/index.ts)
 
 <a id="ctxtoolresultpruner--toolresultpruner"></a>
 

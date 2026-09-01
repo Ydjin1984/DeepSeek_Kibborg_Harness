@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PluginInventorySettingsTab } from '../src/client/PluginInventorySettingsTab.tsx'
 import type {
@@ -11,12 +11,21 @@ import { en, type PluginInventoryLocaleKey } from '../src/client/locales.ts'
 afterEach(cleanup)
 
 type Snapshot = Awaited<ReturnType<PluginInventorySettingsTabInjected['list']>>
-const t = ((key: PluginInventoryLocaleKey): string => en[key]) as PluginInventorySettingsTabProps['t']
+const t = ((key: PluginInventoryLocaleKey, params?: Record<string, unknown>): string => {
+  const template = en[key]
+  return params === undefined
+    ? template
+    : template.replace(/\{(\w+)\}/g, (match, name: string) => name in params ? String(params[name]) : match)
+}) as PluginInventorySettingsTabProps['t']
 
-function props(list: PluginInventorySettingsTabInjected['list']): PluginInventorySettingsTabProps {
+function props(
+  list: PluginInventorySettingsTabInjected['list'],
+  over: Partial<Pick<PluginInventorySettingsTabInjected, 'setEnabled'>> = {},
+): PluginInventorySettingsTabProps {
   return {
     t,
     list,
+    setEnabled: over.setEnabled ?? (async () => SNAPSHOT),
   } as PluginInventorySettingsTabProps
 }
 
@@ -123,5 +132,78 @@ describe('PluginInventorySettingsTab', () => {
     const pendingFailure = render(<PluginInventorySettingsTab {...props(() => deferredFailure.promise)} />)
     pendingFailure.unmount()
     await act(async () => { deferredFailure.reject(new Error('late failure')) })
+  })
+
+  it('toggles one entry through setEnabled and adopts the returned snapshot', async () => {
+    const setEnabled = vi.fn<PluginInventorySettingsTabInjected['setEnabled']>()
+    // The Host folds each toggle over the CURRENT list, so the snapshot
+    // returned for one entry never reverts another toggle.
+    let current: Snapshot = SNAPSHOT
+    setEnabled.mockImplementation(async (entryId, enabled) => {
+      current = {
+        entries: current.entries.map(entry =>
+          entry.entryId === entryId ? { ...entry, enabled, fiberPhase: null } : entry),
+      }
+      return current
+    })
+    const view = render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT, { setEnabled })} />)
+    await screen.findByRole('searchbox', { name: en.search })
+
+    // One action per card: Disable for an enabled plugin, Enable for a disabled one.
+    const disable = screen.getAllByRole('button', { name: en.disable })[0]!
+    fireEvent.click(disable)
+    await waitFor(() => {
+      expect(setEnabled).toHaveBeenCalledExactlyOnceWith('8a1b2c3d', false)
+    })
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: en.disable })).toHaveLength(5)
+    })
+    expect(screen.getAllByRole('button', { name: en.enable })).toHaveLength(2)
+
+    const disabledCard = view.container.querySelector('[data-plugin-entry="disabled-entry"]')
+    expect(disabledCard).not.toBeNull()
+    fireEvent.click(within(disabledCard as HTMLElement).getByRole('button', { name: en.enable }))
+    await waitFor(() => {
+      expect(setEnabled).toHaveBeenLastCalledWith('disabled-entry', true)
+    })
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: en.enable })).toHaveLength(1)
+    })
+    expect(view.container.querySelector('[data-plugin-count]')?.textContent).toBe('7')
+  })
+
+  it('shows a busy toggle while the switch is in flight and blocks concurrent switches', async () => {
+    const setEnabled = vi.fn<PluginInventorySettingsTabInjected['setEnabled']>()
+    const deferred = Promise.withResolvers<Snapshot>()
+    setEnabled.mockReturnValue(deferred.promise)
+    render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT, { setEnabled })} />)
+    await screen.findByRole('searchbox', { name: en.search })
+
+    fireEvent.click(screen.getAllByRole('button', { name: en.disable })[0]!)
+    const busy = await screen.findByRole('button', { name: en.toggleBusy })
+    expect((busy as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getAllByRole('button', { name: en.disable })[0] as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: en.enable }) as HTMLButtonElement).disabled).toBe(true)
+    expect(setEnabled).toHaveBeenCalledTimes(1)
+
+    await act(async () => { deferred.resolve(SNAPSHOT) })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: en.toggleBusy })).toBeNull()
+    })
+    expect((screen.getAllByRole('button', { name: en.disable })[0] as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('announces a failed switch and keeps the previous list', async () => {
+    const setEnabled = vi.fn<PluginInventorySettingsTabInjected['setEnabled']>()
+      .mockRejectedValue(new Error('private transport detail'))
+    render(<PluginInventorySettingsTab {...props(async () => SNAPSHOT, { setEnabled })} />)
+    await screen.findByRole('searchbox', { name: en.search })
+
+    fireEvent.click(screen.getAllByRole('button', { name: en.disable })[0]!)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(en.toggleError.replace('{message}', 'private transport detail'))
+    expect(screen.queryByText('private transport detail')).toBeNull()
+    // The list still shows the original enabled state.
+    expect(screen.getAllByRole('button', { name: en.disable })).toHaveLength(6)
   })
 })

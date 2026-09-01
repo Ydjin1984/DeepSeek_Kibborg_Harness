@@ -7,29 +7,53 @@
     - text: Session log
     - img
   - tablist:
-    - tab "Chat" [selected]
+    - tab "Chat"
+    - tab "Execution" [selected]
     - tab "Trajectory"
+- region "Task execution":
+  - text: Reply with the single word Completed 1 turns · 1 steps · 1 tools · 0 files · 0 errors
+  - button "Collapse details" [expanded]:
+    - img
+  - text: No active task
+- searchbox "Search events…"
+- group "Filter events":
+  - button "All" [pressed]
+  - button "Analysis"
+  - button "Tools"
+  - button "Files"
+  - button "Terminal"
+  - button "Git"
+  - button "Errors"
+  - button "Success"
+- button "Expand all"
+- button "Collapse all"
+- button "{{clock}} User Reply with the single word LIGHTHOUSE and stop." [expanded]:
+  - time: {{clock}}
+  - text: User Reply with the single word LIGHTHOUSE and stop.
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy":
   - img
+- button "{{clock}} Context Current runtime context. This snapshot supersedes earlier runtime-context snapshots. @deepseek-ai/dsh-system-prompt" [expanded]:
+  - time: {{clock}}
+  - text: Context Current runtime context. This snapshot supersedes earlier runtime-context snapshots. @deepseek-ai/dsh-system-prompt
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
+- button "{{clock}} Analysis The user wants me to reply with a single word. Let me comply. The user wants me to reply with a single word. Let me comply." [expanded]:
+  - time: {{clock}}
+  - text: Analysis The user wants me to reply with a single word. Let me comply. The user wants me to reply with a single word. Let me comply.
 - button "Think The user wants me to reply with a single word. Let me comply.":
   - img
   - img
   - text: Think The user wants me to reply with a single word. Let me comply.
 - paragraph: LIGHTHOUSE
-- button "Copy":
-  - img
-- button "Good response":
-  - img
-- button "Bad response":
-  - img
-- button "Branch into a new conversation":
-  - img
-- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
+- button "{{clock}} Completed Turn 1 complete {{duration}}":
+  - time: {{clock}}
+  - text: Completed Turn 1 complete {{duration}}
+- button "{{clock}} Command feedback" [expanded]:
+  - time: {{clock}}
+  - text: Command feedback
 - 'button "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}. Session sharing is enabled."':
   - img
   - img
@@ -38,6 +62,8 @@
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

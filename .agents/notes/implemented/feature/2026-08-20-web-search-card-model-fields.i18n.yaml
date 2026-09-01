@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-20-web-search-card-model-fields.md
+2026-08-20-web-search-card-model-fields.md: 1985cc62799f9150b8803d6e6a696a5fae1dda84
+2026-08-20-web-search-card-model-fields.zh.md: af7bc87d45b074601e11e830e9ddf17f52c67238

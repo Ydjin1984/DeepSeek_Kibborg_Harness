@@ -77,6 +77,25 @@ describe('SearchBlock paths kind', () => {
     expect(fileHeaders(view.container)).toEqual([])
   })
 
+  it('renders owner-supplied labels instead of the built-in copy', () => {
+    const view = render(
+      <SearchBlock
+        kind="paths"
+        truncated={false}
+        total={1}
+        paths={['a.ts']}
+        labels={{
+          paths: count => `${count} путей`,
+          copy: 'Копировать',
+        }}
+      />,
+    )
+    expect(view.getByText('1 путей')).toBeTruthy()
+    expect(view.getByRole('button', { name: 'Копировать' })).toBeTruthy()
+    expect(view.queryByText('个路径')).toBeNull()
+    expect(view.queryByText('复制')).toBeNull()
+  })
+
   it('folds the pre-cap total into the paths summary when truncated', () => {
     const view = render(<SearchBlock kind="paths" truncated total={50} paths={['a', 'b']} />)
     expect(view.getByText('显示 2 / 共 50 个路径')).toBeTruthy()

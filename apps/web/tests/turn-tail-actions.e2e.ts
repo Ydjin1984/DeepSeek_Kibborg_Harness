@@ -20,7 +20,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/turn-tail-actions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
@@ -114,12 +114,15 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     // three UI polls, and two captures with their stability windows. The
     // replay default (30s) leaves no headroom on a slow runner.
     const { settled } = await sendPrompt(120_000)
+    // The Execution view is the conversation default; the turn's first content
+    // is visible now, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     // The marker IS the synchronization: the second call is provably parked,
     // so the first step's message and tool result are already durable.
     await expect.poll(() => existsSync(marker), { timeout: 20_000 }).toBe(true)
     await expect.poll(() => page.getByText(NARRATION, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     await expect.poll(
-      () => page.getByRole('status').filter({ hasText: 'Deep diving...' }).isVisible(),
+      () => page.getByRole('status').filter({ hasText: 'Working on it…' }).isVisible(),
       { timeout: 10_000 },
     ).toBe(true)
     // Only the user bubble owns a footer (clock + copy; user bubbles carry no

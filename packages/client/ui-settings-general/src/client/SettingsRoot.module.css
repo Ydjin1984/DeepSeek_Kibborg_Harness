@@ -30,6 +30,11 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.trigger:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
 /* Rail trigger: the same 36x36 circle box as the other rail controls. */
 .trigger.rail {
   width: 36px;
@@ -62,6 +67,12 @@
   inset: 0;
   background: var(--dsw-alias-bg-mask-1);
   backdrop-filter: var(--dsw-mask-blur);
+  animation: dsh-settings-mask-in 180ms ease;
+}
+
+@keyframes dsh-settings-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Panel (figma Settings 501:29947): r24, white, lv3 shadow (figma effects
@@ -88,6 +99,27 @@
      styles/scrollbar.css for the rebinding contract). */
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  /* Entry motion: a short rise-and-settle on the same ease curve the rest of
+     the shell animates with; reduced-motion users get no movement. */
+  animation: dsh-settings-panel-in 220ms var(--ds-ease-in-out);
+}
+
+@keyframes dsh-settings-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mask,
+  .panel {
+    animation: none;
+  }
 }
 
 /* Nav rail (figma .Setting-nav 501:29958): 188 wide, pad (12,22,12,0),
@@ -121,6 +153,7 @@
 /* Nav cell (figma .Setting-nav-cell 501:29962): 164x40, r12, pad
    (12,9,16,9), gap 8; label 14/400 lh22; selected fill #EBEEF2. */
 .navCell {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -143,8 +176,31 @@
   background: var(--dsw-specific-sidebar-nav-item-hover);
 }
 
+.navCell:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
 .navCell.active {
   background: var(--dsw-specific-sidebar-nav-item-active);
+}
+
+/* Active accent: a short brand bar on the rail edge plus a brand-tinted icon
+   make the current section legible at a glance (token pair owned by the
+   sidebar's active-item vocabulary). */
+.navCell.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--dsw-specific-sidebar-nav-item-active-accent);
+}
+
+.navCell.active .navIcon {
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .navIcon {
@@ -207,11 +263,13 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* Options area (figma Options 501:29983): pad (24,0,24,24), scrolls. */
+/* Options area (figma Options 501:29983): pad (24,0,24,24), scrolls. The
+   small top pad keeps a section's own h2 from pressing against the 54px
+   header row above it. */
 .options {
   flex: 1;
   min-height: 0;
-  padding: 0 24px 24px;
+  padding: 8px 24px 24px;
   overflow-y: auto;
 }
 

@@ -21,8 +21,32 @@
  * lost.
  * @module
  */
-import type { SearchBlockProps, SearchFileGroup } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { SearchBlockLabels, SearchBlockProps, SearchFileGroup } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallBlock } from './tool-call-model.ts'
+
+/**
+ * Build the SearchBlock display copy from the conversation locale seat —
+ * the one place the primitive's label surface pairs with this package's
+ * dictionary, shared by every search render site (chat row, details panel).
+ * @param t - the render site's conversation locale seat.
+ * @returns the full label set for {@link SearchBlockProps}'s `labels`.
+ */
+export function searchBlockLabels(t: TranslateNS<'conversation'>): SearchBlockLabels {
+  return {
+    paths: count => t(count === 1 ? 'search.paths.one' : 'search.paths.other', { count }),
+    pathsTruncated: (shown, total) => t('search.pathsTruncated', { shown, total }),
+    matches: (count, files) => t('search.matches', { count, files }),
+    matchesTruncated: (shown, total, files) => t('search.matchesTruncated', { shown, total, files }),
+    copy: t('search.copy'),
+    copied: t('search.copied'),
+    empty: t('search.empty'),
+    collapseAria: t('search.collapseAria'),
+    collapse: t('collapse'),
+    expandAria: hidden => t('search.expandAria', { n: hidden }),
+    expand: hidden => t('terminal.expandRest', { n: hidden }),
+  }
+}
 
 /**
  * Distributive `Omit`: a plain `Omit<A | B, K>` keeps only the keys common to
@@ -32,7 +56,7 @@ import type { ToolCallBlock } from './tool-call-model.ts'
 type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never
 
 /** The {@link SearchBlockProps} union minus each render site's own fields. */
-type SearchBlockModelProps = DistributiveOmit<SearchBlockProps, 'maxLines' | 'className'>
+type SearchBlockModelProps = DistributiveOmit<SearchBlockProps, 'maxLines' | 'className' | 'labels'>
 
 /**
  * Result rows the chat row's resident search body shows before collapsing the

@@ -20,6 +20,27 @@ const MERGE_HEAD = /declare module ['"]@deepseek-ai\/dsh-client-ui-slots['"]/
 /** Cheap textual prefilter for a registration call site. */
 const REGISTER_HEAD = /\.register\(/
 
+/**
+ * Read one glob-matched source file. A file that vanishes between the glob
+ * listing and this read (a transient `oxlint-contract-*` probe another spec
+ * creates and removes in a real package src) is absent, not an error: it is
+ * not part of the committed surface the catalog scans.
+ * @param abs - absolute path the glob returned.
+ * @returns the file text, or `undefined` when the file no longer exists.
+ */
+function readSource(abs: string): string | undefined {
+  try {
+    return readFileSync(abs, 'utf8')
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 /** One `SlotMap` member: the slot's contract as its owning package declares it. */
 export interface SlotDeclaration {
   /** SlotMap key, e.g. `settings.section`. */
@@ -97,7 +118,8 @@ export function scanSlotFiles(scanRoot: string, patterns: readonly string[]): Sc
     .map(path => path.split(sep).join('/')))].sort()
   for (const rel of rels) {
     const abs = resolve(scanRoot, rel)
-    const text = readFileSync(abs, 'utf8')
+    const text = readSource(abs)
+    if (text === undefined) continue
     if (!MERGE_HEAD.test(text) && !REGISTER_HEAD.test(text)) continue
     out.push({
       rel,
@@ -124,7 +146,9 @@ export function indexExportedTypes(scanRoot: string, patterns: readonly string[]
     .map(path => path.split(sep).join('/')))].sort()
   for (const rel of rels) {
     const abs = resolve(scanRoot, rel)
-    const sf = ts.createSourceFile(abs, readFileSync(abs, 'utf8'), ts.ScriptTarget.Latest, true, scriptKindOf(rel))
+    const text = readSource(abs)
+    if (text === undefined) continue
+    const sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, true, scriptKindOf(rel))
     for (const statement of sf.statements) {
       if (!ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement)) continue
       if (!statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue

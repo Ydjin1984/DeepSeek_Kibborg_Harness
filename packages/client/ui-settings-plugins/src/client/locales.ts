@@ -10,7 +10,11 @@ export type PluginsSettingsLocaleKey =
   | 'agentLoopTitle' | 'agentLoopDescription' | 'agentLoopMaxParallel' | 'agentLoopMaxParallelHint'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
-  | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
+  | 'webSearchBaseUrl' | 'webSearchBaseUrlHint'
+  | 'webSearchApiVersion' | 'webSearchApiVersionHint'
+  | 'webSearchModel' | 'webSearchModelHint'
+  | 'webSearchMaxTokens' | 'webSearchMaxTokensHint'
+  | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -49,6 +53,12 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   webSearchApiKeyUnset: 'No key is configured; search is unavailable until one is.',
   webSearchBaseUrl: 'Endpoint',
   webSearchBaseUrlHint: 'Leave blank to use the provider default.',
+  webSearchApiVersion: 'API version',
+  webSearchApiVersionHint: 'Value of the anthropic-version header. Leave blank to use the provider default.',
+  webSearchModel: 'Model ID',
+  webSearchModelHint: 'Anthropic-format model name sent on each search. Leave blank to use the provider default.',
+  webSearchMaxTokens: 'Max output tokens',
+  webSearchMaxTokensHint: 'Upper bound on generated tokens for the auxiliary search request.',
   webSearchMaxUses: 'Max searches per request',
   webSearchMaxUsesHint: 'How many times one request may search before it must answer.',
 }
@@ -90,6 +100,59 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   webSearchApiKeyUnset: '未配置密钥；配置之前搜索不可用。',
   webSearchBaseUrl: '接口地址',
   webSearchBaseUrlHint: '留空则使用提供方默认地址。',
+  webSearchApiVersion: 'API 版本',
+  webSearchApiVersionHint: 'anthropic-version 请求头的值。留空则使用提供方默认值。',
+  webSearchModel: '模型 ID',
+  webSearchModelHint: '每次搜索发送的 Anthropic 格式模型名。留空则使用提供方默认值。',
+  webSearchMaxTokens: '最大输出 token 数',
+  webSearchMaxTokensHint: '辅助搜索请求可生成的 token 上限。',
   webSearchMaxUses: '单次请求最多搜索次数',
   webSearchMaxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
+}
+
+/** Russian copy. */
+export const ru: Record<PluginsSettingsLocaleKey, string> = {
+  nav: 'Плагины',
+  title: 'Плагины',
+  intro: 'Настройте и просмотрите плагины, установленные в этом развёртывании.',
+  tabs: 'Разделы плагинов',
+  configurableTab: 'Конфигурация плагинов',
+  empty: 'В этом развёртывании нет открытых настроек плагинов.',
+  overridden: 'Переопределено',
+  reset: 'Сбросить к значению по умолчанию',
+  readOnly: 'В этом развёртывании настройки доступны только для чтения.',
+  expand: 'Показать настройки',
+  collapse: 'Скрыть настройки',
+  save: 'Сохранить',
+  saving: 'Сохранение…',
+  discard: 'Отменить',
+  unsaved: 'Не сохранено',
+  saveFailed: 'Развёртывание не приняло эти значения; они оставлены, чтобы вы их исправили.',
+  invalidNumber: 'Введите число или оставьте пустым, чтобы использовать значение по умолчанию.',
+  bashTitle: 'Оболочка',
+  bashDescription: 'Ограничивает каждую команду, которую запускает агент.',
+  bashTimeoutMs: 'Таймаут команды (мс)',
+  bashTimeoutMsHint: 'Сколько может работать одна команда, прежде чем её прервут.',
+  bashMaxOutputBytes: 'Потолок вывода на поток (байты)',
+  bashMaxOutputBytesHint: 'Вывод сверх этого порога сбрасывается во временный файл, а не теряется.',
+  agentLoopTitle: 'Цикл агента',
+  agentLoopDescription: 'Как агент запускает вызовы инструментов.',
+  agentLoopMaxParallel: 'Параллельные вызовы инструментов',
+  agentLoopMaxParallelHint: 'Верхняя граница одновременно выполняемых безопасных для параллелизма вызовов в одном шаге.',
+  webSearchTitle: 'Веб-поиск',
+  webSearchDescription: 'Поисковый провайдер DeepSeek.',
+  webSearchApiKey: 'API-ключ',
+  webSearchApiKeyHint: 'Хранится вне файла настроек. Оставьте пустым, чтобы сохранить текущий ключ.',
+  webSearchApiKeySet: 'Ключ настроен.',
+  webSearchApiKeyUnset: 'Ключ не настроен; поиск недоступен, пока его не зададут.',
+  webSearchBaseUrl: 'Адрес',
+  webSearchBaseUrlHint: 'Оставьте пустым, чтобы использовать адрес провайдера по умолчанию.',
+  webSearchApiVersion: 'Версия API',
+  webSearchApiVersionHint: 'Значение заголовка anthropic-version. Оставьте пустым, чтобы использовать значение провайдера по умолчанию.',
+  webSearchModel: 'ID модели',
+  webSearchModelHint: 'Имя модели в формате Anthropic, которое отправляется при каждом поиске. Оставьте пустым, чтобы использовать значение провайдера по умолчанию.',
+  webSearchMaxTokens: 'Максимум выходных токенов',
+  webSearchMaxTokensHint: 'Верхняя граница числа сгенерированных токенов для вспомогательного поискового запроса.',
+  webSearchMaxUses: 'Максимум поисков на запрос',
+  webSearchMaxUsesHint: 'Сколько раз один запрос может искать, прежде чем обязан ответить.',
 }

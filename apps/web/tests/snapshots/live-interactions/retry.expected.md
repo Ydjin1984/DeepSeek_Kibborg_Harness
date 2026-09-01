@@ -7,35 +7,59 @@
     - text: Session log
     - img
   - tablist:
-    - tab "Chat" [selected]
+    - tab "Chat"
+    - tab "Execution" [selected]
     - tab "Trajectory"
+- region "Task execution":
+  - text: Reply with a one-sentence description Completed 1 turns · 1 steps · 0 tools · 0 files · 0 errors
+  - button "Collapse details" [expanded]:
+    - img
+  - text: No active task
+- searchbox "Search events…"
+- group "Filter events":
+  - button "All" [pressed]
+  - button "Analysis"
+  - button "Tools"
+  - button "Files"
+  - button "Terminal"
+  - button "Git"
+  - button "Errors"
+  - button "Success"
+- button "Expand all"
+- button "Collapse all"
+- button "{{clock}} User Reply with a one-sentence description of event sourcing, then stop." [expanded]:
+  - time: {{clock}}
+  - text: User Reply with a one-sentence description of event sourcing, then stop.
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
+- button "{{clock}} Context Current runtime context. This snapshot supersedes earlier runtime-context snapshots. @deepseek-ai/dsh-system-prompt" [expanded]:
+  - time: {{clock}}
+  - text: Context Current runtime context. This snapshot supersedes earlier runtime-context snapshots. @deepseek-ai/dsh-system-prompt
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
-- group:
-  - status: Retried model request (1/5) · {{duration}}
+- button "{{clock}} Warning Model retry retry 1":
+  - time: {{clock}}
+  - text: Warning Model retry retry 1
+- button "{{clock}} Analysis The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that … The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or too…" [expanded]:
+  - time: {{clock}}
+  - text: Analysis The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that … The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or too…
 - button "Think The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or tool calls.":
   - img
   - img
   - text: Think The user is asking for a one-sentence description of event sourcing. This is a straightforward knowledge question that doesn't require any skill loading or tool calls.
 - paragraph: Event sourcing is a pattern where all changes to an application's state are stored as an immutable, append-only sequence of events, rather than persisting only the current state, enabling full auditability, temporal queries, and event-driven architectures.
-- button "Copy":
-  - img
-- button "Good response":
-  - img
-- button "Bad response":
-  - img
-- button "Branch into a new conversation":
-  - img
-- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
+- button "{{clock}} Completed Turn 1 complete {{duration}}":
+  - time: {{clock}}
+  - text: Completed Turn 1 complete {{duration}}
 - textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Attach files"
+- button "Compact conversation history"
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

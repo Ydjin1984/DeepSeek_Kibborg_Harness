@@ -56,6 +56,7 @@ function renderSection(
     setCopyName: vi.fn(),
     confirmCopy: vi.fn(() => Promise.resolve()),
     openLocation: vi.fn(() => Promise.resolve()),
+    edit: vi.fn(() => Promise.resolve()),
     confirmDelete: vi.fn(),
     remove: vi.fn(() => Promise.resolve()),
     makeDefault: vi.fn(() => Promise.resolve()),
@@ -152,9 +153,19 @@ describe('the preset list', () => {
     const standard = rowFor('standard')
     expect(within(standard).getByRole('button', { name: `${en.view}: ${en.presetStandardName}` })).toBeTruthy()
     expect(within(standard).queryByRole('button', { name: `${en.openLocation}: ${en.presetStandardName}` })).toBeNull()
+    expect(within(standard).queryByRole('button', { name: `${en.edit}: ${en.presetStandardName}` })).toBeNull()
     const mine = rowFor('mine')
+    expect(within(mine).getByRole('button', { name: `${en.edit}: mine` })).toBeTruthy()
     expect(within(mine).getByRole('button', { name: `${en.openLocation}: mine` })).toBeTruthy()
     expect(within(mine).queryByRole('button', { name: `${en.view}: mine` })).toBeNull()
+  })
+
+  it('edits a custom preset through the composition opener', () => {
+    const actions = renderSection()
+
+    fireEvent.click(within(rowFor('mine')).getByRole('button', { name: `${en.edit}: mine` }))
+
+    expect(actions.edit).toHaveBeenCalledWith('mine')
   })
 
   it('offers Delete only for a locally authored preset', () => {

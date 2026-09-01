@@ -18,7 +18,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, conversationContextKey, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, conversationContextKey, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const MODE = webSnapshotMode()
 const TURN_COUNT = 12
@@ -229,6 +229,10 @@ describe('web e2e: continuous conversation grown through the composer', () => {
 
       const settled = scaffold.whenTurnSettled(60_000)
       await page.getByRole('button', { name: 'Send message', exact: true }).click()
+      // The Execution view is the conversation default; the first turn's
+      // content is visible now, so switch to Chat before the chat-flow
+      // assertions (idempotent on every later iteration).
+      await selectChatView(page)
       await page.getByText(spec.userMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
       await expect.poll(() => sessionEvents.slice(eventStart).some(event => (
         event.type === 'user/message'

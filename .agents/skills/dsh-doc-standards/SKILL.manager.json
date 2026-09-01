@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-08-31T20:39:33.138Z",
+  "updatedAt": "2026-08-31T20:39:33.138Z",
+  "activeVersion": "v1",
+  "versions": [
+    {
+      "id": "v1",
+      "createdAt": "2026-08-31T20:39:33.138Z",
+      "reason": "Initial",
+      "source": "initial"
+    }
+  ],
+  "benchmarks": {
+    "v1": {
+      "runId": "bench-1fb092f1-87d2-4488-af4c-797c86805250",
+      "at": "2026-08-31T20:39:33.121Z",
+      "version": "v1",
+      "taskModel": {
+        "provider": "deepseek-official",
+        "model": "deepseek-v4-flash"
+      },
+      "evaluatorModel": {
+        "provider": "deepseek-official",
+        "model": "deepseek-v4-flash"
+      },
+      "baselineScore": 14.4,
+      "skillScore": 21.6,
+      "improvementPercent": 50,
+      "verdict": "improvement",
+      "baselineTokens": {
+        "input": 1160,
+        "output": 844,
+        "total": 2004
+      },
+      "skillTokens": {
+        "input": 520,
+        "output": 1176,
+        "total": 1696
+      },
+      "baselineTimeMs": 1809.8,
+      "skillTimeMs": 2450.8,
+      "baselineToolCalls": 0,
+      "skillToolCalls": 0
+    }
+  }
+}

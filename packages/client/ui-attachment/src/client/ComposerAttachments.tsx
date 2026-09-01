@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ComposerAttachment, ComposerAttachmentsProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { IconCloseFill14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { AttachmentRail } from '../AttachmentRail.tsx'
 import type { AttachmentRailItem } from '../AttachmentRail.tsx'
 import { DropOverlay } from '../DropOverlay.tsx'
 import { ImageLightbox } from '../ImageLightbox.tsx'
-import { attachmentRailLabels, dropOverlayLabels, lightboxLabels } from './labels.ts'
+import { attachmentRailLabels, dropOverlayLabels, fileSizeText, lightboxLabels } from './labels.ts'
 import css from './ComposerAttachments.module.css'
 
 /** Rail item retaining its browser-owned attachment for callbacks. */
@@ -16,7 +17,7 @@ interface ComposerRailItem extends AttachmentRailItem {
 
 /** Draft-image rail, document drop target, and original-image preview slot entry. */
 export function ComposerAttachments({
-  attachments, canAcceptDrop, onAddImages, onRemoveImage, dropLimits, t,
+  attachments, files, canAcceptDrop, onAddImages, onAddFiles, onRemoveImage, onRemoveFile, dropLimits, t,
 }: ComposerAttachmentsProps) {
   const [preview, setPreview] = useState<ComposerAttachment | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -62,7 +63,14 @@ export function ComposerAttachments({
       if (dataTransfer === null) return
       event.preventDefault()
       reset()
-      if (canAcceptDrop) onAddImages([...dataTransfer.files])
+      if (!canAcceptDrop) return
+      const dropped = [...dataTransfer.files]
+      // Dropped batches route by declared type: images keep the image
+      // validation path, everything else attaches as a file draft (any format).
+      const images = dropped.filter(file => file.type.startsWith('image/'))
+      const others = dropped.filter(file => !file.type.startsWith('image/'))
+      if (images.length > 0) onAddImages(images)
+      if (others.length > 0) onAddFiles(others)
     }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
@@ -76,11 +84,11 @@ export function ComposerAttachments({
       document.removeEventListener('drop', onDrop)
       window.removeEventListener('dragend', reset)
     }
-  }, [canAcceptDrop, onAddImages])
+  }, [canAcceptDrop, onAddImages, onAddFiles])
 
   const railItems = useMemo<ComposerRailItem[]>(() => attachments.map(attachment => ({
     id: attachment.id,
-    previewUrl: attachment.previewUrl,
+    previewUrl: attachment.previewUrl ?? '',
     alt: attachment.file.name || t('image.pending'),
     removeLabel: t('image.remove', { name: attachment.file.name }),
     attachment,
@@ -104,9 +112,27 @@ export function ComposerAttachments({
           />
         </div>
       )}
+      {files.length > 0 && (
+        <div className={css.fileRow} role="group" aria-label={t('file.pending')}>
+          {files.map(file => (
+            <span key={file.id} className={css.chip} title={file.file.name}>
+              <span className={css.chipName}>{file.file.name}</span>
+              <span className={css.chipSize}>{fileSizeText(file.file.size)}</span>
+              <button
+                type="button"
+                className={css.chipRemove}
+                aria-label={t('file.remove', { name: file.file.name })}
+                onClick={() => { onRemoveFile(file.id) }}
+              >
+                <IconCloseFill14 size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {preview !== null && (
         <ImageLightbox
-          src={preview.previewUrl}
+          src={preview.previewUrl ?? ''}
           alt={preview.file.name || t('image.original')}
           labels={lightboxLabels(t)}
           onClose={closePreview}

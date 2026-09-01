@@ -10,6 +10,9 @@
     - button "插件":
       - img
       - text: 插件
+    - button "技能":
+      - img
+      - text: 技能
     - button "Agent 预设":
       - img
       - text: Agent 预设
@@ -67,6 +70,9 @@
       - 'button "设为默认: 我的模式"':
         - text: 我的模式 自定义 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。
         - code: my-agent
+      - 'button "编辑: 我的模式"':
+        - img
+        - text: 编辑
       - 'button "查看路径: 我的模式"':
         - img
         - text: 查看路径

@@ -16,6 +16,10 @@ describe('dsh-skill-badge', () => {
     expect(await ctx.skills.list()).toEqual([{
       name: 'dsh-badge',
       description: 'Add the official “powered by dsh” badge to documents, pull requests, merge requests, and other content produced with DeepSeek Harness. Use whenever creating a pull request or merge request. Also use when the user asks for a dsh badge, powered-by-dsh attribution, or a reusable dsh badge asset or snippet.',
+      localizedDescription: {
+        zh: '将官方的「powered by dsh」徽章添加到文档、pull request、merge request 以及使用 DeepSeek Harness 制作的其他内容中。在创建 pull request 或 merge request 时使用。当用户索要 dsh 徽章、powered-by-dsh 署名或可复用的 dsh 徽章资源或片段时也使用。',
+        ru: 'Добавляйте официальный значок «powered by dsh» в документы, pull request, merge request и другой контент, созданный с помощью DeepSeek Harness. Используйте при создании pull request или merge request. Также используйте, когда пользователь просит значок dsh, атрибуцию powered-by-dsh или переиспользуемый ресурс или фрагмент значка dsh.',
+      },
       invocation: { modelInvocable: true, userInvocable: true },
       provider: 'dsh-badge',
       source: 'bundled',

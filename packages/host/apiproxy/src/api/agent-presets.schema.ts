@@ -78,6 +78,17 @@ export const agentPresetOpenDocumentValueSchema = z.union([
   z.object({ opened: z.literal(false), path: z.string() }),
 ]) satisfies z.ZodType<Wire<ResponseValue<'agentPreset.openDocument'>>>
 
+/** agentPreset.openComposition request payload. */
+export const agentPresetOpenCompositionRequestSchema = z.object({
+  agentPreset: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'agentPreset.openComposition'>>>
+
+/** agentPreset.openComposition response value. */
+export const agentPresetOpenCompositionValueSchema = z.union([
+  z.object({ opened: z.literal(true) }),
+  z.object({ opened: z.literal(false), path: z.string() }),
+]) satisfies z.ZodType<Wire<ResponseValue<'agentPreset.openComposition'>>>
+
 /** agentPreset.remove request payload. */
 export const agentPresetRemoveRequestSchema = z.object({
   agentPreset: z.string().min(1),

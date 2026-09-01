@@ -23,6 +23,7 @@ import { canonicalizeWatchPath, resolveDshHome } from '@deepseek-ai/dsh-home-pat
 import {
   BUNDLED_SKILL_RANK,
   isSkillName,
+  type LocalizedSkillDescription,
   type SkillCandidate,
   type SkillDefinition,
   type SkillInvocationPolicy,
@@ -103,14 +104,21 @@ interface SkillRootEntry {
   path: string
 }
 
-interface ParsedSkill {
+/** One parsed skill source with the same field rules the discovery path enforces. */
+export interface ParsedSkill {
   name: string
   description: string
+  localizedDescription?: LocalizedSkillDescription
   whenToUse?: string
   invocation: SkillInvocationPolicy
   metadata?: Record<string, unknown>
   content: string
 }
+
+/** Outcome of parsing one raw SKILL.md source against the provider's frontmatter rules. */
+export type SkillParseResult =
+  | { readonly ok: true; readonly skill: ParsedSkill }
+  | { readonly ok: false; readonly reason: string }
 
 interface LocalLocator {
   path: string
@@ -210,6 +218,7 @@ export class FileSystemSkillProvider implements SkillProvider {
     return {
       name: parsed.name,
       description: parsed.description,
+      ...parsed.localizedDescription !== undefined ? { localizedDescription: parsed.localizedDescription } : {},
       ...parsed.whenToUse !== undefined ? { whenToUse: parsed.whenToUse } : {},
       invocation: parsed.invocation,
       source: candidate.source,
@@ -668,6 +677,7 @@ function isRelevantWatchEvent(
     if (event === 'addDir' || event === 'unlinkDir') return true
     return segments[0]?.endsWith('.md') === true
   }
+  if (segments[1] === '.disabled') return event !== 'addDir' && event !== 'unlinkDir'
   return segments.length === 2
     && segments[1] === 'SKILL.md'
     && event !== 'addDir'
@@ -680,7 +690,7 @@ function isPotentialSkillPath(root: SkillRoot, path: string): boolean {
   if (root.skipSystem === true && segments[0] === '.system') return false
   return segments.length === 1
     ? segments[0]?.endsWith('.md') === true
-    : segments[1] === 'SKILL.md'
+    : segments[1] === 'SKILL.md' || segments[1] === '.disabled'
 }
 
 function containedSegments(root: string, path: string): string[] | undefined {
@@ -727,11 +737,16 @@ async function discoverRoot(root: SkillRoot, ctx: Context, provider: string): Pr
         ? { path: entry.path, directory: root.path }
         : undefined
     if (locator === undefined) continue
+    // A `.disabled` marker inside a directory skill removes it from every
+    // invocation surface without deleting it; the skill manager toggles the
+    // marker and the watcher invalidates the catalog on marker changes.
+    if (entry.type === 'directory' && await hasDisabledMarker(locator.directory, ctx)) continue
     const parsed = await parseSkillFile(locator.path, ctx, undefined, root.trustedHost === true)
     if (parsed === undefined) continue
     skills.push({
       name: parsed.name,
       description: parsed.description,
+      ...parsed.localizedDescription !== undefined ? { localizedDescription: parsed.localizedDescription } : {},
       ...parsed.whenToUse !== undefined ? { whenToUse: parsed.whenToUse } : {},
       invocation: parsed.invocation,
       provider,
@@ -744,6 +759,26 @@ async function discoverRoot(root: SkillRoot, ctx: Context, provider: string): Pr
     })
   }
   return skills
+}
+
+/** Whether a directory skill carries the `.disabled` marker file. */
+async function hasDisabledMarker(directory: string, ctx: Context): Promise<boolean> {
+  const marker = join(directory, '.disabled')
+  const fs = optionalFileSystem(ctx)
+  if (fs !== undefined) {
+    try {
+      const target = await fs.resolve(marker)
+      return await fs.stat(target) !== undefined
+    } catch {
+      return false
+    }
+  }
+  try {
+    await access(marker)
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function listSkillRootEntries(root: SkillRoot, ctx: Context): Promise<SkillRootEntry[]> {
@@ -796,41 +831,70 @@ async function parseSkillFile(path: string, ctx: Context, signal?: AbortSignal, 
   if (raw === undefined) {
     return undefined
   }
+  const result = parseSkillSource(raw)
+  if (!result.ok) {
+    ctx.logger.warn(`skill file ${path} ignored: ${result.reason}`)
+    return undefined
+  }
+  return result.skill
+}
+
+/**
+ * Parse raw SKILL.md text against the provider's frontmatter rules, reporting
+ * the first failure reason instead of silently skipping. Discovery and the
+ * skill manager share this single parser, so a manager-validated skill is
+ * discoverable exactly when it is valid.
+ * @param raw - complete SKILL.md file text.
+ * @returns the parsed skill or the exact reason it failed the shared rules.
+ */
+export function parseSkillSource(raw: string): SkillParseResult {
   let parsed
   try {
     parsed = parseFrontmatter(raw)
   } catch (error) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid YAML frontmatter: ${errorMessage(error)}`)
-    return undefined
+    return { ok: false, reason: `invalid YAML frontmatter: ${errorMessage(error)}` }
   }
-  if (!parsed) {
-    ctx.logger.warn(`skill file ${path} ignored: missing YAML frontmatter`)
-    return undefined
+  if (parsed === undefined) {
+    return { ok: false, reason: 'missing YAML frontmatter' }
   }
   const name = stringField(parsed.data, 'name')
   const description = stringField(parsed.data, 'description')
   if (name === undefined || description === undefined) {
-    ctx.logger.warn(`skill file ${path} ignored: frontmatter requires name and description`)
-    return undefined
+    return { ok: false, reason: 'frontmatter requires name and description' }
   }
   if (!isSkillName(name)) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid skill name "${name}"`)
-    return undefined
+    return { ok: false, reason: `invalid skill name "${name}"` }
   }
   let invocation
   try {
     invocation = parseInvocationPolicy(parsed.data)
   } catch (error) {
-    ctx.logger.warn(`skill file ${path} ignored: invalid invocation frontmatter: ${errorMessage(error)}`)
-    return undefined
+    return { ok: false, reason: `invalid invocation frontmatter: ${errorMessage(error)}` }
   }
   return {
-    name,
-    description,
-    ...optionalString(parsed.data, 'whenToUse'),
-    invocation,
-    ...optionalMetadata(parsed.data),
-    content: parsed.body.trim(),
+    ok: true,
+    skill: {
+      name,
+      description,
+      ...localizedDescriptions(parsed.data),
+      ...optionalString(parsed.data, 'whenToUse'),
+      invocation,
+      ...optionalMetadata(parsed.data),
+      content: parsed.body.trim(),
+    },
+  }
+}
+
+/** Read optional per-locale descriptions from frontmatter (`description.ru`, `description.zh`); absent keys yield nothing. */
+function localizedDescriptions(data: Record<string, unknown>): { localizedDescription?: LocalizedSkillDescription } {
+  const zh = stringField(data, 'description.zh')
+  const ru = stringField(data, 'description.ru')
+  if (zh === undefined && ru === undefined) return {}
+  return {
+    localizedDescription: {
+      ...zh !== undefined ? { zh } : {},
+      ...ru !== undefined ? { ru } : {},
+    },
   }
 }
 
@@ -934,7 +998,15 @@ function findClosingFrontmatter(raw: string, start: number): { start: number; bo
   }
 }
 
-async function findProjectRoot(cwd: string, fs: FileSystem | undefined): Promise<string> {
+/**
+ * Walk upward from `cwd` to the nearest directory containing `.git`; without
+ * one, return `cwd` itself. The skill manager reuses this project-root rule so
+ * its project and agents roots match the provider's discovery exactly.
+ * @param cwd - starting directory.
+ * @param fs - optional filesystem service for the same probe the provider uses.
+ * @returns the nearest project root.
+ */
+export async function findProjectRoot(cwd: string, fs: FileSystem | undefined): Promise<string> {
   let current = cwd
   while (true) {
     if (await pathExists(join(current, '.git'), fs)) {

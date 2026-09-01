@@ -112,7 +112,10 @@ export function QueueDock({ useSession, updateQueue, notify, t }: QueueDockProps
                         setEditing(null)
                         return
                       }
-                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                      // IME guard plus busy/repeat fences: Enter while another
+                      // action is in flight would queue a second edit and toast
+                      // a false failure.
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing && !event.repeat && busy === null) {
                         event.preventDefault()
                         void saveEdit()
                       }

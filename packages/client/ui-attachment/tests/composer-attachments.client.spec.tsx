@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, ComposerAttachmentsProps,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -36,6 +36,11 @@ const t = ((key: string, params?: Readonly<Record<string, unknown>>): string => 
     const name = params?.name
     return `移除图片 ${typeof name === 'string' ? name : ''}`
   }
+  if (key === 'file.remove') {
+    const name = params?.name
+    return `移除文件 ${typeof name === 'string' ? name : ''}`
+  }
+  if (key === 'file.pending') return '待发送文件'
   if (key === 'image.dropDesc') {
     const count = params?.count
     const size = params?.size
@@ -56,12 +61,23 @@ function attachment(id: string, name = `${id}.png`): ComposerAttachment {
 function props(overrides: Partial<ComposerAttachmentsOwnerProps> = {}): ComposerAttachmentsProps {
   return {
     attachments: [],
+    files: [],
     canAcceptDrop: true,
     onAddImages: () => {},
+    onAddFiles: () => {},
     onRemoveImage: () => {},
+    onRemoveFile: () => {},
     t,
     ...overrides,
   } as unknown as ComposerAttachmentsProps
+}
+
+function fileAttachment(id: string, name: string, type = 'text/plain'): ComposerAttachment {
+  return {
+    kind: 'file',
+    id: id as ComposerAttachment['id'],
+    file: new File([Uint8Array.of(1, 2, 3)], name, { type }),
+  }
 }
 
 describe('ComposerAttachments', () => {
@@ -156,5 +172,37 @@ describe('ComposerAttachments', () => {
     expect(view.getByAltText('待发送图片')).toBeTruthy()
     fireEvent.click(view.getByTitle('查看原图'))
     expect(view.getByAltText('原图')).toBeTruthy()
+  })
+
+  it('routes non-image dropped files to the file-draft path', () => {
+    const onAddFiles = vi.fn()
+    render(<ComposerAttachments {...props({ onAddFiles })} />)
+    const dataTransfer = { types: ['Files'], files: [fileAttachment('doc', 'spec.pdf').file], dropEffect: 'none' }
+    fireEvent.dragEnter(document.body, { dataTransfer })
+    fireEvent.drop(document.body, { dataTransfer })
+    expect(onAddFiles).toHaveBeenCalledWith([expect.objectContaining({ name: 'spec.pdf' })])
+  })
+
+  it('routes a mixed drop batch by declared type', () => {
+    const onAddImages = vi.fn()
+    const onAddFiles = vi.fn()
+    render(<ComposerAttachments {...props({ onAddImages, onAddFiles })} />)
+    const dataTransfer = {
+      types: ['Files'],
+      files: [attachment('photo', 'photo.png').file, fileAttachment('doc', 'notes.txt').file],
+      dropEffect: 'none',
+    }
+    fireEvent.drop(document.body, { dataTransfer })
+    expect(onAddImages).toHaveBeenCalledWith([expect.objectContaining({ name: 'photo.png' })])
+    expect(onAddFiles).toHaveBeenCalledWith([expect.objectContaining({ name: 'notes.txt' })])
+  })
+
+  it('renders file drafts as chips and removes one on click', () => {
+    const onRemoveFile = vi.fn()
+    const doc = fileAttachment('doc', 'spec.pdf', 'application/pdf')
+    render(<ComposerAttachments {...props({ files: [doc], onRemoveFile })} />)
+    expect(screen.getByText('spec.pdf')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '移除文件 spec.pdf' }))
+    expect(onRemoveFile).toHaveBeenCalledWith(doc.id)
   })
 })

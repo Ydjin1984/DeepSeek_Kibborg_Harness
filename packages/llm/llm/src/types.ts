@@ -184,6 +184,69 @@ export interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean
+  /**
+   * Device-code OAuth this adapter offers for the route. Absent means the
+   * Models page shows no subscription sign-in. The credential reference is
+   * the stored OAuth JSON; it is never an API key.
+   */
+  oauth?: LlmProviderOAuth
+}
+
+/** OAuth sign-in metadata one configurable provider may advertise. */
+export interface LlmProviderOAuth {
+  /** Button label, e.g. "Sign in with SuperGrok or X Premium". */
+  loginLabel: string
+  /** Credential reference holding the OAuth JSON for this route. */
+  credentialRef: string
+}
+
+/**
+ * Device-code challenge one OAuth login returns before the user approves it.
+ * The UI shows {@link userCode} and opens {@link verificationUri}; {@link loginId}
+ * identifies the in-flight login for wait/cancel.
+ */
+export interface LlmOAuthDeviceChallenge {
+  /** Opaque id for {@link LlmRuntime.waitOAuthLogin} / {@link LlmRuntime.cancelOAuthLogin}. */
+  loginId: string
+  /** Provider route this login authenticates. */
+  provider: string
+  /** Short code the user types or confirms on the verification page. */
+  userCode: string
+  /** HTTPS verification URL the user opens. */
+  verificationUri: string
+  /** Device-code lifetime in seconds, when the issuer supplied one. */
+  expiresInSeconds?: number
+  /** Button/dialog label copied from the catalog OAuth method. */
+  loginLabel: string
+}
+
+/**
+ * Adapter-owned OAuth login for one settings namespace. One registration per
+ * namespace, matching {@link LlmRuntime.registerModelDiscovery}.
+ */
+export interface LlmOAuthLoginHandlers {
+  /**
+   * Start device-code login for one route.
+   * @param provider - provider route key.
+   * @param signal - cancels obtaining the device code.
+   */
+  start(provider: string, signal?: AbortSignal): Promise<LlmOAuthDeviceChallenge>
+  /**
+   * Wait for an in-flight login to store tokens and activate the route.
+   * @param loginId - id from {@link start}.
+   * @param signal - cancels the wait and the login.
+   */
+  wait(loginId: string, signal?: AbortSignal): Promise<void>
+  /**
+   * Cancel one in-flight login. Unknown ids are a no-op.
+   * @param loginId - id from {@link start}.
+   */
+  cancel(loginId: string): void
+  /**
+   * Forget the stored OAuth credential for one route.
+   * @param provider - provider route key.
+   */
+  logout(provider: string): Promise<void>
 }
 
 /**

@@ -18,3 +18,11 @@ export const en = {
   'appearance.dark': 'Dark',
   'appearance.system': 'System',
 } satisfies Record<ThemeKey, string>
+
+/** Russian dictionary, checked complete against the zh key set. */
+export const ru = {
+  'appearance.title': 'Оформление',
+  'appearance.light': 'Светлая',
+  'appearance.dark': 'Тёмная',
+  'appearance.system': 'Системная',
+} satisfies Record<ThemeKey, string>

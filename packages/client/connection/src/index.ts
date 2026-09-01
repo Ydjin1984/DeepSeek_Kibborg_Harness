@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-attachment'
 import type { WebRoute, WebUpgradeRoute } from '@deepseek-ai/dsh-host-webserver'
 import { toFetchHandler } from '@deepseek-ai/dsh-host-apiproxy'
 import { API_PATH, HOST_EVENTS_PATH, MUX_EVENTS_PATH } from './api-path.ts'
-import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES } from './http-bridge.ts'
+import { bridge, DEFAULT_MAX_REQUEST_BODY_BYTES, requestPeer, socketPeer } from './http-bridge.ts'
 import { assertTrustedAuthority, isTrustedApiRequest } from './api-request-trust.ts'
 import { HostConnectionService } from './rpc-host.ts'
 import { rejectWebSocketUpgrade, WebSocketDownlinks } from './websocket-downlink.ts'
@@ -80,7 +80,8 @@ export const Config: z<ConnectionConfig> = z.object({
  * carries a draft credential, and it makes the HOST issue a GET to a URL the
  * caller chose and reports back the status or the parsed body — an anonymous
  * LAN caller would have a probe for whatever the host can reach and the
- * browser cannot.
+ * browser cannot. The OAuth login methods belong here because they mint and
+ * store tokens on the Host.
  *
  * The model catalog (`llm.providers`, `llm.models`) is deliberately NOT here:
  * it carries provider ids, display names, and model lists — no endpoints,
@@ -115,7 +116,28 @@ const PRIVILEGED_METHODS = new Set([
   'credentials.describe',
   'credentials.set',
   'credentials.unset',
+  // Skill management writes project/user skill files and drives benchmark runs:
+  // same loopback pin as settings and credentials.
+  'skill.listManaged',
+  'skill.read',
+  'skill.save',
+  'skill.remove',
+  'skill.restore',
+  'skill.permanentDelete',
+  'skill.trash',
+  'skill.setEnabled',
+  'skill.versions',
+  'skill.rollback',
+  'skill.benchmarkStart',
+  'skill.benchmarkPoll',
+  'skill.benchmarkCancel',
+  'skill.benchmarkBatchStart',
+  'skill.autoImprove',
   'llm.discoverModels',
+  'llm.oauthLoginStart',
+  'llm.oauthLoginWait',
+  'llm.oauthLoginCancel',
+  'llm.oauthLogout',
 ])
 
 /**
@@ -144,7 +166,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         : undefined
       if (method !== undefined
         && PRIVILEGED_METHODS.has(method)
-        && !isTrustedApiRequest(request, [])) {
+        && !isTrustedApiRequest(request, [], requestPeer(request))) {
         return new Response('forbidden', { status: 403 })
       }
       if (request.method === 'GET' && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) {
@@ -162,7 +184,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
     kind: 'prefix',
     path: API_PATH,
     handler: async (req, res) => {
-      if (!isTrustedApiRequest(req, trustedHosts)) {
+      if (!isTrustedApiRequest(req, trustedHosts, socketPeer(req))) {
         res.writeHead(403)
         res.end('forbidden')
         return
@@ -181,7 +203,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
       apiCtx.effect(() => apiCtx.webServer.registerUpgrade({
         path,
         handler: (req, socket, head) => {
-          if (!isTrustedApiRequest(req, trustedHosts)) {
+          if (!isTrustedApiRequest(req, trustedHosts, socketPeer(req))) {
             rejectWebSocketUpgrade(socket)
             return
           }

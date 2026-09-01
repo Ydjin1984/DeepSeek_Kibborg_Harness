@@ -175,4 +175,27 @@ describe('WebBlock fetch card', () => {
     const view = render(<WebBlock kind="fetch" url="https://example.com/missing" statusCode={404} truncated={false} />)
     expect(view.getByText('HTTP 404')).toBeTruthy()
   })
+
+  it('renders owner-supplied search labels over the built-in copy', () => {
+    const view = render(<WebBlock
+      kind="search"
+      answer=""
+      sources={[]}
+      truncated
+      labels={{ empty: 'No results', sourcesTruncated: 'Sources cut' }}
+    />)
+    expect(view.getByText('No results')).toBeTruthy()
+    expect(view.getByText('Sources cut')).toBeTruthy()
+  })
+
+  it('renders owner-supplied fetch labels over the built-in copy', () => {
+    const view = render(<WebBlock
+      kind="fetch"
+      url="https://example.com"
+      statusCode={200}
+      truncated
+      labels={{ contentTruncated: 'Content cut' }}
+    />)
+    expect(view.getByText('Content cut')).toBeTruthy()
+  })
 })

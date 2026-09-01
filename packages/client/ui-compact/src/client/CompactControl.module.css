@@ -1,0 +1,39 @@
+/* Manual compaction button in the composer tool row (the ContextMeter button
+   family: a 28px circular hit target with a hover tint). */
+
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+/* Occupancy at or above the auto-compaction threshold: the warning tint
+   signals that automatic compaction is about to fire. */
+.warn {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.warn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}

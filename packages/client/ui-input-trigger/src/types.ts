@@ -31,7 +31,10 @@ export type PickVia = 'menu' | 'space' | 'enter'
 
 /** One menu candidate. Pure display data — zero behavior declaration. */
 export interface InputTriggerCandidate {
+  /** Stable source-owned identity: the fuzzy-match and pick key, never localized. */
   readonly name: string
+  /** Localized display name rendered in place of `name`; absent = show `name`. */
+  readonly label?: string
   readonly description?: string
   readonly icon?: string
   readonly hint?: string
@@ -56,6 +59,18 @@ export interface SubmitImageAttachment {
   readonly data: string
   /** Optional display name; never interpreted as a path. */
   readonly name?: string
+}
+
+/** Base64-encoded composer file accompanying one prompt transaction (any format). */
+export interface SubmitFileAttachment {
+  /** Wire discriminant: the host stores the payload as a file content part. */
+  readonly type: 'file'
+  /** Declared media type; the host stores it verbatim — no format restriction. */
+  readonly mediaType: string
+  /** Canonical base64 encoding of the file bytes. */
+  readonly data: string
+  /** Display name; the host sanitizes it before materializing, never a path. */
+  readonly name: string
 }
 
 /**

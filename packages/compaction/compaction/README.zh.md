@@ -70,6 +70,10 @@
 
 `compactCheckpointSource()`、`CompactionCheckpointSource` 与 `isCompactCheckpointSource()` 声明在 `@deepseek-ai/dsh-compaction/checkpoint` 子路径上，并由包根重新导出，因此 host 侧消费方仍从根读取它们。构造函数要求传入所属 `CompactionId`，防止后端写入缺少关联关系、必然被包不变量拒绝的标记。该叶子不导入 cordis、也不声明任何模块增强（即 [`dsh-commands/brand`](../../interaction/commands/README.md) 的形状），这正是客户端或 wire 程序能够命名该检查点来源的原因：包的**根**根本无法进入这类程序，因为它会到达 `dsh-session` 的根，而那处 `Context` 合并会让 host 的 `sessions` 服务与客户端自己的冲突（`TS2717`——每侧一个程序，见 [development.md](../../../docs/development.md#typescript-project-layout)）。Web 客户端的 transcript（文本记录）适配器用仅类型导入把它的插件字面量钉在该叶子的源类型上，因此在此处改插件 id 会让那边编译失败。
 
+## 面向浏览器的策略与状态（`./projection` 与 `./client`）
+
+`CompactionProjection` 及其 `SessionProjectionMap` 合并位于 `@deepseek-ai/dsh-compaction/projection` 叶子上，并通过 `@deepseek-ai/dsh-compaction/client` 供浏览器聚合重新导出——与 `./checkpoint` 相同的无 cordis、无模块增强规则，因此客户端程序无需加载宿主插件的 Context 合并即可命名 `compaction` 投影键。`dsh-compaction-basic` 注册对应的投影单元；本接口包只拥有词汇。
+
 ## 模型体验
 
 ### 调用后端时的会话历史

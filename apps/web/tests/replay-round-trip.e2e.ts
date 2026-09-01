@@ -20,7 +20,7 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot, selectChatView } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/fresh-round-trip', import.meta.url))
 const FIXTURE = fileURLToPath(new URL('./snapshots/fresh-round-trip/session.jsonl', import.meta.url))
@@ -74,6 +74,9 @@ describe('web e2e: fresh round trip through the real assembly', () => {
     await input.press('Enter')
     const sessionId = await settled
     settledSessionId = sessionId
+    // The Execution view is the conversation default; the drive turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions.
+    await selectChatView(page)
     if (MODE === 'record') {
       await recordFixture(scaffold, sessionId, FIXTURE)
     }

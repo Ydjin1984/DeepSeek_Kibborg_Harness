@@ -1,0 +1,217 @@
+/* ExecutionView: sticky header + toolbar over the view-owned virtualized
+   event list. The view opts into the composer-overlay seat so the session
+   body stops scrolling and this list owns the scrollport. */
+
+.root {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.search {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 220px;
+  max-width: 40%;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--dsw-alias-label-caption);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 30px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.searchInput::placeholder {
+  color: var(--dsw-alias-label-caption);
+}
+
+.searchInput:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.filterChip {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.filterChip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.filterChip:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.filterChipActive {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.filterChip[data-filter='errors'].filterChipActive {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.filterChip[data-filter='success'].filterChipActive {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.toolButton {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.toolButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.toolButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.list {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  /* The overlay composer seat floats over this scrollport's bottom edge;
+     reserve its live height (ConversationRoot publishes
+     --dsh-composer-height on the scroller) plus a gap, so the trace tail
+     never scrolls under the input card or its fade band — the full run stays
+     visible above the composer. */
+  padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  /* The sheet carries elevated-surface tokens (filter chips, the jump pill),
+     so the scroller rebinds the scrollbar indirection to the l2 pair. */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.flow {
+  position: relative;
+  min-width: 0;
+}
+
+.rowSlot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  min-width: 0;
+}
+
+/* One expanded event's inner content must not stretch the column; the flow
+   and the row slot both cap at the scrollport width. */
+.rowSlot > div {
+  min-width: 0;
+}
+
+.jumpLatest {
+  position: sticky;
+  /* Clears the overlay composer seat (same variable as the list's bottom
+     padding), so the pill stays clickable above the input card instead of
+     sticking behind it. */
+  bottom: calc(var(--dsh-composer-height, 152px) + 12px);
+  left: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  box-shadow: var(--dsw-shadow-elevated, 0 2px 8px rgba(0, 0, 0, 0.16));
+}
+
+.jumpLatest:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.jumpLatest:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.empty {
+  padding: 40px 20px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}

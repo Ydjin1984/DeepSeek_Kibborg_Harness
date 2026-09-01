@@ -41,5 +41,24 @@ export const en: Record<JobKey, string> = {
   'duration.title.done': 'Took {duration}',
 }
 
+/** Russian dictionary, key-identical to the Chinese source of truth. */
+export const ru: Record<JobKey, string> = {
+  'count.live.one': '{count} фоновая задача выполняется',
+  'count.live.other': '{count} фоновых задач выполняется',
+  'count.idle.one': '{count} фоновая задача',
+  'count.idle.other': '{count} фоновых задач',
+  'list.aria': 'Фоновые задачи',
+  'status.running': 'выполняется',
+  'status.stopping': 'остановка',
+  'status.completed': 'завершено',
+  'status.killed': 'отменено',
+  'status.failed': 'не удалось',
+  'duration.seconds': '{seconds} с',
+  'duration.minutes': '{minutes} м {seconds} с',
+  'duration.hours': '{hours} ч {minutes} м',
+  'duration.title.live': 'Выполняется {duration}',
+  'duration.title.done': 'Заняло {duration}',
+}
+
 /** Key domain of the `job` namespace (zh is the source of truth). */
 export type JobKey = keyof typeof zh

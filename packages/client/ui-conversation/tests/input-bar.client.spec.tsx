@@ -18,7 +18,7 @@ import { SessionInputShell } from '../src/client/input/facade.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps,
 } from '../src/client/contract/slots.ts'
-import type { DraftAttachmentId } from '../src/client/input/contract.ts'
+import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -90,6 +90,8 @@ interface BenchOptions {
   rightItems?: React.ReactNode
   attachments?: readonly ComposerAttachment[]
   addImages?: (files: readonly File[]) => string | null
+  /** The bar's file-draft mint face (absent = undefined, file intake no-ops). */
+  addFiles?: (files: readonly File[]) => string | null
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
@@ -108,6 +110,7 @@ function bench(over?: BenchOptions) {
   const sink = vi.fn<(
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: 'queue' | 'steer',
     signal: AbortSignal,
   ) => Promise<SubmitOutcome>>(() => Promise.resolve({ kind: 'success' }))
@@ -124,6 +127,11 @@ function bench(over?: BenchOptions) {
     actx: SCTX,
     defaultSink: sink,
     commandImages: { serialize: () => Promise.resolve([]), release: () => {}, unsupportedNotice: (token: string) => `${token.trim()} images-unsupported` },
+    commandFiles: {
+      create: files => files.map(() => 'file-draft' as DraftAttachmentId),
+      release: () => {},
+      unsupportedNotice: (token: string) => `${token.trim()} files-unsupported`,
+    },
     queue: {
       getSnapshot: () => session.getSnapshot().queue,
       subscribe: fn => session.subscribe(fn),
@@ -176,6 +184,9 @@ function bench(over?: BenchOptions) {
       const attachment = over?.attachments?.find(candidate => candidate.id === id)
       return attachment === undefined ? [] : [attachment]
     }),
+    addFiles: over?.addFiles ?? (() => null),
+    removeFile: (id) => { shell.removeFile(id) },
+    draftFiles: () => [],
     resolveSubmitMode: (running, gesture, steeringAvailable) => {
       if (!running || !steeringAvailable) return 'queue'
       const preferred = over?.busyEnter ?? 'queue'
@@ -357,7 +368,7 @@ describe('image draft rail', () => {
     let settle!: (outcome: SubmitOutcome) => void
     sink.mockImplementationOnce(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
     fireEvent.keyDown(textarea, { key: 'Enter' })
-    expect(sink).toHaveBeenCalledWith('', ['draft-1'], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('', ['draft-1'], [], 'queue', expect.any(AbortSignal))
     expect(attachmentOwner(result.slotCalls).attachments).toEqual([attachments[0]])
     await act(async () => { settle({ kind: 'success' }) })
     await vi.waitFor(() => {
@@ -373,7 +384,7 @@ describe('image draft rail', () => {
       const paste = () => {
         fireEvent.paste(textarea, {
           clipboardData: {
-            items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'note.txt', { type: 'text/plain' }) }],
+            items: [{ kind: 'file', type: 'image/png', getAsFile: () => new File(['x'], 'note.png', { type: 'image/png' }) }],
             getData: () => '',
           },
         })
@@ -388,6 +399,20 @@ describe('image draft rail', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('routes non-image clipboard files to the file-draft path', () => {
+    const addFiles = vi.fn(() => null)
+    const { textarea, shell } = bench({ addFiles })
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'note.txt', { type: 'text/plain' }) }],
+        getData: () => '',
+      },
+    })
+    expect(addFiles).toHaveBeenCalledWith([expect.objectContaining({ name: 'note.txt' })])
+    // The draft text stays empty: the file rides the attachment rail.
+    expect(shell.snapshot.draft).toBe('')
   })
 
   it('announces a rejected attachment-slot intake through the same toast', () => {
@@ -457,7 +482,7 @@ describe('Enter semantics', () => {
   it('plain Enter submits queue mode through the machine; repeat and empty are suppressed', () => {
     const { textarea, sink } = bench({ draft: 'hello' })
     fireEvent.keyDown(textarea, { key: 'Enter' })
-    expect(sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('hello', [], [], 'queue', expect.any(AbortSignal))
     // The submitting-phase lock, not draft emptiness, suppresses the repeat:
     // the draft is still uncleared while the sink round-trip is in flight.
     fireEvent.keyDown(textarea, { key: 'Enter', repeat: true })
@@ -485,15 +510,15 @@ describe('Enter semantics', () => {
   it('Ctrl/Meta+Enter sends normally while idle and steers while running', () => {
     const idle = bench({ draft: 'hello' })
     fireEvent.keyDown(idle.textarea, { key: 'Enter', metaKey: true })
-    expect(idle.sink).toHaveBeenCalledWith('hello', [], 'queue', expect.any(AbortSignal))
+    expect(idle.sink).toHaveBeenCalledWith('hello', [], [], 'queue', expect.any(AbortSignal))
 
     const busyCtrl = bench({ running: true, draft: 'steer with ctrl' })
     fireEvent.keyDown(busyCtrl.textarea, { key: 'Enter', ctrlKey: true })
-    expect(busyCtrl.sink).toHaveBeenCalledWith('steer with ctrl', [], 'steer', expect.any(AbortSignal))
+    expect(busyCtrl.sink).toHaveBeenCalledWith('steer with ctrl', [], [], 'steer', expect.any(AbortSignal))
 
     const busyMeta = bench({ running: true, draft: 'steer with cmd' })
     fireEvent.keyDown(busyMeta.textarea, { key: 'Enter', metaKey: true })
-    expect(busyMeta.sink).toHaveBeenCalledWith('steer with cmd', [], 'steer', expect.any(AbortSignal))
+    expect(busyMeta.sink).toHaveBeenCalledWith('steer with cmd', [], [], 'steer', expect.any(AbortSignal))
   })
 
   it('empty-draft Cmd/Ctrl+Enter steers the whole queue instead of submitting', () => {
@@ -558,7 +583,7 @@ describe('Enter semantics', () => {
     const steerQueue = vi.fn()
     const { textarea, sink } = bench({ running: true, queue: [row('q-1')], draft: '插话', steerQueue })
     fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
-    expect(sink).toHaveBeenCalledWith('插话', [], 'steer', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('插话', [], [], 'steer', expect.any(AbortSignal))
     expect(steerQueue).not.toHaveBeenCalled()
   })
 
@@ -606,7 +631,7 @@ describe('running and lock semantics', () => {
     expect(textarea.disabled).toBe(false)
     fireEvent.change(textarea, { target: { value: '排队消息2' } })
     fireEvent.keyDown(textarea, { key: 'Enter' })
-    expect(sink).toHaveBeenCalledWith('排队消息2', [], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('排队消息2', [], [], 'queue', expect.any(AbortSignal))
     expect(button.getAttribute('aria-label')).toBe('停止生成')
     fireEvent.click(button)
     expect(stop).toHaveBeenCalledTimes(1)
@@ -615,17 +640,17 @@ describe('running and lock semantics', () => {
   it('running plain Enter follows the busy-state Steer preference', () => {
     const { textarea, sink } = bench({ running: true, busyEnter: 'steer', draft: '直接插话' })
     fireEvent.keyDown(textarea, { key: 'Enter' })
-    expect(sink).toHaveBeenCalledWith('直接插话', [], 'steer', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('直接插话', [], [], 'steer', expect.any(AbortSignal))
   })
 
   it('running Cmd/Ctrl+Enter uses the opposite of the busy-state Enter preference', () => {
     const meta = bench({ running: true, busyEnter: 'steer', draft: '排到下一轮' })
     fireEvent.keyDown(meta.textarea, { key: 'Enter', metaKey: true })
-    expect(meta.sink).toHaveBeenCalledWith('排到下一轮', [], 'queue', expect.any(AbortSignal))
+    expect(meta.sink).toHaveBeenCalledWith('排到下一轮', [], [], 'queue', expect.any(AbortSignal))
 
     const ctrl = bench({ running: true, busyEnter: 'steer', draft: 'also queue' })
     fireEvent.keyDown(ctrl.textarea, { key: 'Enter', ctrlKey: true })
-    expect(ctrl.sink).toHaveBeenCalledWith('also queue', [], 'queue', expect.any(AbortSignal))
+    expect(ctrl.sink).toHaveBeenCalledWith('also queue', [], [], 'queue', expect.any(AbortSignal))
   })
 
   it('running continuable subagent keeps Send beside an independent Stop', () => {
@@ -645,7 +670,7 @@ describe('running and lock semantics', () => {
     expect(interruptButton).not.toBeNull()
     expect(textarea.disabled).toBe(false)
     fireEvent.click(button)
-    expect(sink).toHaveBeenCalledWith('后续消息', [], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('后续消息', [], [], 'queue', expect.any(AbortSignal))
     fireEvent.click(interruptButton!)
     expect(stop).toHaveBeenCalledTimes(1)
   })
@@ -702,11 +727,11 @@ describe('running and lock semantics', () => {
     }
     const plain = bench({ running: true, busyEnter: 'steer', draft: 'plain', subagent })
     fireEvent.keyDown(plain.textarea, { key: 'Enter' })
-    expect(plain.sink).toHaveBeenCalledWith('plain', [], 'queue', expect.any(AbortSignal))
+    expect(plain.sink).toHaveBeenCalledWith('plain', [], [], 'queue', expect.any(AbortSignal))
 
     const accelerated = bench({ running: true, draft: 'accelerated', subagent })
     fireEvent.keyDown(accelerated.textarea, { key: 'Enter', metaKey: true })
-    expect(accelerated.sink).toHaveBeenCalledWith('accelerated', [], 'queue', expect.any(AbortSignal))
+    expect(accelerated.sink).toHaveBeenCalledWith('accelerated', [], [], 'queue', expect.any(AbortSignal))
   })
 
   it('disabled (session removed) locks the textarea and chrome', () => {
@@ -719,7 +744,7 @@ describe('running and lock semantics', () => {
   it('idle primary sends and disables on empty draft', () => {
     const { button, sink } = bench({ draft: 'go' })
     fireEvent.click(button)
-    expect(sink).toHaveBeenCalledWith('go', [], 'queue', expect.any(AbortSignal))
+    expect(sink).toHaveBeenCalledWith('go', [], [], 'queue', expect.any(AbortSignal))
     const empty = bench()
     expect(empty.button.disabled).toBe(true)
   })

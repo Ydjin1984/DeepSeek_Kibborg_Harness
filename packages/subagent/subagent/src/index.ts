@@ -66,7 +66,11 @@ import type { ContinuableSetupContribution } from './activation-setup-registry.t
 import { listChildren as listSubagentChildren, listDescendants as listSubagentDescendants } from './list-children.ts'
 import type { SubagentDescendantListEntry, SubagentListEntry } from './list-children.ts'
 import { snapshotSubagentDescriptor } from './descriptor.ts'
-import { subagentIdentityProjectionDefinition, subagentTimingProjectionDefinition } from './projection.ts'
+import {
+  subagentActivityProjectionDefinition,
+  subagentIdentityProjectionDefinition,
+  subagentTimingProjectionDefinition,
+} from './projection.ts'
 
 export * from './out-of-process.ts'
 export { AssistantOutputFold, finalAssistantOutput } from './assistant-output.ts'
@@ -197,6 +201,7 @@ export class SubagentRuntime extends Service {
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register(subagentTimingProjectionDefinition)
       projectionCtx.sessionProjections.register(subagentIdentityProjectionDefinition)
+      projectionCtx.sessionProjections.register(subagentActivityProjectionDefinition)
     })
   }
 

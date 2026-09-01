@@ -5,6 +5,18 @@ import type { ImageLightboxLabels } from '../ImageLightbox.tsx'
 import type { MessageImageLabels } from '../MessageImage.tsx'
 
 /**
+ * Byte count as user-facing megabytes (`10MB`, `2.5MB`). Local copy of the
+ * conversation namespace's formatter: a value import across plugin packages
+ * is forbidden, and the format is a stable display contract.
+ * @param bytes - the byte count.
+ * @returns the rounded megabyte text.
+ */
+export function fileSizeText(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  return `${Number.isInteger(mb) ? String(mb) : mb.toFixed(1)}MB`
+}
+
+/**
  * Resolve original-image lightbox strings from the conversation namespace.
  * @param t - conversation namespace translator.
  * @returns translated lightbox labels.

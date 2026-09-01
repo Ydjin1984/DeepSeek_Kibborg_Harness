@@ -16,8 +16,10 @@ import {
   createSnapshotStore, EMPTY_CONVERSATION_VIEWS, PendingWait,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { RpcId } from '@deepseek-ai/dsh-client-connection/client'
+import type { SessionProviderComponent } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  ChatNode, ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, SelectionTarget, UseChatNodeTurnData,
+  ChatNode, ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, RenderChatNode,
+  RenderMessageImages, SelectionTarget, UseChatNodeTurnData,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
@@ -180,12 +182,12 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     React.ComponentProps<typeof TurnTailNodeView>['renderSlotChain']
   const renderTurnTailSlot = (() => null) as unknown as
     React.ComponentProps<typeof TurnTailNodeView>['renderSlot']
-  const renderSlot = ((key: string, owner: object, opts?: {
+  const renderChatNode = ((owner: RoutedChatNodeOwner, opts: {
+    entryKey: string
+    hookContext: string
     fallback?: React.ReactNode
-    hookContext?: unknown
   }) => {
-    if (key !== 'conversation.chat.node') return opts?.fallback ?? null
-    const nodeOwner = owner as RoutedChatNodeOwner
+    const nodeOwner = owner
     const nodeKey = opts?.hookContext as string | undefined
     const useTurnData: UseChatNodeTurnData = dataKey => props.useSession((snapshot) => {
       const location = nodeKey === undefined ? undefined : snapshot.chat.nodes.get(nodeKey)?.location
@@ -209,7 +211,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
           <CommandNodeView
             {...nodeProps<'command'>()}
             renderSlot={renderCommandSlot}
-            SessionProvider={props.SessionProvider}
+            SessionProvider={SessionProviderStub}
           />
         )
       case 'manual-compaction':
@@ -228,7 +230,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
             {...nodeProps<'turn-tail'>()}
             renderSlot={renderTurnTailSlot}
             renderSlotChain={renderTurnTail}
-            SessionProvider={props.SessionProvider}
+            SessionProvider={SessionProviderStub}
           />
         )
       case 'unknown':
@@ -258,10 +260,10 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
       default:
         return opts?.fallback ?? null
     }
-  }) as unknown as ChatViewSlotProps['renderSlot']
-  // SessionProvider seat arrives with the session-scope child declaration;
-  // ChatView never invokes it (render-prop pass-through stub).
-  const SessionProviderStub: ChatViewSlotProps['SessionProvider'] = ({ children }) => <>{children(SID)}</>
+  }) as RenderChatNode
+  // SessionProvider seat arrives with the session-scope node declarations;
+  // the stub supplies it because the node views are rendered directly here.
+  const SessionProviderStub: SessionProviderComponent = ({ children }) => <>{children(SID)}</>
   const props: ChatViewSlotProps = {
     sessionId: SID,
     useSession: bindSnapshotSelector(source),
@@ -274,16 +276,18 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
       addImages: () => true,
       removeImage: () => {},
       pruneImages: () => {},
+      addFiles: () => null,
+      removeFile: () => {},
+      pruneFiles: () => {},
       submit: () => {},
     },
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
-    renderSlot,
-    SessionProvider: SessionProviderStub,
+    renderChatNode,
+    renderMessageImages: (() => null) as RenderMessageImages,
     openDetails,
     openFile,
     loadOlder,
-    loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
     inspectCall,
     chatScroll,
     forkAt,
@@ -844,12 +848,11 @@ describe('ChatView', () => {
     // Count renderSlot invocations: the memo boundary holds when CallRow does
     // not re-render, so the row's renderSlot call count freezes during chunks.
     let rowRenders = 0
-    h.props.renderSlot = ((key: string, owner: object) => {
-      if (key !== 'conversation.chat.node'
-        || (owner as RoutedChatNodeOwner).node.kind !== 'tool-call') return null
+    h.props.renderChatNode = ((owner: object) => {
+      if ((owner as RoutedChatNodeOwner).node.kind !== 'tool-call') return null
       rowRenders += 1
       return <div data-testid="counting-row" />
-    })
+    }) as RenderChatNode
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByTestId('counting-row')).toBeTruthy()
     const afterMount = rowRenders
@@ -875,7 +878,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByTestId('tool-seat-r1')).toBeTruthy()
     expect(h.toolOwners[0]?.block).toMatchObject({ callId: 'r1', argsRaw: '{"command":"cmd-r1"}' })
-    expect(view.getByRole('status').textContent).toBe('Deep diving...')
+    expect(view.getByRole('status').textContent).toBe('正在处理…')
   })
 
   it('keeps the Tool renderer mounted when a running call settles into log order', () => {
@@ -899,12 +902,12 @@ describe('ChatView', () => {
       runningCalls: [runningCall('r1')],
       running: true,
     })
-    h.props.renderSlot = ((key: string, owner: object, opts?: { fallback?: React.ReactNode }) => {
+    h.props.renderChatNode = ((owner: object, opts?: { fallback?: React.ReactNode }) => {
       const routed = owner as RoutedChatNodeOwner
-      return key === 'conversation.chat.node' && routed.node.kind === 'tool-call'
+      return routed.node.kind === 'tool-call'
         ? <StatefulToolNode node={routed.node} />
         : opts?.fallback ?? null
-    }) as ChatViewSlotProps['renderSlot']
+    }) as RenderChatNode
     const view = render(<h.ChatView {...h.props} />)
     const tool = view.getByTestId('stateful-tool')
     const row = view.container.querySelector('[data-chat-flow-key="fixture:tool:r1"]')
@@ -935,7 +938,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     // Freshly mounted (as after a reload) yet already past the 15s gate.
     const status = view.getByRole('status')
-    expect(status.textContent).toMatch(/^Deep diving\.\.\.2分0\d秒$/)
+    expect(status.textContent).toMatch(/^正在处理…2分0\d秒$/)
     expect(status.querySelector('[aria-hidden="true"]')).not.toBeNull()
     act(() => {
       h.set({ queue: [{
@@ -947,21 +950,20 @@ describe('ChatView', () => {
         text: 'also',
       }] })
     })
-    expect(status.textContent).toMatch(/^Deep diving\.\.\.2分0\d秒$/)
+    expect(status.textContent).toMatch(/^正在处理…2分0\d秒$/)
   })
 
   it('hands each ordered root call to the keyed business-node slot', () => {
     const block = toolResult(3, 'a')
     const h = makeHarness({ nodes: [block] })
-    const calls: { key: string; owner: object; entryKey?: string }[] = []
-    h.props.renderSlot = ((key: string, owner: object, opts?: { entryKey?: string; fallback?: React.ReactNode }) => {
-      calls.push({ key, owner, ...(opts?.entryKey !== undefined ? { entryKey: opts.entryKey } : {}) })
+    const calls: { owner: object; entryKey?: string }[] = []
+    h.props.renderChatNode = ((owner: object, opts?: { entryKey?: string; fallback?: React.ReactNode }) => {
+      calls.push({ owner, ...(opts?.entryKey !== undefined ? { entryKey: opts.entryKey } : {}) })
       return opts?.fallback ?? null
-    })
+    }) as RenderChatNode
     render(<h.ChatView {...h.props} />)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({
-      key: 'conversation.chat.node',
       owner: { node: { kind: 'tool-call' }, selectedCallId: undefined },
       entryKey: 'tool-call',
     })

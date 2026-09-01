@@ -198,7 +198,7 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 ## 已知限制与暂缓事项
 
 - **`maxRequestImageBytes` 只统计 base64 图片载荷**：文本、工具与 JSON 结构不计入上限，因此该值必须低于网关请求体上限并留出余量。offload 在请求转换时决定，是历史与配置的纯函数，不记录为会话事件；由按路由能力元数据（图片数量、单图大小、请求总大小）同时驱动准入与组装的完整设计属于暂缓工作。
-- **仅以 OAuth 认证的提供方不予提供**：pi-ai 的 OAuth 只从*已存储*的 OAuth 凭据解析，而本适配器构造 `Models` 集合时不注入凭据存储、也不运行登录流程，因此这类路由的每个请求都会在发出之前以 `Provider is not configured` 失败。可配置提供方目录因此不列出它们；已安装 catalog 中只有 `openai-codex` 属于此类。settings 文档已经写过的路由仍保留目录条目，配置界面据此可以编辑或删除；`apiKeyEnv` 也仍能用该密钥完成认证——对 Codex 而言那是一个会过期、且这里没有任何环节会去刷新的 token。
+- **休眠目录不列出仅以 OAuth 认证的提供方** — 已安装 catalog 中只有 `openai-codex` 属于此类。同时接受 API 密钥的路由（xAI）照常出现：Models 页在密钥字段旁提供订阅设备码登录。OAuth 令牌以 JSON 存在 `<ROUTE>_OAUTH` 下并按请求刷新；登录从不读取其他产品的 auth 文件。Codex 仍被排除，因为本适配器仍没有为会过期的 Codex token 提供刷新循环。
 - **提供方自带的凭据发现只读进程环境**：不指定凭据的路由交由 catalog 提供方自行解析，而它探测的是环境变量（`AZURE_OPENAI_API_KEY`、`AWS_PROFILE`、`AWS_ACCESS_KEY_ID` 以及各提供方自己的那一组）。它不读任何本地凭据目录，因此只有 `~/.aws/credentials` 而未导出 `AWS_PROFILE` 会被解析为未配置；由 harness 凭据 seam 保管的值，除非进程环境里也有，否则对它不可见。
 - **settings 能新增或覆盖路由，但不能移除组合路由**：用户层合并在组合 `base` 之上，因此删除 `cordis.yml` 提供的提供方属于组合变更；对该 namespace 执行 `replace` 只会重置用户层。
 - **分层合并对字典键没有删除语义**：settings seam 把组合 `base` 与用户层按键递归合并，因此 base 声明的某个 `reasoningEfforts` 档位、`modelOverrides` 条目或 `compat` 字段，用户层只能覆盖、无法移除——而 `reasoningEfforts` 里缺席本身*就是*语义（「不提供」），于是 base 声明过的档位会一直被提供。只有 `cordis.yml` entry config 为用户层正在编辑的同一模型声明了按模型推理字段才会触发；受支持的姿态是把这些字段留给 settings 文档（shipped 组合以 dormant 方式挂载该适配器），且 `models` 列表是数组、整体替换，这是带内的解决办法。

@@ -4,9 +4,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { access, mkdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
@@ -23,6 +23,15 @@ import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-se
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
 import type { SubagentListEntry as CatalogSubagentListEntry } from '@deepseek-ai/dsh-subagent'
 import { isUserInvocable } from '@deepseek-ai/dsh-skill'
+import { SkillManagerError } from '@deepseek-ai/dsh-skill-manager'
+import type {
+  AutoImproveRun,
+  BenchmarkRun,
+  ManagedSkill,
+  ManagedSkillSummary,
+  SaveSkillResult,
+  SkillVersion,
+} from '@deepseek-ai/dsh-skill-manager'
 import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
@@ -124,17 +133,154 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
-/** Validate one prompt as a batch before publishing any durable image object. */
-async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
+/** Per-message bound on attached files (the user asked for unrestricted formats, not unbounded counts). */
+const MAX_FILES_PER_MESSAGE = 20
+/** Per-file byte bound on browser uploads. */
+const MAX_FILE_BYTES = 25 * 1024 * 1024
+/** Aggregate byte bound on one message's file uploads. */
+const MAX_MESSAGE_FILE_BYTES = 100 * 1024 * 1024
+/** Inline text preview bound: larger files are addressed by path alone. */
+const MAX_INLINE_FILE_TEXT_BYTES = 64 * 1024
+/** Subdirectory under the session cwd that holds materialized file uploads. */
+const ATTACHMENTS_DIR = '.dsh/attachments'
+
+/** Decode one file upload payload while rejecting non-canonical base64 forms. */
+function decodeFileBase64(data: string): Uint8Array {
+  const decoded = Buffer.from(data, 'base64')
+  if (data.length === 0 || decoded.toString('base64') !== data) {
+    throw new AttachmentError('File upload is not canonical base64.', 'INVALID_FILE_BASE64')
+  }
+  return new Uint8Array(decoded)
+}
+
+/** Strip path components and control characters; empty and dot-only names fall back to 'attachment'. */
+function safeFileName(name: string): string {
+  const base = name.split(/[\\/]/u).pop() ?? ''
+  const cleaned = base.replace(/[\u0000-\u001f\u007f]/gu, '').trim()
+  const stem = cleaned === '' || cleaned === '.' || cleaned === '..' ? 'attachment' : cleaned
+  return stem.slice(0, 128)
+}
+
+/** True when bytes decode losslessly as UTF-8 text (the inline-content eligibility test). */
+function isUtf8Text(bytes: Uint8Array): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether a path exists (uncached). */
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Write one uploaded file under `<cwd>/.dsh/attachments/` so the session's
+ * filesystem tools (rooted at the session cwd) can read it. Colliding names
+ * get a numeric suffix before the extension.
+ * @param cwd - the session's workspace directory.
+ * @param name - sanitized display name (never a path).
+ * @param bytes - decoded upload bytes.
+ * @returns the absolute written path.
+ */
+async function materializeFile(cwd: string, name: string, bytes: Uint8Array): Promise<string> {
+  const dir = join(cwd, ATTACHMENTS_DIR)
+  await mkdir(dir, { recursive: true })
+  const dot = name.lastIndexOf('.')
+  const stem = dot <= 0 ? name : name.slice(0, dot)
+  const ext = dot <= 0 ? '' : name.slice(dot)
+  let candidate = name
+  let suffix = 1
+  while (await pathExists(join(dir, candidate))) {
+    candidate = `${stem}-${suffix}${ext}`
+    suffix += 1
+  }
+  const target = join(dir, candidate)
+  await writeFile(target, bytes)
+  return target
+}
+
+/**
+ * The model-visible text form of one admitted file part (pinned contract the
+ * model parses): a header naming the file, its declared type and byte count,
+ * and its absolute path (readable through the session's filesystem tools),
+ * followed by the inline content when the bytes decode as UTF-8 text within
+ * the preview bound. Binary documents are addressed by path alone.
+ */
+function describeFile(part: Extract<PromptContentPart, { type: 'file' }>, bytes: Uint8Array, path: string): string {
+  const header = `Attached file: ${part.name} (${part.mediaType}, ${bytes.byteLength} bytes)\nPath: ${path}`
+  if (bytes.byteLength <= MAX_INLINE_FILE_TEXT_BYTES && isUtf8Text(bytes)) {
+    return `${header}\nContent:\n${new TextDecoder('utf-8').decode(bytes)}`
+  }
+  return header
+}
+
+/**
+ * Enforce the file-upload caps over one decoded batch before any write.
+ * @param files - decoded uploads in message order.
+ * @throws AttachmentError naming the refused bound.
+ */
+function admitDecodedFiles(files: readonly { readonly part: Extract<PromptContentPart, { type: 'file' }>; readonly bytes: Uint8Array }[]): void {
+  if (files.length > MAX_FILES_PER_MESSAGE) {
+    throw new AttachmentError(`Message exceeds the file-count limit of ${MAX_FILES_PER_MESSAGE}.`, 'TOO_MANY_FILES')
+  }
+  let total = 0
+  for (const { part, bytes } of files) {
+    if (bytes.byteLength > MAX_FILE_BYTES) {
+      throw new AttachmentError(`File "${part.name}" exceeds the ${MAX_FILE_BYTES}-byte limit.`, 'FILE_TOO_LARGE')
+    }
+    total += bytes.byteLength
+    if (total > MAX_MESSAGE_FILE_BYTES) {
+      throw new AttachmentError(`Files exceed the aggregate ${MAX_MESSAGE_FILE_BYTES}-byte limit.`, 'FILES_TOO_LARGE')
+    }
+  }
+}
+
+/** Validate one prompt as a batch before publishing any durable image object
+ * or materializing any uploaded file: image admission precedes all file
+ * writes, so a refused batch starts no write. */
+async function durablePromptContent(
+  ctx: Context,
+  content: readonly PromptContentPart[],
+  cwd: string,
+): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
+  const fileParts = content.filter((part): part is Extract<PromptContentPart, { type: 'file' }> => part.type === 'file')
+  const decodedFiles = fileParts.map(part => ({ part, bytes: decodeFileBase64(part.data) }))
+  admitDecodedFiles(decodedFiles)
   const refs = await admitEncodedImages(ctx.attachments, content.filter(part => part.type === 'image'))
+  const decodedByPart = new Map(decodedFiles.map(entry => [entry.part, entry.bytes]))
+  const blocks: ContentBlock[] = []
   let next = 0
-  return content.map(part => part.type === 'text'
-    ? { type: 'text', text: part.text }
-    // admitEncodedImages returns one reference per image part in order.
-    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+  for (const part of content) {
+    if (part.type === 'text') {
+      blocks.push({ type: 'text', text: part.text })
+      continue
+    }
+    if (part.type === 'image') {
+      // admitEncodedImages returns one reference per image part in order.
+      blocks.push({ type: 'image', attachment: refs[next++] as ImageAttachmentRef })
+      continue
+    }
+    const bytes = decodedByPart.get(part) as Uint8Array
+    try {
+      const path = await materializeFile(cwd, safeFileName(part.name), bytes)
+      blocks.push({ type: 'text', text: describeFile(part, bytes, path) })
+    } catch (error: unknown) {
+      if (error instanceof AttachmentError) throw error
+      throw new AttachmentError(`Failed to store file "${part.name}".`, 'FILE_STORAGE_FAILED')
+    }
+  }
+  return blocks
 }
 
 /** Search durable content for an image reference, including nested tool results. */
@@ -1227,6 +1373,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   // subscription unwinds with this gateway's fiber.
   ctx.inject(['sessionProjections'], (projectionCtx) => {
     projectionCtx.sessionProjections.onChanged((session, key, value, seq) => {
+      // The subagentActivity unit folds every session, but only subagent
+      // children surface it in the sidebar; ordinary sessions would push a
+      // frame per tool call for no reader.
+      if (key === 'subagentActivity' && session.header.origin !== 'subagent') return
       broadcast({ type: 'session/projection', sessionId: session.id, key, value, seq })
     })
   })
@@ -1865,6 +2015,38 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return defaults.openPath !== undefined || canOpenNativePath()
   }
 
+  /**
+   * Open one Host-resolved target, falling back to reporting its path as text
+   * when the deployment has no native opener or the open fails — the gesture
+   * must not die silently on a machine whose desktop handoff is unreliable.
+   * The agent-preset directory and composition openers use this; the other
+   * open targets still surface a failure as an error.
+   * @param request - the in-flight RPC request.
+   * @param path - absolute host-resolved target path (caller owns resolution).
+   * @param signal - caller/connection lifetime.
+   * @param open - the native opener to attempt.
+   * @returns opened natively, or the path for the surface to show as text.
+   */
+  async function openOrReveal(
+    request: RpcRequest<unknown>, path: string, signal: AbortSignal,
+    open: (path: string, signal: AbortSignal) => Promise<void>,
+  ): Promise<RpcResponse<{ opened: true } | { opened: false; path: string }>> {
+    if (!canOpenPaths()) return ok(request, { opened: false as const, path })
+    try {
+      await open(path, signal)
+      return ok(request, { opened: true as const })
+    } catch (_error: unknown) {
+      if (signal.aborted) {
+        return err(request, {
+          code: 'cancelled',
+          message: 'path open was aborted',
+          details: {},
+        })
+      }
+      return ok(request, { opened: false as const, path })
+    }
+  }
+
   /** Missing-service report shared by the credentials domain. */
   function credentialsAbsent(): RpcError {
     return { code: 'internal', message: 'credentials service is absent: this deployment does not mount a credential provider (e.g. @deepseek-ai/dsh-credentials-local) in its composition', details: {} }
@@ -2409,7 +2591,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 })
               }
             }
-            const durable = await durablePromptContent(ctx, content)
+            const durable = await durablePromptContent(
+              ctx,
+              content,
+              agent.session.header.cwd ?? defaults.cwd,
+            )
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)
@@ -3099,8 +3285,30 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // directory — no browser payload carries a path in either direction
           // unless the deployment has no opener to hand it to.
           const directory = dirname(preset.path)
-          if (!canOpenPaths()) return ok(request, { opened: false as const, path: directory })
-          return await openPath(request, directory, signal)
+          const open = defaults.openPath
+            ?? ((target: string, openSignal: AbortSignal) => openNativePath(target, openSignal))
+          return await openOrReveal(request, directory, signal, open)
+        } catch (error: unknown) {
+          return err(request, presetError(agentPreset, error))
+        }
+      },
+
+      async openComposition(request, signal) {
+        const { agentPreset } = request.payload
+        const presets = ctx.get('agentPresets')
+        if (presets === undefined) return err(request, noRoster(agentPreset))
+        try {
+          const preset = await presets.resolve(agentPreset)
+          // Shipped presets refuse for the same reason copy/remove draw: the
+          // install is not the user's to manage.
+          if (preset.trust !== 'user') {
+            throw new PresetNotWritableError(preset.id, 'it ships with the deployment')
+          }
+          // The composition file is the preset's own authoring surface: the
+          // persona row there is where a custom system prompt goes.
+          const open = defaults.openTextFile
+            ?? ((target: string, openSignal: AbortSignal) => openNativeTextFile(target, openSignal))
+          return await openOrReveal(request, preset.path, signal, open)
         } catch (error: unknown) {
           return err(request, presetError(agentPreset, error))
         }
@@ -3164,12 +3372,205 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             skills: skills.map(skill => ({
               name: skill.name,
               description: skill.description,
+              ...skill.localizedDescription !== undefined
+                ? { localizedDescription: skill.localizedDescription }
+                : {},
               ...skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse },
               modelInvocable: skill.invocation.modelInvocable,
             })),
           })
         } catch (error: unknown) {
           return err(request, { code: 'internal', message: `skill listing failed: ${String(error)}`, details: {} })
+        }
+      },
+
+      // ── skill-manager lifecycle ─────────────────────────────────────────────
+
+      async listManaged(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const skills = await resolved.manager.list(resolved.cwd)
+          return ok(request, { skills: skills.map(managedSummaryView) })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async read(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const skill = await resolved.manager.read(request.payload.name, resolved.cwd)
+          return ok(request, { ...skill !== undefined ? { skill: managedSkillView(skill) } : {} })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async save(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const result = await resolved.manager.save({
+            name: request.payload.name,
+            content: request.payload.content,
+            scope: request.payload.scope,
+            cwd: resolved.cwd,
+            ...request.payload.replace !== undefined ? { replace: request.payload.replace } : {},
+            ...request.payload.force !== undefined ? { force: request.payload.force } : {},
+            reason: 'Saved from Skills Manager',
+            source: 'manual',
+          })
+          return ok(request, { result: saveSkillResultView(result) })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async remove(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          await resolved.manager.remove(request.payload.name, resolved.cwd)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async restore(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          await resolved.manager.restore(request.payload.name, resolved.cwd)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async permanentDelete(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          await resolved.manager.permanentDelete(request.payload.name, resolved.cwd)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async trash(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const entries = await resolved.manager.trash(resolved.cwd)
+          return ok(request, { entries })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async setEnabled(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          await resolved.manager.setEnabled(request.payload.name, request.payload.enabled, resolved.cwd)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async versions(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const versions = await resolved.manager.versions(request.payload.name, resolved.cwd)
+          return ok(request, { versions: versions.map(skillVersionView) })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async rollback(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const activeVersion = await resolved.manager.rollback(request.payload.name, request.payload.version, resolved.cwd)
+          return ok(request, { activeVersion })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      validate(request) {
+        return Promise.resolve(validateSkillContent(request, ctx))
+      },
+      securityCheck(request) {
+        return Promise.resolve(securityCheckSkillContent(request, ctx))
+      },
+      benchmarkStart(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return Promise.resolve(err(request, resolved.error))
+        try {
+          const run = resolved.manager.startBenchmark({
+            skillName: request.payload.name,
+            cwd: resolved.cwd,
+            taskModel: request.payload.taskModel,
+            ...request.payload.evaluatorModel !== undefined ? { evaluatorModel: request.payload.evaluatorModel } : {},
+            ...request.payload.caseCount !== undefined ? { caseCount: request.payload.caseCount } : {},
+          })
+          return Promise.resolve(ok(request, { run: benchmarkRunView(run) }))
+        } catch (error: unknown) {
+          return Promise.resolve(managerError(request, error))
+        }
+      },
+      benchmarkPoll(request) {
+        const manager = ctx.get('skillManager')
+        if (manager === undefined) {
+          return Promise.resolve(err(request, { code: 'internal', message: 'skill manager is absent', details: {} }))
+        }
+        const run = manager.pollBenchmark(request.payload.runId)
+        if (run === undefined) {
+          return Promise.resolve(err(request, { code: 'skill-manager-error', message: `benchmark run "${request.payload.runId}" not found`, details: { code: 'benchmark-not-found' } }))
+        }
+        return Promise.resolve(ok(request, { run: benchmarkRunView(run) }))
+      },
+      benchmarkCancel(request) {
+        const manager = ctx.get('skillManager')
+        if (manager === undefined) {
+          return Promise.resolve(err(request, { code: 'internal', message: 'skill manager is absent', details: {} }))
+        }
+        const run = manager.cancelBenchmark(request.payload.runId)
+        if (run === undefined) {
+          return Promise.resolve(err(request, { code: 'skill-manager-error', message: `benchmark run "${request.payload.runId}" not found`, details: { code: 'benchmark-not-found' } }))
+        }
+        return Promise.resolve(ok(request, { run: benchmarkRunView(run) }))
+      },
+      benchmarkBatchStart(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return Promise.resolve(err(request, resolved.error))
+        try {
+          const runs = resolved.manager.startBenchmarkBatch({
+            cwd: resolved.cwd,
+            taskModel: request.payload.taskModel,
+            ...request.payload.evaluatorModel !== undefined ? { evaluatorModel: request.payload.evaluatorModel } : {},
+            ...request.payload.caseCount !== undefined ? { caseCount: request.payload.caseCount } : {},
+          }, request.payload.names)
+          return Promise.resolve(ok(request, { runs: runs.map(benchmarkRunView) }))
+        } catch (error: unknown) {
+          return Promise.resolve(managerError(request, error))
+        }
+      },
+      autoImprove(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return Promise.resolve(err(request, resolved.error))
+        try {
+          const run = resolved.manager.startAutoImprove({
+            skillName: request.payload.name,
+            cwd: resolved.cwd,
+            taskModel: request.payload.taskModel,
+            ...request.payload.evaluatorModel !== undefined ? { evaluatorModel: request.payload.evaluatorModel } : {},
+            ...request.payload.caseCount !== undefined ? { caseCount: request.payload.caseCount } : {},
+            maxIterations: request.payload.maxIterations ?? 5,
+            minImprovementPercent: request.payload.minImprovementPercent ?? 1,
+            stopOnRegression: request.payload.stopOnRegression ?? true,
+          })
+          return Promise.resolve(ok(request, { run: benchmarkRunView(run) }))
+        } catch (error: unknown) {
+          return Promise.resolve(managerError(request, error))
         }
       },
     },
@@ -3294,6 +3695,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           settingsPath: [...entry.settingsPath],
           active: active.has(entry.provider),
           ...entry.declared === undefined ? {} : { declared: entry.declared },
+          ...entry.oauth === undefined ? {} : { oauth: { ...entry.oauth } },
         }))
         // Routes registered without a directory declaration still appear —
         // they exist and serve models — just with no settings address. No
@@ -3335,6 +3737,62 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             code: 'model-discovery-failed',
             message: error instanceof Error ? error.message : String(error),
             details: { settingsNs, ...baseURL === undefined ? {} : { baseURL } },
+          })
+        }
+      },
+
+      async oauthLoginStart(request, signal) {
+        const { settingsNs, provider } = request.payload
+        try {
+          const challenge = await ctx.llm.startOAuthLogin(settingsNs, provider, signal)
+          return ok(request, challenge)
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'oauth-login-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs, provider },
+          })
+        }
+      },
+
+      async oauthLoginWait(request, signal) {
+        const { settingsNs, loginId } = request.payload
+        try {
+          await ctx.llm.waitOAuthLogin(settingsNs, loginId, signal)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'oauth-login-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs, loginId },
+          })
+        }
+      },
+
+      oauthLoginCancel(request) {
+        const { settingsNs, loginId } = request.payload
+        try {
+          ctx.llm.cancelOAuthLogin(settingsNs, loginId)
+          return Promise.resolve(ok(request, {}))
+        } catch (error: unknown) {
+          return Promise.resolve(err(request, {
+            code: 'oauth-login-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs, loginId },
+          }))
+        }
+      },
+
+      async oauthLogout(request) {
+        const { settingsNs, provider } = request.payload
+        try {
+          await ctx.llm.logoutOAuth(settingsNs, provider)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'oauth-login-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { settingsNs, provider },
           })
         }
       },
@@ -3655,4 +4113,217 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       return Promise.resolve({ accepted: true })
     },
   }
+}
+
+/**
+ * Resolve the skill manager service and the session's workspace for one
+ * manager RPC. Manager operations are session-addressed: the client never
+ * submits a raw path, and a cold session without a project cwd is refused.
+ * @param request - the RPC request whose payload names the session.
+ * @param ctx - host context carrying sessions and the manager service.
+ * @returns the manager and cwd, or the exact refusal error.
+ */
+function resolveSkillManager(
+  request: RpcRequest<{ sessionId: SessionId }>,
+  ctx: Context,
+): { kind: 'ok'; manager: import('@deepseek-ai/dsh-skill-manager').SkillManager; cwd: string }
+  | { kind: 'error'; error: RpcError } {
+  const { sessionId } = request.payload
+  const session = ctx.sessions.get(sessionId)
+  if (session === undefined) {
+    return {
+      kind: 'error',
+      error: {
+        code: 'session-not-found',
+        message: `session "${sessionId}" not found (not attached)`,
+        details: { sessionId },
+      },
+    }
+  }
+  if (session.header.cwd === undefined) {
+    return {
+      kind: 'error',
+      error: { code: 'internal', message: `session "${sessionId}" has no project cwd`, details: {} },
+    }
+  }
+  const manager = ctx.get('skillManager')
+  if (manager === undefined) {
+    return { kind: 'error', error: { code: 'internal', message: 'skill manager is absent', details: {} } }
+  }
+  return { kind: 'ok', manager, cwd: session.header.cwd }
+}
+
+/** Convert a skill-manager failure into the RPC error vocabulary. */
+function managerError(request: RpcRequest<unknown>, error: unknown): RpcResponse<never> {
+  if (error instanceof SkillManagerError) {
+    return err(request, {
+      code: 'skill-manager-error',
+      message: error.message,
+      details: { code: error.code },
+    })
+  }
+  return err(request, { code: 'internal', message: String(error), details: {} })
+}
+
+/** Project one managed summary onto the wire. */
+function managedSummaryView(summary: ManagedSkillSummary): import('./api/skills.ts').ManagedSkillSummaryView {
+  return {
+    name: summary.name,
+    description: summary.description,
+    ...summary.localizedDescription !== undefined ? { localizedDescription: summary.localizedDescription } : {},
+    ...summary.whenToUse !== undefined ? { whenToUse: summary.whenToUse } : {},
+    invocation: { modelInvocable: summary.invocation.modelInvocable, userInvocable: summary.invocation.userInvocable },
+    scope: summary.scope,
+    ...summary.path !== undefined ? { path: summary.path } : {},
+    source: summary.source,
+    enabled: summary.enabled,
+    status: summary.status,
+    version: summary.version,
+    versionsCount: summary.versionsCount,
+    ...summary.createdAt !== undefined ? { createdAt: summary.createdAt } : {},
+    ...summary.updatedAt !== undefined ? { updatedAt: summary.updatedAt } : {},
+    ...summary.lastBenchmark !== undefined ? { lastBenchmark: benchmarkSummaryView(summary.lastBenchmark) } : {},
+  }
+}
+
+/** Project one full managed skill onto the wire. */
+function managedSkillView(skill: ManagedSkill): import('./api/skills.ts').ManagedSkillView {
+  return {
+    ...managedSummaryView(skill),
+    content: skill.content,
+    versions: skill.versions.map(skillVersionView),
+    ...skill.metadata !== undefined ? { metadata: skill.metadata } : {},
+  }
+}
+
+/** Project one version record onto the wire. */
+function skillVersionView(version: SkillVersion): import('./api/skills.ts').SkillVersionView {
+  return {
+    id: version.id,
+    createdAt: version.createdAt,
+    reason: version.reason,
+    source: version.source,
+    ...version.benchmark !== undefined ? { benchmark: benchmarkSummaryView(version.benchmark) } : {},
+  }
+}
+
+/** Project one persisted benchmark summary onto the wire. */
+function benchmarkSummaryView(summary: ManagedSkillSummary['lastBenchmark']): import('./api/skills.ts').BenchmarkSummaryView {
+  if (summary === undefined) throw new Error('benchmark summary is required')
+  return {
+    runId: summary.runId,
+    at: summary.at,
+    version: summary.version,
+    taskModel: summary.taskModel,
+    evaluatorModel: summary.evaluatorModel,
+    baselineScore: summary.baselineScore,
+    skillScore: summary.skillScore,
+    improvementPercent: summary.improvementPercent,
+    verdict: summary.verdict,
+    baselineTokens: summary.baselineTokens,
+    skillTokens: summary.skillTokens,
+    baselineTimeMs: summary.baselineTimeMs,
+    skillTimeMs: summary.skillTimeMs,
+    baselineToolCalls: summary.baselineToolCalls,
+    skillToolCalls: summary.skillToolCalls,
+  }
+}
+
+/** Project a save outcome onto the wire. */
+function saveSkillResultView(result: SaveSkillResult): import('./api/skills.ts').SaveSkillResultView {
+  return {
+    name: result.name,
+    scope: result.scope,
+    path: result.path,
+    created: result.created,
+    version: result.version,
+    security: {
+      status: result.security.status,
+      findings: result.security.findings.map(finding => ({
+        severity: finding.severity,
+        rule: finding.rule,
+        message: finding.message,
+        evidence: finding.evidence,
+      })),
+    },
+  }
+}
+
+/** Project one live benchmark run onto the wire. */
+function benchmarkRunView(run: BenchmarkRun): import('./api/skills.ts').BenchmarkRunView {
+  const improve = run as Partial<AutoImproveRun>
+  return {
+    id: run.id,
+    skillName: run.skillName,
+    status: run.status,
+    phase: run.phase,
+    progress: run.progress,
+    ...run.result !== undefined ? { result: benchmarkResultView(run.result) } : {},
+    ...run.error !== undefined ? { error: run.error } : {},
+    createdAt: run.createdAt,
+    ...improve.iterations !== undefined ? { iterations: improve.iterations.map(iteration => ({
+      index: iteration.index,
+      version: iteration.version,
+      score: iteration.score,
+      accepted: iteration.accepted,
+      reason: iteration.reason,
+    })) } : {},
+    ...improve.bestVersion !== undefined ? { bestVersion: improve.bestVersion } : {},
+  }
+}
+
+/** Project one complete benchmark result onto the wire. */
+function benchmarkResultView(result: NonNullable<BenchmarkRun['result']>): import('./api/skills.ts').BenchmarkResultView {
+  return {
+    summary: benchmarkSummaryView(result.summary),
+    cases: result.cases.map(oneCase => ({
+      caseId: oneCase.caseId,
+      title: oneCase.title,
+      baselineScore: oneCase.baselineScore,
+      skillScore: oneCase.skillScore,
+      improvementPercent: oneCase.improvementPercent,
+      baselineTokens: oneCase.baselineTokens,
+      skillTokens: oneCase.skillTokens,
+      baselineTimeMs: oneCase.baselineTimeMs,
+      skillTimeMs: oneCase.skillTimeMs,
+      baselineToolCalls: oneCase.baselineToolCalls,
+      skillToolCalls: oneCase.skillToolCalls,
+      baselineError: oneCase.baselineError,
+      skillError: oneCase.skillError,
+      baselineOutput: oneCase.baselineOutput,
+      skillOutput: oneCase.skillOutput,
+      baselineComment: oneCase.baselineComment,
+      skillComment: oneCase.skillComment,
+    })),
+    criteria: result.criteria,
+    reasons: result.reasons,
+  }
+}
+
+/** Validate raw skill content against the shared parser. */
+function validateSkillContent(request: RpcRequest<{ content: string }>, ctx: Context): RpcResponse<{ ok: boolean; reason?: string }> {
+  const manager = ctx.get('skillManager')
+  if (manager === undefined) {
+    return err(request, { code: 'internal', message: 'skill manager is absent', details: {} })
+  }
+  const validation = manager.validate(request.payload.content)
+  return ok(request, validation.ok ? { ok: true } : { ok: false, reason: validation.reason })
+}
+
+/** Run the static security check over raw skill content. */
+function securityCheckSkillContent(request: RpcRequest<{ content: string }>, ctx: Context): RpcResponse<import('./api/skills.ts').SecurityVerdictView> {
+  const manager = ctx.get('skillManager')
+  if (manager === undefined) {
+    return err(request, { code: 'internal', message: 'skill manager is absent', details: {} })
+  }
+  const verdict = manager.securityCheck(request.payload.content)
+  return ok(request, {
+    status: verdict.status,
+    findings: verdict.findings.map(finding => ({
+      severity: finding.severity,
+      rule: finding.rule,
+      message: finding.message,
+      evidence: finding.evidence,
+    })),
+  })
 }

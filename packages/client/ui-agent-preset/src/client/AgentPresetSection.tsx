@@ -13,7 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  Button, IconBrowseOutline16, IconCopyOutline16, IconFolderOpenOutline16, IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
+  Button, IconBrowseOutline16, IconCopyOutline16, IconEditOutline16, IconFolderOpenOutline16, IconPlusOutline16, IconTrashOutline16, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -45,6 +45,8 @@ export interface AgentPresetSectionInjected {
   confirmCopy: () => Promise<void>
   /** Open one preset's directory, or reveal its path where there is no desktop. */
   openLocation: (id: string) => Promise<void>
+  /** Open one preset's composition file in the host text editor, or reveal it. */
+  edit: (id: string) => Promise<void>
   /**
    * Stage the self-referential preset and start a new session on it — the
    * guided way to author a preset, beside copying. Absent when the surface
@@ -309,15 +311,31 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
                           )
                           : null
                         : (
-                          <button
-                            type="button"
-                            className={css.iconButton}
-                            data-tip={state.hasDocument ? t('openLocation') : t('showLocation')}
-                            aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
-                            onClick={() => { void props.openLocation(row.id) }}
-                          >
-                            <IconFolderOpenOutline16 />
-                          </button>
+                          <>
+                            {/* Editing the composition is the direct way to
+                              paste a custom system prompt into the persona row;
+                              the folder is where every other file of the preset
+                              lives. Both answer with a text path where the
+                              deployment has no desktop opener. */}
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={t('edit')}
+                              aria-label={`${t('edit')}: ${text.name}`}
+                              onClick={() => { void props.edit(row.id) }}
+                            >
+                              <IconEditOutline16 />
+                            </button>
+                            <button
+                              type="button"
+                              className={css.iconButton}
+                              data-tip={state.hasDocument ? t('openLocation') : t('showLocation')}
+                              aria-label={`${state.hasDocument ? t('openLocation') : t('showLocation')}: ${text.name}`}
+                              onClick={() => { void props.openLocation(row.id) }}
+                            >
+                              <IconFolderOpenOutline16 />
+                            </button>
+                          </>
                         )}
                       <button
                         type="button"

@@ -190,6 +190,54 @@ describe('SubagentCatalogAction', () => {
     expect(screen.getByRole('treeitem', { name: /worker/ }).children).toHaveLength(1)
   })
 
+  it('shows the live last-activity detail of a running child in its row', () => {
+    const input = props(catalog({
+      entries: [{
+        kind: 'child', id: CHILD, mode: 'continuable', label: 'worker',
+        activity: 'running', hasChildren: false,
+      }],
+    }), {}, {
+      [CHILD]: {
+        ...summary(CHILD, Date.now()),
+        parentId: PARENT,
+        origin: 'subagent',
+        running: true,
+        projectionValues: {
+          subagentActivity: { status: 'running', detail: 'pwsh' },
+        } as unknown as SessionSummary['projectionValues'],
+      },
+    } as Record<SessionId, SessionSummary>)
+    render(<SubagentCatalogAction {...input} />)
+    fireEvent.click(screen.getByRole('button', { name: /1 个子代理/ }))
+
+    const row = screen.getByRole('treeitem', { name: /worker/ })
+    expect(row.textContent).toContain('pwsh')
+  })
+
+  it('omits the activity detail for an idle child', () => {
+    const input = props(catalog({
+      entries: [{
+        kind: 'child', id: CHILD, mode: 'continuable', label: 'worker',
+        activity: 'inactive', hasChildren: false,
+      }],
+    }), {}, {
+      [CHILD]: {
+        ...summary(CHILD, Date.now()),
+        parentId: PARENT,
+        origin: 'subagent',
+        running: false,
+        projectionValues: {
+          subagentActivity: { status: 'idle', detail: 'pwsh' },
+        } as unknown as SessionSummary['projectionValues'],
+      },
+    } as Record<SessionId, SessionSummary>)
+    render(<SubagentCatalogAction {...input} />)
+    fireEvent.click(screen.getByRole('button', { name: /1 个子代理/ }))
+
+    const row = screen.getByRole('treeitem', { name: /worker/ })
+    expect(row.textContent).not.toContain('pwsh')
+  })
+
   it('supports trigger/menu keyboard traversal, Escape focus restore, and outside close', async () => {
     const input = props(catalog())
     render(<SubagentCatalogAction {...input} />)

@@ -266,3 +266,45 @@ describe('model discovery registry', () => {
     await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
   })
 })
+
+describe('OAuth login registry', () => {
+  it('dispatches start/wait/cancel/logout to the namespace handler', async () => {
+    const ctx = await setup()
+    const start = vi.fn(() => Promise.resolve({
+      loginId: 'login-1',
+      provider: 'xai',
+      userCode: 'ABCD',
+      verificationUri: 'https://auth.x.ai/device',
+      loginLabel: 'Sign in',
+    }))
+    const wait = vi.fn(() => Promise.resolve())
+    const cancel = vi.fn()
+    const logout = vi.fn(() => Promise.resolve())
+    const dispose = ctx.llm.registerOAuthLogin('llm-pi-ai', { start, wait, cancel, logout })
+
+    await expect(ctx.llm.startOAuthLogin('llm-pi-ai', 'xai')).resolves.toMatchObject({ loginId: 'login-1' })
+    await ctx.llm.waitOAuthLogin('llm-pi-ai', 'login-1')
+    ctx.llm.cancelOAuthLogin('llm-pi-ai', 'login-1')
+    await ctx.llm.logoutOAuth('llm-pi-ai', 'xai')
+    expect(start).toHaveBeenCalledWith('xai', undefined)
+    expect(wait).toHaveBeenCalledWith('login-1', undefined)
+    expect(cancel).toHaveBeenCalledWith('login-1')
+    expect(logout).toHaveBeenCalledWith('xai')
+
+    dispose()
+    expect(() => { ctx.llm.cancelOAuthLogin('llm-pi-ai', 'login-1') }).toThrow(/no OAuth login is registered/)
+  })
+
+  it('rejects an unnamed namespace and a second registration of the same one', async () => {
+    const ctx = await setup()
+    const handlers = {
+      start: () => Promise.reject(new Error('unused')),
+      wait: () => Promise.resolve(),
+      cancel: () => undefined,
+      logout: () => Promise.resolve(),
+    }
+    expect(() => ctx.llm.registerOAuthLogin('', handlers)).toThrow(/non-empty settings namespace/)
+    ctx.llm.registerOAuthLogin('llm-pi-ai', handlers)
+    expect(() => ctx.llm.registerOAuthLogin('llm-pi-ai', handlers)).toThrow(/already registered/)
+  })
+})

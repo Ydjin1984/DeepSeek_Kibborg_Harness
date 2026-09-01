@@ -18,6 +18,12 @@
 
 使用原生认证的提供方需要各自的原生凭据。Bedrock、Vertex、Azure 和 Codex 分别使用 AWS 凭据与区域、ADC 项目、`api-version` 和 OAuth；只填写 API 密钥字段无法完成配置。
 
+## 使用 SuperGrok 登录
+
+选择**添加提供方**，选取 **xai**，不要填 API 密钥，改用 **Sign in with SuperGrok or X Premium**。宿主在 `auth.x.ai` 启动设备码登录，在浏览器中批准即可。令牌写入 `$DSH_HOME/.credentials.yaml` 的 `XAI_OAUTH`，不会读取 Grok CLI 的 `~/.grok/auth.json`。用量计入 SuperGrok 或 X Premium 额度，而不是 xAI API 按量计费。会话仍走 Harness 的 agent loop 和 Harness 工具；xAI 只提供模型。
+
+同一张 xai 卡片上如果填了 API 密钥，密钥优先。退出登录只清除 OAuth 凭据，提供方行保留。
+
 ## 添加自定义提供方
 
 对于公司网关、自建服务器或已安装目录中不存在的提供方，选择**添加自定义提供方**。提供小写 Provider ID、基础 URL、API 协议、凭据和至少一个模型。

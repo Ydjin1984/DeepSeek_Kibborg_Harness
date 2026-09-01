@@ -20,6 +20,10 @@ export const zh = {
   active: '已挂载',
   failed: '挂载失败',
   unloading: '卸载中',
+  enable: '启用',
+  disable: '停用',
+  toggleBusy: '切换中…',
+  toggleError: '切换失败：{message}',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -45,4 +49,34 @@ export const en = {
   active: 'Mounted',
   failed: 'Mount failed',
   unloading: 'Unloading',
+  enable: 'Enable',
+  disable: 'Disable',
+  toggleBusy: 'Switching…',
+  toggleError: 'Failed to switch: {message}',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** Russian dictionary checked against the Chinese key set. */
+export const ru = {
+  tab: 'Список плагинов',
+  loading: 'Чтение плагинов…',
+  error: 'Плагины временно недоступны.',
+  retry: 'Повторить',
+  search: 'Поиск плагинов',
+  catalog: 'Список плагинов',
+  empty: 'Плагины отсутствуют.',
+  emptySearch: 'Нет подходящих плагинов.',
+  enabledTag: 'Включён',
+  disabledTag: 'Отключён',
+  configuration: 'Конфигурация',
+  cordis: 'Состояние Cordis',
+  unobserved: 'Не смонтирован',
+  pending: 'Ожидание зависимостей',
+  loadingPhase: 'Загрузка',
+  active: 'Смонтирован',
+  failed: 'Сбой монтирования',
+  unloading: 'Размонтирование',
+  enable: 'Включить',
+  disable: 'Отключить',
+  toggleBusy: 'Переключение…',
+  toggleError: 'Не удалось переключить: {message}',
 } satisfies Record<PluginInventoryLocaleKey, string>

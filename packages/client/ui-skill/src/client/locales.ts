@@ -8,6 +8,8 @@ export const zh = {
   'row.running': '正在加载 skill',
   'row.failed': 'skill 加载失败',
   'row.stopped': 'skill 加载已中止',
+  'row.title': 'Skill',
+  'row.inspect': '检查',
   'row.instructions': '说明',
   'menu.userOnly': '仅用户',
 } satisfies Record<string, string>
@@ -20,6 +22,19 @@ export const en = {
   'row.running': 'Loading skill',
   'row.failed': 'Skill load failed',
   'row.stopped': 'Skill load stopped',
+  'row.title': 'Skill',
+  'row.inspect': 'Inspect',
   'row.instructions': 'Instructions',
   'menu.userOnly': 'user-only',
+} satisfies Record<SkillKey, string>
+
+/** Russian dictionary, checked complete against the zh key set. */
+export const ru = {
+  'row.running': 'Загрузка skill',
+  'row.failed': 'Не удалось загрузить skill',
+  'row.stopped': 'Загрузка skill прервана',
+  'row.title': 'Skill',
+  'row.inspect': 'Проверить',
+  'row.instructions': 'Инструкции',
+  'menu.userOnly': 'только пользователь',
 } satisfies Record<SkillKey, string>

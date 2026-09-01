@@ -1,0 +1,185 @@
+/* ExecutionEventRow: timeline event chrome — icon rail, wall clock, type
+   badge, headline fields, counts, status dot, chevron; expanded body below. */
+
+.row {
+  position: relative;
+  padding: 2px 16px 2px 12px;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  margin-left: 10px;
+}
+
+/* The running row's border pulses with the business color. */
+.row[data-status='running'] {
+  border-left-color: var(--dsw-alias-state-business-primary);
+}
+
+.row[data-status='error'] {
+  border-left-color: var(--dsw-alias-state-error-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.header:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.header:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -1px;
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.row[data-status='running'] .icon {
+  color: var(--dsw-alias-state-business-primary);
+  animation: dsh-execution-spin 1.1s linear infinite;
+}
+
+.row[data-status='error'] .icon {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.row[data-status='success'] .icon {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.row[data-status='warning'] .icon {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+@keyframes dsh-execution-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.time {
+  flex: none;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
+.typeBadge {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.typeBadge[data-category='agent'] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.typeBadge[data-category='files'] {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.typeBadge[data-category='terminal'] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title mark,
+.summary mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 28%, transparent);
+  color: inherit;
+}
+
+.counts {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  margin-left: auto;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.add {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.del {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.duration {
+  flex: none;
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 11px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-caption);
+}
+
+.state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--dsw-alias-label-caption);
+}
+
+.body {
+  padding: 4px 8px 8px 36px;
+  min-width: 0;
+}

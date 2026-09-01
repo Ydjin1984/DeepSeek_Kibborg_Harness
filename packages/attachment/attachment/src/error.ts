@@ -15,9 +15,22 @@ const IMAGE_ADMISSION_ERROR_CODES = [
 /** Caller-correctable attachment failure codes raised while admitting image input. */
 export type ImageAdmissionErrorCode = typeof IMAGE_ADMISSION_ERROR_CODES[number]
 
+/** Caller-correctable attachment failure codes raised while admitting file input. */
+export const FILE_ADMISSION_ERROR_CODES = [
+  'TOO_MANY_FILES',
+  'FILES_TOO_LARGE',
+  'FILE_TOO_LARGE',
+  'INVALID_FILE_BASE64',
+] as const
+
+/** Caller-correctable attachment failure codes raised while admitting file input. */
+export type FileAdmissionErrorCode = typeof FILE_ADMISSION_ERROR_CODES[number]
+
 /** Stable attachment failure codes used for protocol error routing. */
 export type AttachmentErrorCode =
   | ImageAdmissionErrorCode
+  | FileAdmissionErrorCode
+  | 'FILE_STORAGE_FAILED'
   | 'INVALID_ATTACHMENT_REF'
   | 'ATTACHMENT_CORRUPT'
   | 'ATTACHMENT_WRITE_FAILED'

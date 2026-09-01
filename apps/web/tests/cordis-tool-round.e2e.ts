@@ -18,7 +18,7 @@ import {
   captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, saveFailureShot, selectChatView } from './support.ts'
 
 const FIXTURE = fileURLToPath(new URL('./snapshots/cordis-tool-round/session.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/cordis-tool-round/ui.expected.md', import.meta.url))
@@ -113,6 +113,11 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     // turn, matching the recorded replay and keeping turn grouping deterministic.
     const approvalTurnSettled = scaffold.whenTurnSettled()
     await approve.click()
+    // The Execution view is the conversation default; the turn rendered
+    // visible content, so switch to Chat before the chat-flow assertions. This
+    // must come AFTER the approval click: a pointer outside the Cordis panel
+    // dismisses it (outside-pointer dismissal), and the panel is the gate.
+    await selectChatView(page)
     await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: 30_000 }).toBe(1)
     await approvalTurnSettled
     await expect.poll(() => page.getByText('The Cordis Plugin is running.', { exact: true }).count(), { timeout: 15_000 })

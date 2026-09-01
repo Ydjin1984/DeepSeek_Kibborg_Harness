@@ -114,6 +114,14 @@ function fakeApi(
           ? ok({ opened: true })
           : ok({ opened: false, path: `/presets/${payload.agentPreset}` })
       },
+      openComposition: (payload: { agentPreset: string }) => {
+        record('openComposition', payload)
+        if (options.throwOpen === true) return Promise.reject(new Error('socket closed'))
+        if (options.failOpen !== undefined) return fail(options.failOpen)
+        return (options.hasDocument ?? true)
+          ? ok({ opened: true })
+          : ok({ opened: false, path: `/presets/${payload.agentPreset}/agent.cordis.yml` })
+      },
       remove: async (payload: { agentPreset: string }) => {
         record('remove', payload)
         await options.holdRemove
@@ -427,6 +435,25 @@ describe('the location action', () => {
 
     expect(calls.find(call => call.method === 'openDocument')?.payload).toEqual({ agentPreset: 'mine' })
     expect(controller.store.getSnapshot().revealedPaths).toEqual({})
+  })
+
+  it('opens the composition file and leaves the page alone on a desktop host', async () => {
+    const { controller, calls } = harness()
+    await controller.load()
+
+    await controller.edit('mine')
+
+    expect(calls.find(call => call.method === 'openComposition')?.payload).toEqual({ agentPreset: 'mine' })
+    expect(controller.store.getSnapshot().revealedPaths).toEqual({})
+  })
+
+  it('reveals the composition file on the row where the host has none', async () => {
+    const { controller } = harness({ hasDocument: false })
+    await controller.load()
+
+    await controller.edit('mine')
+
+    expect(controller.store.getSnapshot().revealedPaths).toEqual({ mine: '/presets/mine/agent.cordis.yml' })
   })
 
   it('reveals the path on the row where the host has none', async () => {

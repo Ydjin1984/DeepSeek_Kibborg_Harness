@@ -169,6 +169,20 @@ describe('DiffBlock copy', () => {
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
   })
 
+  it('renders owner-supplied labels over the built-in copy', () => {
+    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: 'old', newText: 'new' }]
+    render(<DiffBlock
+      diffs={diffs}
+      labels={{
+        copy: 'Copy',
+        copied: 'Copied',
+        footer: (added, removed, files) => `${added}+ ${removed}- ${files} files`,
+      }}
+    />)
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+    expect(screen.getByText('1+ 1- 1 files')).toBeTruthy()
+  })
+
   it('ignores a second click while the copied label is showing', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn().mockResolvedValue(undefined)

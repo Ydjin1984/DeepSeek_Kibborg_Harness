@@ -283,6 +283,7 @@ describe('a capability the session\'s preset mounts', () => {
         list: () => Promise.resolve([{
           name: 'preset-owned',
           description: 'ships inside the preset directory',
+          localizedDescription: { zh: '预设目录自带的技能', ru: 'Навык из каталога пресета' },
           invocation: { modelInvocable: true, userInvocable: true },
         }]),
       },
@@ -293,6 +294,10 @@ describe('a capability the session\'s preset mounts', () => {
     // A preset ships its own skill directory, so the catalog IS the
     // session's; reading a host singleton would answer for the wrong one.
     expect(response.result).toMatchObject({ ok: true, value: { skills: [{ name: 'preset-owned' }] } })
+    expect(response.result).toMatchObject({
+      ok: true,
+      value: { skills: [{ localizedDescription: { zh: '预设目录自带的技能', ru: 'Навык из каталога пресета' } }] },
+    })
     services.delete('k1')
   })
 
@@ -576,6 +581,22 @@ describe('opening a preset directory', () => {
     expect(response.result.value).toEqual({ opened: false, path: '/presets/my-preset' })
   })
 
+  it('falls back to the path as text when the native opener fails', async () => {
+    const { api } = await harness(['standard', 'my-preset'], undefined, {
+      userIds: ['my-preset'],
+      defaults: { openPath: () => Promise.reject(new Error('no desktop session')) },
+    })
+
+    const response = await api.agentPresets.openDocument(
+      request({ agentPreset: 'my-preset' }), new AbortController().signal)
+
+    // A desktop handoff that fails must not leave the gesture dead: the row
+    // shows the directory instead of a bare error.
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value).toEqual({ opened: false, path: '/presets/my-preset' })
+  })
+
   it('refuses a preset that ships with the deployment', async () => {
     const opened: string[] = []
     const { api } = await harness(['standard'], undefined, {
@@ -616,6 +637,54 @@ describe('opening a preset directory', () => {
     const response = await api.agentPresets.list(request({}))
 
     expect(response.result.ok && response.result.value.hasDocument).toBe(true)
+  })
+})
+
+describe('opening a preset composition for editing', () => {
+  it('hands the resolved composition file to the text editor', async () => {
+    const opened: string[] = []
+    const { api } = await harness(['standard', 'my-preset'], undefined, {
+      userIds: ['my-preset'],
+      defaults: { openTextFile: (path: string) => { opened.push(path); return Promise.resolve() } },
+    })
+
+    const response = await api.agentPresets.openComposition(
+      request({ agentPreset: 'my-preset' }), new AbortController().signal)
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value).toEqual({ opened: true })
+    // The id selected the composition file; the browser supplied no path.
+    expect(opened).toEqual(['/presets/my-preset/agent.cordis.yml'])
+  })
+
+  it('answers the file path as text where the deployment has no editor', async () => {
+    const { api } = await harness(['standard', 'my-preset'], undefined, {
+      userIds: ['my-preset'],
+      defaults: { canOpenPath: () => false },
+    })
+
+    const response = await api.agentPresets.openComposition(
+      request({ agentPreset: 'my-preset' }), new AbortController().signal)
+
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value).toEqual({ opened: false, path: '/presets/my-preset/agent.cordis.yml' })
+  })
+
+  it('refuses a preset that ships with the deployment', async () => {
+    const opened: string[] = []
+    const { api } = await harness(['standard'], undefined, {
+      defaults: { openTextFile: (path: string) => { opened.push(path); return Promise.resolve() } },
+    })
+
+    const response = await api.agentPresets.openComposition(
+      request({ agentPreset: 'standard' }), new AbortController().signal)
+
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) throw new Error('unreachable')
+    expect(response.result.error.code).toBe('agent-preset-read-only')
+    expect(opened).toEqual([])
   })
 })
 

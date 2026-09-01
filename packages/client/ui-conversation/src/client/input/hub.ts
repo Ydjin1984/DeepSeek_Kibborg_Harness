@@ -11,8 +11,8 @@
 import type { ClientContext, ISessions, SessionBinding, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { InputTriggerController, SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
-import { queueReadFaceOf } from '../queue/store.ts'
-import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, SessionInput } from './contract.ts'
+import { queueReadFaceOf } from '../contract/queue-read.ts'
+import type { ComposerKeyboard, DraftAttachmentId, SessionInputResolver, SessionInput } from '../contract/input.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type { PopupDismissFace } from './facade.ts'
 import { SessionInputShell } from './facade.ts'
@@ -28,11 +28,14 @@ interface ConversationAttachmentFace {
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome>
   serializeDraftImages(imageIds: readonly DraftAttachmentId[]): Promise<readonly SubmitImageAttachment[]>
   releaseDraftImage(id: DraftAttachmentId): void
+  createDraftFiles(files: readonly File[]): readonly { readonly id: DraftAttachmentId }[]
+  releaseDraftFile(id: DraftAttachmentId): void
 }
 
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
@@ -77,7 +80,8 @@ export class InputHub implements SessionInputResolver {
       inputTriggers: () => this.controller(actx),
       popup: () => this.popup(actx),
       queue: queueReadFaceOf(session),
-      defaultSink: (text, imageIds, mode, signal) => this.sink(session, text, imageIds, mode, signal),
+      defaultSink: (text, imageIds, fileIds, mode, signal) =>
+        this.sink(session, text, imageIds, fileIds, mode, signal),
       steerQueue: () => { void this.steerQueue(session, shell) },
       commandImages: {
         serialize: ids => this.conversation().serializeDraftImages(ids),
@@ -90,6 +94,21 @@ export class InputHub implements SessionInputResolver {
           for (const imageId of ids) conversation?.releaseDraftImage(imageId)
         },
         unsupportedNotice: token => this.t('command.imagesUnsupported', {
+          command: token.trim().replace(/^\//u, ''),
+        }),
+      },
+      commandFiles: {
+        // Files have no preview URL and no format gate: minting is
+        // synchronous and cannot reject, so the shell appends the ids and
+        // reports success; the paperclip stays disabled during admission
+        // phases where the append would be refused.
+        create: files => this.conversation().createDraftFiles(files).map(file => file.id),
+        // Same late-teardown tolerance as commandImages.release.
+        release: (ids) => {
+          const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
+          for (const id of ids) conversation?.releaseDraftFile(id)
+        },
+        unsupportedNotice: token => this.t('command.filesUnsupported', {
           command: token.trim().replace(/^\//u, ''),
         }),
       },
@@ -111,10 +130,12 @@ export class InputHub implements SessionInputResolver {
       return () => {
         for (const off of offs) off()
         const drafts = shell.snapshot.imageIds
+        const files = shell.snapshot.fileIds
         shell.dispose()
         this.shells.delete(id)
         const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
         for (const imageId of drafts) conversation?.releaseDraftImage(imageId)
+        for (const fileId of files) conversation?.releaseDraftFile(fileId)
       }
     }, 'conversation.input: session shell')
     return shell
@@ -166,11 +187,14 @@ export class InputHub implements SessionInputResolver {
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
-    if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
-    return this.conversation().sendSession(session, text, imageIds, mode, signal)
+    if (text === '' && imageIds.length === 0 && fileIds.length === 0) {
+      return Promise.resolve({ kind: 'success' })
+    }
+    return this.conversation().sendSession(session, text, imageIds, fileIds, mode, signal)
   }
 
   /**

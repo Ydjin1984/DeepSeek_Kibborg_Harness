@@ -220,7 +220,38 @@ describe('candidates', () => {
     const { source, listCalls } = await bench()
     const list = await source.candidates(proj('s1'), req('g'))
     expect(listCalls).toEqual([{ sessionId: sid('s1') }])
-    expect(list).toEqual([{ name: 'goal', description: 'leadingInput kind', hint: 'goal text' }])
+    expect(list).toEqual([{
+      name: 'goal',
+      label: 'command:menu.goal',
+      description: 'command:menu.goal.description',
+      hint: 'goal text',
+    }])
+  })
+
+  it('localizes menu rows for dictionary-known commands and keeps raw copy for unknown ones', async () => {
+    const { source } = await bench()
+    const list = await source.candidates(proj('s2'), req(''))
+    // Known names carry the localized label/description; unknown ones keep the
+    // raw catalog copy (the fake locale echoes `command:<key>`).
+    expect(list).toEqual([
+      {
+        name: 'plan',
+        label: 'command:menu.plan',
+        description: 'command:menu.plan.description',
+      },
+      {
+        name: 'goal',
+        label: 'command:menu.goal',
+        description: 'command:menu.goal.description',
+        hint: 'goal text',
+      },
+      {
+        name: 'attach',
+        label: 'attach',
+        description: 'scoped shadow',
+        hint: 'path',
+      },
+    ])
   })
 
   it('matches case-insensitive subsequences and ranks prefixes, boundaries, adjacency, gaps, then source order', async () => {

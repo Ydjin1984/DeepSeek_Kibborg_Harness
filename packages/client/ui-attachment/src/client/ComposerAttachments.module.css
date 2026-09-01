@@ -2,3 +2,55 @@
   min-width: 0;
   padding: 4px 12px 0;
 }
+
+/* Any-format file drafts: one chip per file with a remove control. */
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 6px;
+  background: var(--dsw-surface-2, rgba(128, 128, 128, 0.12));
+}
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.chipSize {
+  flex: none;
+  font-size: 11px;
+  line-height: 20px;
+  opacity: 0.6;
+}
+
+.chipRemove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.chipRemove:hover {
+  background: rgba(128, 128, 128, 0.18);
+}

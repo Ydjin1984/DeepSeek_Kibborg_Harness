@@ -13,7 +13,7 @@ import { z } from 'zod'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
@@ -341,5 +341,48 @@ describe('session/projection push frame', () => {
     seedMessages(session, 2)
     await drained
     expect(frames.some(f => f.type === 'session/projection')).toBe(false)
+  })
+
+  it('restricts subagentActivity push frames to subagent-origin sessions', async () => {
+    const { ctx, session } = await harness(true)
+    type ActivityState = { status: 'running' | 'idle'; detail: string }
+    ctx.sessionProjections.register({
+      key: 'subagentActivity',
+      schema: z.object({ status: z.enum(['running', 'idle']), detail: z.string() }),
+      init: (): ActivityState => ({ status: 'idle', detail: '' }),
+      apply: (state, event) => event.type === 'tool/call'
+        ? { status: 'running' as const, detail: (event.data as { name: string }).name }
+        : state,
+      view: state => state,
+      stateVersion: 1,
+    })
+    const child = ctx.sessions.create(undefined, { meta: { origin: 'subagent' } })
+    ctx.agents.register({ id: child.id, session: child, inbox: new Inbox(child, { inserted: () => {}, discarded: () => {}, claimed: () => {} }), status: 'idle', ctx } as Agent)
+    const proxy = api(ctx)
+    // The gateway's onChanged subscription lives in an inject child whose
+    // fiber activates asynchronously; yield until it lands before appending.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const abort = new AbortController()
+    const stream = proxy.events.mux({ rpcId: RpcId('t-subact-mux'), payload: {} }, abort.signal)
+    const frames: MuxFrame[] = []
+    const drained = (async () => {
+      for await (const envelope of stream) {
+        frames.push(envelope.payload)
+        if (frames.filter(f => f.type === 'session/projection' && f.key === 'subagentActivity').length >= 1) {
+          abort.abort()
+        }
+      }
+    })().catch(() => {})
+    // The unit folds for the ordinary session too, but the gateway must drop
+    // its frame; only the subagent child's frame reaches mux consumers.
+    session.append('tool/call', { turn: 1, step: 1, callId: CallId('c-ordinary'), name: 'pwsh', arguments: '{}' })
+    child.append('tool/call', { turn: 1, step: 1, callId: CallId('c-child'), name: 'pwsh', arguments: '{}' })
+    await drained
+    const pushes = frames.filter(
+      (f): f is Extract<MuxFrame, { type: 'session/projection' }> =>
+        f.type === 'session/projection' && f.key === 'subagentActivity',
+    )
+    expect(pushes).toHaveLength(1)
+    expect(pushes[0]?.sessionId).toBe(child.id)
   })
 })

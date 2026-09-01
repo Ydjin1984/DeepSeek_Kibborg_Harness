@@ -108,7 +108,7 @@ export function MenuView({ menu, onPick, onDismiss, t }: MenuViewProps) {
                         }}
                       >
                         {item.icon !== undefined && <span className={css.itemIcon} aria-hidden>{item.icon}</span>}
-                        <span className={css.itemName}>{item.name}</span>
+                        <span className={css.itemName}>{item.label ?? item.name}</span>
                         {item.description !== undefined && <span className={css.itemDescription}>{item.description}</span>}
                       </button>
                     </Fragment>

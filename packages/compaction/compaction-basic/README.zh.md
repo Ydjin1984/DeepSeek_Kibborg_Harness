@@ -20,6 +20,7 @@
 - **生命周期**：所有入口点共享一个先记录标记的区域事务。它会验证范围与活动锁，同步追加 `compaction/start`，准备并等待摘要，重新验证，再追加 `compaction/summary` 和替换，最后恰好进行一次闭合尝试。自动调用和显式范围调用要求数字标识的开放轮次归属，并要求整个表层保持稳定；串行 `agent/pre-step` listener 会在派生请求之前检查压力，而规范提供方溢出则经由 `agent/request-error` 进入，并且只在表层取得持久进展后才允许重试。`compactNow()` 会预留空闲接纳，使用 `turn: null`，允许所选 span 之外追加仅追加上下文，flush 每次已闭合尝试，并在 `finally` 中释放接纳预留。
 - **溢出恢复**：提供方已确认的溢出不需容量元数据。它会绕过常规压力与保留，执行剪枝，再尝试一次最大平衡头部缩减，并留下最新不可分单元。只要 `surface.replaceGeneration` 前进，就允许重试，包括剪枝在后续摘要工作抛出异常前已落地的情况。如果没有替换、目标特定上限已耗尽、已取消，或遇到未知／非规范错误，则保留原始提供方失败。
 - **失败处理**：活动的未匹配 `compaction/start` 是持久锁。位于较新 `session/end-seed` 之前的未匹配标记，是先前生命周期留下的陈旧证据，不会阻塞；位于该边界之后的标记报告 `busy`。摘要和 span 变更失败会以错误闭合，并保持会话表层不变，但日志中仍保留该尝试。闭合失败会有意留下阻塞性的未匹配标记。压力检查中的运行故障会发出警告并继续；只有此前没有替换推进表层时，溢出恢复失败才保留原始提供方错误。完成清理与持久化后，取消仍具有最终决定权。
+- **只读状态投影**：注册 `compaction` 会话投影单元：`auto` 标志、当前路由解析出的 `thresholdRatio`（精确的 `modelPolicies` 覆盖或顶层默认值），以及进行中的 `active` 锁。该单元只折叠 `compaction/start…end` 括号、`request/context` 路由记录与 `session/end-seed` 陈旧孤儿重置，因此浏览器界面可以按能力门控手动压缩控件、在自动阈值处着色，并在压缩进行中禁用。注册是引擎的可选子项（没有 `ctx.sessionProjections` 的组合保持独立的读取形态）。
 
 受保护的 `summarize()` 方法是唯一的子类钩子。基于模板或远程摘要器的子类可以覆盖该方法，同时压力、保留、被引用的源事件、缩减验证与已遮蔽 token 计量仍由 `ctx.tokenMeter` 负责。钩子返回安全摘要，以及完整提供方输出、调用 envelope 和可用时的 usage（`{ summary, rawOutput?, llmStreamCall?, provider, model, maxTokens?, usage? }`）；`llmStreamCall: true` 表示生成该结果时恰好通过此上下文的 `ctx.llm.stream()` 发起了一次调用，且必须提供完整的 `rawOutput`；未带标记的 `rawOutput` 并不能判定调用路径。事务会在 `compaction/summary` 上保留这些字段。
 
