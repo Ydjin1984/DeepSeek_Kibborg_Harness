@@ -155,6 +155,7 @@ export function fakeActions(over: Partial<SkillsActions> = {}): SkillsActions {
   const setEnabled = vi.fn<SkillsActions['setEnabled']>()
   const versions = vi.fn<SkillsActions['versions']>()
   const rollback = vi.fn<SkillsActions['rollback']>()
+  const activate = vi.fn<SkillsActions['activate']>()
   const validate = vi.fn<SkillsActions['validate']>()
   const securityCheck = vi.fn<SkillsActions['securityCheck']>()
   const benchmarkStart = vi.fn<SkillsActions['benchmarkStart']>()
@@ -180,6 +181,7 @@ export function fakeActions(over: Partial<SkillsActions> = {}): SkillsActions {
   setEnabled.mockResolvedValue(undefined)
   versions.mockResolvedValue([version()])
   rollback.mockResolvedValue('v1')
+  activate.mockResolvedValue('v1')
   validate.mockResolvedValue({ ok: true })
   securityCheck.mockResolvedValue(cleanVerdict)
   benchmarkStart.mockResolvedValue(benchmarkRun())
@@ -190,7 +192,7 @@ export function fakeActions(over: Partial<SkillsActions> = {}): SkillsActions {
 
   const actions: SkillsActions = {
     listManaged, trash, read, save, remove, restore, permanentDelete, setEnabled,
-    versions, rollback, validate, securityCheck, benchmarkStart, benchmarkPoll,
+    versions, rollback, activate, validate, securityCheck, benchmarkStart, benchmarkPoll,
     benchmarkCancel, benchmarkBatchStart, listModels,
     ...over,
   }

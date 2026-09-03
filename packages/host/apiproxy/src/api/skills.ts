@@ -231,6 +231,8 @@ export interface SkillsApi {
   versions(request: RpcRequest<{ sessionId: SessionId; name: string }>): Promise<RpcResponse<{ versions: readonly SkillVersionView[] }>>
   /** Rolls one managed skill back to an earlier version. */
   rollback(request: RpcRequest<{ sessionId: SessionId; name: string; version: string }>): Promise<RpcResponse<{ activeVersion: string }>>
+  /** Makes one published version the active default without publishing a new version event. */
+  activate(request: RpcRequest<{ sessionId: SessionId; name: string; version: string }>): Promise<RpcResponse<{ activeVersion: string }>>
   /** Validates raw SKILL.md content with the shared parser. */
   validate(request: RpcRequest<{ content: string }>): Promise<RpcResponse<{ ok: boolean; reason?: string }>>
   /** Runs the static security check over raw SKILL.md content. */

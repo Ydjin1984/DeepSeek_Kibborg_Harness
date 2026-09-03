@@ -136,6 +136,29 @@ describe('skill-manager gateway surface', () => {
     expect(read.result.value.skill?.content).toContain('v1')
   })
 
+  it('activates an existing version as the default without publishing a new version', async () => {
+    const { api } = await harness()
+    await api.skills.save(request({ sessionId: SessionId('s1'), name: 'demo-skill', content: validSkill('demo-skill', 'First', 'v1'), scope: 'project' }))
+    await api.skills.save(request({ sessionId: SessionId('s1'), name: 'demo-skill', content: validSkill('demo-skill', 'Second', 'v2'), scope: 'project', replace: true }))
+    const activated = await api.skills.activate(request({ sessionId: SessionId('s1'), name: 'demo-skill', version: 'v1' }))
+    expect(activated.result.ok).toBe(true)
+    if (!activated.result.ok) throw new Error('unreachable')
+    // Activation selects a published version; the active id is that version.
+    expect(activated.result.value.activeVersion).toBe('v1')
+    const read = await api.skills.read(request({ sessionId: SessionId('s1'), name: 'demo-skill' }))
+    if (!read.result.ok) throw new Error('unreachable')
+    expect(read.result.value.skill?.content).toContain('v1')
+    expect(read.result.value.skill?.version).toBe('v1')
+    // No new version event was published.
+    const versions = await api.skills.versions(request({ sessionId: SessionId('s1'), name: 'demo-skill' }))
+    if (!versions.result.ok) throw new Error('unreachable')
+    expect(versions.result.value.versions.map(version => version.id)).toEqual(['v2', 'v1'])
+    const missing = await api.skills.activate(request({ sessionId: SessionId('s1'), name: 'demo-skill', version: 'v99' }))
+    expect(missing.result.ok).toBe(false)
+    if (missing.result.ok) throw new Error('unreachable')
+    expect(missing.result.error.details).toMatchObject({ code: 'version-not-found' })
+  })
+
   it('starts, polls, and cancels a benchmark run', async () => {
     const { api } = await harness()
     await api.skills.save(request({ sessionId: SessionId('s1'), name: 'demo-skill', content: validSkill('demo-skill'), scope: 'project' }))

@@ -159,6 +159,15 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async openPath(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { opened: true as const } } }
       },
+      async listChildren(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path, entries: [], truncated: false } } }
+      },
+      async readTextFile(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path, name: 'file.md', text: '# stub' } } }
+      },
+      async writeTextFile(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { path: request.payload.path } } }
+      },
     },
     workspace: {
       async list(request) {
@@ -268,6 +277,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return { rpcId: request.rpcId, result: { ok: true, value: { versions: [] } } }
       },
       async rollback(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { activeVersion: request.payload.version } } }
+      },
+      async activate(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { activeVersion: request.payload.version } } }
       },
       async validate(request) {

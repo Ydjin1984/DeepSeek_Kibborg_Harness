@@ -1,8 +1,11 @@
 /**
  * Skill editor: textarea over the body, with the save pipeline the manager
  * requires — validate, then security-check, then save — and in-dialog
- * resolution for a blocked security verdict (force) and a name conflict
- * (replace). The dialog never writes directly; every step is a prop callback.
+ * resolution for a blocked security verdict (force). The dialog only edits
+ * skills that already exist on disk (it opens from a managed-skill card), so
+ * every save is an in-place update and publishes `replace: true`; the manager
+ * snapshots the previous body as a version before overwriting. The dialog
+ * never writes directly; every step is a prop callback.
  */
 
 import { useState } from 'react'
@@ -10,12 +13,11 @@ import type {
   ManagedSkillView, SecurityVerdictView,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { SkillApiError } from './skills-api.ts'
 import css from './SkillsSettingsSection.module.css'
 
 /** Save-options the dialog resolved through its confirmation steps. */
 export interface SkillSaveOptions {
-  /** Overwrite an existing same-name skill. */
+  /** Overwrite the existing skill's file (always true: the editor targets an existing skill). */
   replace: boolean
   /** Save despite a blocked security verdict. */
   force: boolean
@@ -31,7 +33,7 @@ export interface SkillEditDialogProps {
   validate: (content: string) => Promise<{ ok: boolean; reason?: string }>
   /** Run the static security check over raw SKILL.md content. */
   securityCheck: (content: string) => Promise<SecurityVerdictView>
-  /** Persist the content; rejects with SkillApiError('skill-conflict'|'skill-blocked'). */
+  /** Persist the content; rejects with the host error message on failure. */
   save: (content: string, options: SkillSaveOptions) => Promise<void>
   /** The save committed; the parent refreshes and closes. */
   onSaved: () => void
@@ -51,10 +53,9 @@ export function SkillEditDialog(props: SkillEditDialogProps) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [blocked, setBlocked] = useState(false)
-  const [conflict, setConflict] = useState(false)
 
-  /** Run the staged pipeline; `force`/`replace` reflect in-dialog confirmations. */
-  const save = async (force: boolean, replace: boolean): Promise<void> => {
+  /** Run the staged pipeline; `force` reflects the blocked-verdict confirmation. */
+  const save = async (force: boolean): Promise<void> => {
     // v8 ignore next -- every save button is disabled while a save is in flight.
     if (saving) return
     setSaving(true)
@@ -72,15 +73,10 @@ export function SkillEditDialog(props: SkillEditDialogProps) {
         setSaving(false)
         return
       }
-      await props.save(content, { replace, force })
+      await props.save(content, { replace: true, force })
       setSaved(true)
       props.onSaved()
     } catch (cause) {
-      if (cause instanceof SkillApiError && cause.code === 'skill-conflict' && !replace) {
-        setConflict(true)
-        setSaving(false)
-        return
-      }
       setError(t('editError', { message: cause instanceof Error ? cause.message : String(cause) }))
       setSaving(false)
     }
@@ -115,35 +111,21 @@ export function SkillEditDialog(props: SkillEditDialogProps) {
                 <button type="button" className={css.buttonSecondary} disabled={saving} onClick={props.onClose}>
                   {t('actionCancel')}
                 </button>
-                <button type="button" className={css.buttonPrimary} disabled={saving} onClick={() => { void save(true, conflict) }}>
+                <button type="button" className={css.buttonPrimary} disabled={saving} onClick={() => { void save(true) }}>
                   {t('editSaveAnyway')}
                 </button>
               </div>
             </div>
-          ) : null}
-          {conflict ? (
-            <div className={css.confirmPanel}>
-              <p>{t('editConflict')}</p>
-              <div className={css.footer}>
-                <button type="button" className={css.buttonSecondary} disabled={saving} onClick={() => { setConflict(false) }}>
-                  {t('actionCancel')}
-                </button>
-                <button type="button" className={css.buttonPrimary} disabled={saving} onClick={() => { void save(blocked, true) }}>
-                  {t('editReplace')}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {!blocked && !conflict ? (
+          ) : (
             <div className={css.footer}>
               <button type="button" className={css.buttonSecondary} disabled={saving} onClick={props.onClose}>
                 {t('actionCancel')}
               </button>
-              <button type="button" className={css.buttonPrimary} disabled={saving || content.trim().length === 0} onClick={() => { void save(false, false) }}>
+              <button type="button" className={css.buttonPrimary} disabled={saving || content.trim().length === 0} onClick={() => { void save(false) }}>
                 {t(saving ? 'editSaving' : 'editSave')}
               </button>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

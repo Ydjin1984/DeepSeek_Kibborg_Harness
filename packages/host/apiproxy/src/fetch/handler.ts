@@ -31,8 +31,8 @@ import {
 } from '../api/sessions.schema.ts'
 import {
   hostCreateDirectoryRequestSchema, hostDescribeRequestSchema,
-  hostListDirectoryRequestSchema, hostOpenPathRequestSchema,
-  hostPickDirectoryRequestSchema,
+  hostListChildrenRequestSchema, hostListDirectoryRequestSchema, hostOpenPathRequestSchema,
+  hostPickDirectoryRequestSchema, hostReadTextFileRequestSchema, hostWriteTextFileRequestSchema,
 } from '../api/host.schema.ts'
 import {
   workspaceArchiveSessionRequestSchema,
@@ -44,6 +44,7 @@ import {
   workspaceRenameRequestSchema,
 } from '../api/workspace.schema.ts'
 import {
+  skillActivateRequestSchema,
   skillAutoImproveRequestSchema,
   skillBenchmarkBatchStartRequestSchema,
   skillBenchmarkCancelRequestSchema,
@@ -132,6 +133,9 @@ const UNARY_ROUTES: UnaryRoutes = {
   'host.listDirectory': { schema: hostListDirectoryRequestSchema, invoke: (api, r, signal) => api.host.listDirectory(r, signal) },
   'host.createDirectory': { schema: hostCreateDirectoryRequestSchema, invoke: (api, r) => api.host.createDirectory(r) },
   'host.openPath': { schema: hostOpenPathRequestSchema, invoke: (api, r, signal) => api.host.openPath(r, signal) },
+  'host.listChildren': { schema: hostListChildrenRequestSchema, invoke: (api, r, signal) => api.host.listChildren(r, signal) },
+  'host.readTextFile': { schema: hostReadTextFileRequestSchema, invoke: (api, r, signal) => api.host.readTextFile(r, signal) },
+  'host.writeTextFile': { schema: hostWriteTextFileRequestSchema, invoke: (api, r) => api.host.writeTextFile(r) },
   'workspace.list': { schema: workspaceListRequestSchema, invoke: (api, r) => api.workspace.list(r) },
   'workspace.create': { schema: workspaceCreateRequestSchema, invoke: (api, r) => api.workspace.create(r) },
   'workspace.rename': { schema: workspaceRenameRequestSchema, invoke: (api, r) => api.workspace.rename(r) },
@@ -150,6 +154,7 @@ const UNARY_ROUTES: UnaryRoutes = {
   'skill.setEnabled': { schema: skillSetEnabledRequestSchema, invoke: (api, r) => api.skills.setEnabled(r) },
   'skill.versions': { schema: skillVersionsRequestSchema, invoke: (api, r) => api.skills.versions(r) },
   'skill.rollback': { schema: skillRollbackRequestSchema, invoke: (api, r) => api.skills.rollback(r) },
+  'skill.activate': { schema: skillActivateRequestSchema, invoke: (api, r) => api.skills.activate(r) },
   'skill.validate': { schema: skillValidateRequestSchema, invoke: (api, r) => api.skills.validate(r) },
   'skill.securityCheck': { schema: skillSecurityCheckRequestSchema, invoke: (api, r) => api.skills.securityCheck(r) },
   'skill.benchmarkStart': { schema: skillBenchmarkStartRequestSchema, invoke: (api, r) => api.skills.benchmarkStart(r) },

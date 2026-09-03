@@ -258,6 +258,18 @@ export const skillRollbackValueSchema = z.object({
   activeVersion: z.string(),
 }) satisfies z.ZodType<Wire<ResponseValue<'skill.rollback'>>>
 
+/** skill.activate request payload. */
+export const skillActivateRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  name: z.string().min(1),
+  version: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'skill.activate'>>>
+
+/** skill.activate response value. */
+export const skillActivateValueSchema = z.object({
+  activeVersion: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'skill.activate'>>>
+
 /** skill.validate request payload. */
 export const skillValidateRequestSchema = z.object({
   content: z.string().min(1),

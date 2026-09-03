@@ -78,6 +78,9 @@ function scriptedApi(overrides: {
       listDirectory: r => ok(r, { path: '/t', home: '/t', crumbs: [], entries: [], truncated: false }),
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),
+      listChildren: r => ok(r, { path: r.payload.path, entries: [], truncated: false }),
+      readTextFile: r => ok(r, { path: r.payload.path, name: 'file.md', text: '# stub' }),
+      writeTextFile: r => ok(r, { path: r.payload.path }),
       ...overrides.host,
     },
     workspace: {
@@ -101,6 +104,7 @@ function scriptedApi(overrides: {
       setEnabled: err,
       versions: err,
       rollback: err,
+      activate: err,
       validate: err,
       securityCheck: err,
       benchmarkStart: err,

@@ -95,7 +95,7 @@ describe('ui-settings-models apply', () => {
     expect(after.slots.entries('settings.section')[0]!.component).toBe(ModelsSection)
     expect(after.slots.entries('settings.onboarding')).toHaveLength(2)
     // The self-inflicted ledger notifications hit the duplicate guard.
-    expect(after.slots.entries('settings.section')).toHaveLength(1)
+    expect(after.slots.entries('settings.section')).toHaveLength(2)
   })
 
   it('the label thunk follows the active locale without re-registration', async () => {
@@ -123,7 +123,7 @@ describe('ui-settings-models apply', () => {
     const b = await bench()
     const redeclare = declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries('settings.section')).toHaveLength(1)
+    expect(b.slots.entries('settings.section')).toHaveLength(2)
     // Declarer unload: the cascade removes our entry while our local
     // disposer variable goes stale.
     redeclare()

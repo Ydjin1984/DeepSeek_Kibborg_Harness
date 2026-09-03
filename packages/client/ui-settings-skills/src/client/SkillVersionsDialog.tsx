@@ -1,7 +1,9 @@
 /**
- * Version history dialog: one row per stored version with rollback to any
- * non-active version. Rollback failures surface inline without closing the
- * dialog, so a user can pick another version.
+ * Version history dialog: one row per stored version with two ways to select a
+ * version — "Use as default" activates the published version without a new
+ * version event, and "Roll back" publishes a new version whose body is the
+ * target's. Failures surface inline without closing the dialog, so a user can
+ * pick another version.
  */
 
 import { useState } from 'react'
@@ -22,34 +24,49 @@ export interface SkillVersionsDialogProps {
   t: TranslateNS<'settings.skills'>
   /** BCP-47 locale tag for date formatting. */
   locale: string
+  /** Whether an activation is in flight. */
+  activating: boolean
   /** Whether a rollback is in flight. */
   rolling: boolean
+  /** Activate one published version as the default; rejects on failure. */
+  onActivate: (version: string) => Promise<void>
   /** Roll the skill back to one version; rejects on failure. */
   onRollback: (version: string) => Promise<void>
   /** Close the dialog. */
   onClose: () => void
 }
 
+/** One settled version selection, classified for the inline notice copy. */
+type SelectionNotice =
+  | { readonly kind: 'activate'; readonly version: string }
+  | { readonly kind: 'rollback'; readonly version: string }
+
 /**
- * Render the version history with rollback controls.
- * @param props - the history plus rollback callbacks.
+ * Render the version history with activation and rollback controls.
+ * @param props - the history plus selection callbacks.
  * @returns the dialog overlay.
  */
 export function SkillVersionsDialog(props: SkillVersionsDialogProps) {
-  const { versions, activeVersion, t, locale, rolling } = props
+  const { versions, activeVersion, t, locale, activating, rolling } = props
   const [error, setError] = useState<string | null>(null)
-  const [rolledBack, setRolledBack] = useState<string | null>(null)
+  const [notice, setNotice] = useState<SelectionNotice | null>(null)
+  const busy = activating || rolling
 
-  /** Roll back and report the outcome inline. */
-  const rollback = async (version: string): Promise<void> => {
-    // v8 ignore next -- every rollback button is disabled while one is in flight.
-    if (rolling) return
+  /** Run one selection action and report the outcome inline. */
+  const select = async (
+    action: 'activate' | 'rollback',
+    version: string,
+  ): Promise<void> => {
+    // v8 ignore next -- every selection button is disabled while one is in flight.
+    if (busy) return
     setError(null)
     try {
-      await props.onRollback(version)
-      setRolledBack(version)
+      if (action === 'activate') await props.onActivate(version)
+      else await props.onRollback(version)
+      setNotice({ kind: action, version })
     } catch (cause) {
-      setError(t('versionsError', { message: cause instanceof Error ? cause.message : String(cause) }))
+      const key = action === 'activate' ? 'versionsActivateError' : 'versionsError'
+      setError(t(key, { message: cause instanceof Error ? cause.message : String(cause) }))
     }
   }
 
@@ -64,8 +81,12 @@ export function SkillVersionsDialog(props: SkillVersionsDialogProps) {
         </div>
         <div className={css.dialogBody}>
           {error !== null ? <p className={css.failure} role="alert">{error}</p> : null}
-          {rolledBack !== null ? (
-            <p className={css.notice} role="status">{t('versionsRolledBack', { version: rolledBack })}</p>
+          {notice !== null ? (
+            <p className={css.notice} role="status">
+              {notice.kind === 'activate'
+                ? t('versionsActivated', { version: notice.version })
+                : t('versionsRolledBack', { version: notice.version })}
+            </p>
           ) : null}
           {versions.length === 0 ? <p className={css.empty}>{t('versionsEmpty')}</p> : (
             <ul className={css.versions}>
@@ -82,14 +103,24 @@ export function SkillVersionsDialog(props: SkillVersionsDialogProps) {
                     </div>
                     {!active
                       ? (
-                        <button
-                          type="button"
-                          className={css.actionButton}
-                          disabled={rolling}
-                          onClick={() => { void rollback(version.id) }}
-                        >
-                          {t(rolling ? 'versionsRolling' : 'versionsRollback')}
-                        </button>
+                        <div className={css.versionActions}>
+                          <button
+                            type="button"
+                            className={css.actionButton}
+                            disabled={busy}
+                            onClick={() => { void select('activate', version.id) }}
+                          >
+                            {t(activating ? 'versionsActivating' : 'versionsActivate')}
+                          </button>
+                          <button
+                            type="button"
+                            className={css.actionButton}
+                            disabled={busy}
+                            onClick={() => { void select('rollback', version.id) }}
+                          >
+                            {t(rolling ? 'versionsRolling' : 'versionsRollback')}
+                          </button>
+                        </div>
                       )
                       : null}
                   </li>

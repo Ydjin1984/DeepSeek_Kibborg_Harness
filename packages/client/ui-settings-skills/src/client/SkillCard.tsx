@@ -105,15 +105,19 @@ export function SkillCard(props: SkillCardProps) {
           <span className={css.cardDescription}>{skill.description}</span>
         </button>
         <span className={css.statusBadge} data-status={skill.status}>{t(STATUS_KEYS[skill.status])}</span>
-        <button
-          type="button"
-          className={css.toggleButton}
-          disabled={busy}
-          aria-label={skill.enabled ? t('actionDisable') : t('actionEnable')}
-          onClick={props.onToggleEnabled}
-        >
-          {skill.enabled ? t('actionDisable') : t('actionEnable')}
-        </button>
+        {!readOnly
+          ? (
+            <button
+              type="button"
+              className={css.toggleButton}
+              disabled={busy}
+              aria-label={skill.enabled ? t('actionDisable') : t('actionEnable')}
+              onClick={props.onToggleEnabled}
+            >
+              {skill.enabled ? t('actionDisable') : t('actionEnable')}
+            </button>
+          )
+          : null}
       </div>
       {open
         ? (
@@ -134,8 +138,12 @@ export function SkillCard(props: SkillCardProps) {
               {!readOnly
                 ? <button type="button" className={css.actionButton} onClick={props.onEdit}>{t('actionEdit')}</button>
                 : null}
-              <button type="button" className={css.actionButton} onClick={props.onVersions}>{t('actionVersions')}</button>
-              <button type="button" className={css.actionButton} onClick={props.onBenchmark}>{t('actionBenchmark')}</button>
+              {!readOnly
+                ? <button type="button" className={css.actionButton} onClick={props.onVersions}>{t('actionVersions')}</button>
+                : null}
+              {!readOnly
+                ? <button type="button" className={css.actionButton} onClick={props.onBenchmark}>{t('actionBenchmark')}</button>
+                : null}
               {!readOnly
                 ? (
                   <button type="button" className={css.actionDanger} disabled={busy} onClick={props.onDelete}>

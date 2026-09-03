@@ -181,6 +181,9 @@ export class FakeApiClient implements IApiClient {
     listDirectory: (payload: unknown) => this.record('host.listDirectory', payload, this.onListDirectory(payload)),
     createDirectory: (payload: unknown) => this.record('host.createDirectory', payload, this.onCreateDirectory(payload)),
     openPath: (payload: unknown) => this.record('host.openPath', payload, this.onOpenPath(payload)),
+    listChildren: (payload: unknown) => this.record('host.listChildren', payload, Promise.resolve(ok({ path: '', entries: [], truncated: false }))),
+    readTextFile: (payload: unknown) => this.record('host.readTextFile', payload, Promise.resolve(ok({ path: '', name: '', text: '' }))),
+    writeTextFile: (payload: unknown) => this.record('host.writeTextFile', payload, Promise.resolve(ok({ path: '' }))),
   }
 
   // The archive-set field defaults at the binding below so list stubs keep
@@ -261,6 +264,7 @@ export class FakeApiClient implements IApiClient {
     setEnabled: payload => this.record('skill.setEnabled', payload, Promise.resolve(ok({}))),
     versions: payload => this.record('skill.versions', payload, Promise.resolve(ok({ versions: [] }))),
     rollback: payload => this.record('skill.rollback', payload, Promise.resolve(ok({ activeVersion: 'v1' }))),
+    activate: payload => this.record('skill.activate', payload, Promise.resolve(ok({ activeVersion: 'v1' }))),
     validate: payload => this.record('skill.validate', payload, Promise.resolve(ok({ ok: true }))),
     securityCheck: payload => this.record('skill.securityCheck', payload, Promise.resolve(ok({ status: 'valid', findings: [] }))),
     benchmarkStart: payload => this.record('skill.benchmarkStart', payload, Promise.resolve(ok({

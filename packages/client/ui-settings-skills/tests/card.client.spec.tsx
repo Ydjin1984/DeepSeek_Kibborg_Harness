@@ -144,12 +144,18 @@ describe('SkillCard', () => {
     expect(screen.getByText(en.lastBenchmarkNone)).toBeTruthy()
   })
 
-  it('keeps built-in skills read-only: no edit and no delete', () => {
+  it('keeps built-in skills read-only: only the viewer action renders', () => {
     renderCard({ open: true, skill: summary({ scope: 'built-in' }) })
 
     expect(screen.getByText(en.scopeBuiltIn)).toBeTruthy()
+    // Built-ins are immutable: no enable/disable, no edit/delete, and no
+    // version or benchmark lifecycle (the host protects these with errors).
     expect(screen.queryByText(en.actionEdit)).toBeNull()
     expect(screen.queryByText(en.actionDelete)).toBeNull()
+    expect(screen.queryByText(en.actionVersions)).toBeNull()
+    expect(screen.queryByText(en.actionBenchmark)).toBeNull()
+    expect(screen.queryByText(en.actionDisable)).toBeNull()
+    expect(screen.queryByText(en.actionEnable)).toBeNull()
     expect(screen.getByText(en.actionView)).toBeTruthy()
   })
 

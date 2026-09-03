@@ -521,6 +521,19 @@
   border-color: var(--dsw-alias-state-success-primary);
 }
 
+.versionActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.versionActions .actionButton:first-child {
+  /* The activation choice is the primary selection action. */
+  background: var(--dsw-alias-state-info-tertiary);
+  color: var(--dsw-alias-state-info-primary);
+}
+
 .versionMain {
   display: flex;
   flex-direction: column;

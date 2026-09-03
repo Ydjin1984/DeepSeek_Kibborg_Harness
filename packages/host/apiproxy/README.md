@@ -66,18 +66,23 @@ The `settings.*`, `credentials.*`, and `llm.*` domains are the configuration-pag
 
 `AbstractApiClient` holds every protocol invariant — rpcId minting, envelope wrap/unwrap, zod parsing, SSE frame decoding, unary timeout, microtask-batched envelope observation (`subscribeEnvelopes`) — while platform subclasses supply only the `doFetch` transport aspect. `InProcessApiClient` over `toFetchHandler(api)` remains the isomorphic point for callers and carrier tests that need the full wire serialization/validation path without a network. Product `dsh --profile headless` is a direct core entry point and does not mount this package.
 
+## Workspace file-tree surface (`ui-files`)
+
+The `host.listChildren` / `host.readTextFile` / `host.writeTextFile` trio backs the workspace file-tree panel: one session-routed listing verb per folder level and two text verbs that canonicalize every path inside the session's recorded project cwd before touching disk. Reads reject directories and non-UTF-8 bodies, and both text verbs cap content at a server-side byte bound a client cannot raise; writes never follow a symlink out of the project (an existing final component is realpath'd and containment-checked before the write). All three reject out-of-root targets with the stable `file-outside-project` code, so the browser cannot reach past the project the user opened.
+
 ## Model Experience
 
-None, as the package defines the client↔host wire contract and carriers; nothing here reaches a model request.
+Indirectly: the file-attachment admission path folds an attached-file description into the durable user message the session submits — `describeFile` writes `Attached file: <name> (<mediaType>, <bytes> bytes)\nPath: <path>`, so files the user attaches (paperclip or the workspace panel) reach the model as prose through the ordinary prompt path. The rest of the package defines the wire contract and carriers and assembles no provider request of its own.
 
 #### KV Cache effect
 
-None; this package neither assembles nor sends a provider request.
+None; this package neither assembles nor sends a provider request. Attachment prose enters through the caller's ordinary user-message prompt path, so its cache effect is that of any user message.
 
 ## Known Limitations and Deferred Work
 
 - **Forwarded Remote events are parasitic on this legacy frame union** — `host/remote-event` lives in `HostFrame` so the delivery path could reuse the existing host stream instead of opening a third downlink, which makes it read as if this package owned the Remote event contract. It does not: the allowlist is `dsh-api-remotes`' and the consumer verb is `ctx.remote.$on`. When the host stream moves off this package, the frame moves with it and the consumer contract is unaffected ([rationale](../../../.agents/notes/implemented/architecture/2026-08-10-remote-event-delivery.md)).
 - **Pending-interaction state is host-side** — the wire uses POST `/api/respond` plus `RpcReceipt`; the table in `src/api-proxy.ts` handles questions only and has no approval entries.
+- **File parts attach copies** — admission materializes every `type: 'file'` prompt part under `.dsh/attachments` and `describeFile` quotes that copy's path; an original project path is not carried on the wire yet (the workspace panel drop is an ordinary draft for the same reason).
 - **Reserved seams stay out of `RpcMethodMap`** — `prompt.mode: 'inject'`, `job.list`, and a describe `hostInstanceId` are documented reservations; model discovery uses `llm.models`. An unknown method fails loud at envelope parse rather than getting a not-implemented code.
 - **No protocol version field** — client and host ship together; `host.describe` gains a version negotiation field only when an independently released client exists.
 - **Search failures include provider diagnostics** — the gateway is a single-user local service. A carrier that exposes it to multiple users must replace internal search details with a public-safe diagnostic.

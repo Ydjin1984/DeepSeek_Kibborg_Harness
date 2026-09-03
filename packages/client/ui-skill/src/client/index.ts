@@ -51,7 +51,17 @@ interface CatalogFetch {
   readonly abort: AbortController
   /** Settled catalog for synchronous lexicon reads (unset while in flight or on failure). */
   settled?: readonly SkillEntry[]
+  /** Wall-clock time the settled snapshot was fetched. */
+  settledAt?: number
 }
+
+/**
+ * A settled catalog is reused within this window, then refetched on the next
+ * candidates call. Skills are managed outside this plugin (the Skills Manager
+ * settings tab), so a long-lived cache would keep newly created, edited, or
+ * re-enabled skills hidden from a session that already fetched its catalog.
+ */
+const CATALOG_TTL_MS = 10_000
 
 /** Required services: reference source faces plus the tool-row and locale registries. */
 export const inject = ['inputTriggers', 'connection', 'sessions', 'slots', 'locale', 'remote']
@@ -91,7 +101,16 @@ export function apply(ctx: ClientContext): void {
   const fetchCatalog = (sessionId: SessionId): Promise<readonly SkillEntry[]> => {
     if (sessions.subagentAddress(sessionId) !== undefined) return Promise.resolve([])
     const existing = fetches.get(sessionId)
-    if (existing !== undefined) return existing.promise
+    if (existing !== undefined) {
+      // A settled snapshot that is still fresh answers from the cache; an
+      // expired one is dropped so the next fetch re-reads the host catalog.
+      if (existing.settled === undefined
+        || (existing.settledAt !== undefined && Date.now() - existing.settledAt < CATALOG_TTL_MS)) {
+        return existing.promise
+      }
+      fetches.delete(sessionId)
+      existing.abort.abort()
+    }
     const abort = new AbortController()
     const promise = (async () => {
       const { result } = await skills.list({ sessionId }, abort.signal)
@@ -104,6 +123,7 @@ export function apply(ctx: ClientContext): void {
       // Settled snapshot backs the synchronous lexicon reads.
       (skills) => {
         entry.settled = skills
+        entry.settledAt = Date.now()
         notifyLexicon(sessionId)
       },
       // A failed fetch must not poison the key: the next consumer retries.
@@ -137,7 +157,7 @@ export function apply(ctx: ClientContext): void {
    * @returns the display description for the current locale.
    */
   const displayDescription = (skill: SkillEntry): string => {
-    const locale = ctx.get('locale')?.getLocale?.()?.active
+    const locale = ctx.locale.getLocale().active
     return locale === 'zh' || locale === 'ru'
       ? skill.localizedDescription?.[locale] ?? skill.description
       : skill.description
@@ -157,7 +177,7 @@ export function apply(ctx: ClientContext): void {
       const normalized = query.trim().toLocaleLowerCase()
       return skills
         .filter(skill => normalized.length === 0 || skill.name.toLocaleLowerCase().includes(normalized))
-        .map(skill => {
+        .map((skill) => {
           const description = displayDescription(skill)
           return {
             name: skill.name,

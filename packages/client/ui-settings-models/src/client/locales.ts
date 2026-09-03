@@ -105,6 +105,16 @@ export const en = {
   oauthWaiting: 'Approve this code in the browser:',
   oauthOpenLink: 'Open the sign-in page',
   oauthCancel: 'Cancel sign-in',
+  orchestratorRouteRequired: 'Enable requires a provider and model for the local executor.',
+  orchestratorNav: 'Orchestrator',
+  orchestratorIntro: 'The session\'s current chat model plays the HEAD (planner) and answers the user; heavy tool work goes to the local executor model through the `executor` tool, saving head tokens. The head route is set by the model picker in the composer — only the executor is configured here.',
+  orchestratorEnable: 'Enable orchestrator mode',
+  orchestratorExecutorLegend: 'Executor model (local)',
+  orchestratorProvider: 'Provider',
+  orchestratorModel: 'Model',
+  orchestratorSave: 'Save',
+  orchestratorSaving: 'Saving…',
+  orchestratorSaved: 'Saved. Changes apply immediately: the executor tool appears and the head instructions render.',
 }
 
 /** Russian strings (same keys as {@link en}). */
@@ -210,6 +220,16 @@ export const ru: { [Key in keyof typeof en]: string } = {
   oauthWaiting: 'Подтвердите этот код в браузере:',
   oauthOpenLink: 'Открыть страницу входа',
   oauthCancel: 'Отменить вход',
+  orchestratorRouteRequired: 'Для включения укажите провайдера и модель локального исполнителя.',
+  orchestratorNav: 'Оркестратор',
+  orchestratorIntro: 'Текущая модель сессии играет роль головы (планировщика) и отвечает пользователю; тяжёлую инструментальную работу выполняет локальная исполнительная модель через инструмент `executor`, экономя токены головной. Маршрут головы задаёт выбор модели в поле ввода сообщения — здесь настраивается только исполнитель.',
+  orchestratorEnable: 'Включить режим оркестра',
+  orchestratorExecutorLegend: 'Исполнительная модель (локальная)',
+  orchestratorProvider: 'Провайдер',
+  orchestratorModel: 'Модель',
+  orchestratorSave: 'Сохранить',
+  orchestratorSaving: 'Сохранение…',
+  orchestratorSaved: 'Сохранено. Изменения действуют сразу: появится инструмент executor и инструкция головной модели.',
 }
 
 /** The settings.models namespace key union. */
@@ -318,4 +338,14 @@ export const zh: { [Key in keyof typeof en]: string } = {
   oauthWaiting: '请在浏览器中确认此代码：',
   oauthOpenLink: '打开登录页',
   oauthCancel: '取消登录',
+  orchestratorRouteRequired: '启用前请指定本地执行模型的提供商和模型。',
+  orchestratorNav: '编排器',
+  orchestratorIntro: '当前会话模型担任 HEAD（规划者）并回答用户；繁重的工具工作通过 `executor` 工具交给本地执行模型，以节省 HEAD 的令牌。HEAD 路由由输入框中的模型选择器决定——这里只配置执行者。',
+  orchestratorEnable: '启用编排模式',
+  orchestratorExecutorLegend: '执行模型（本地）',
+  orchestratorProvider: '提供商',
+  orchestratorModel: '模型',
+  orchestratorSave: '保存',
+  orchestratorSaving: '保存中…',
+  orchestratorSaved: '已保存。更改立即生效：executor 工具出现，HEAD 指令开始渲染。',
 }

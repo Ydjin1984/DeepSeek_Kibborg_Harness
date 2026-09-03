@@ -17,8 +17,9 @@ export type SkillsLocaleKey =
   | 'actionVersions' | 'actionBenchmark' | 'actionEnable' | 'actionDisable' | 'actionClose' | 'actionCancel'
   | 'viewTitle' | 'viewRendered' | 'viewRaw' | 'viewContentEmpty'
   | 'editTitle' | 'editContent' | 'editSave' | 'editSaving' | 'editSaved'
-  | 'editValidationFailed' | 'editSecurityBlocked' | 'editSaveAnyway' | 'editConflict' | 'editReplace' | 'editError'
+  | 'editValidationFailed' | 'editSecurityBlocked' | 'editSaveAnyway' | 'editError'
   | 'versionsTitle' | 'versionsActive' | 'versionsRollback' | 'versionsRolling' | 'versionsEmpty' | 'versionsRolledBack' | 'versionsError'
+  | 'versionsActivate' | 'versionsActivating' | 'versionsActivated' | 'versionsActivateError'
   | 'benchmarkTitle' | 'benchmarkTaskModel' | 'benchmarkEvaluatorModel' | 'benchmarkUseSameModel' | 'benchmarkCaseCount'
   | 'benchmarkRun' | 'benchmarkRunning' | 'benchmarkPhase' | 'benchmarkProgress' | 'benchmarkCancel' | 'benchmarkCancelled'
   | 'benchmarkFailed' | 'benchmarkResults' | 'benchmarkBaselineScore' | 'benchmarkSkillScore' | 'benchmarkImprovement'
@@ -98,8 +99,6 @@ export const en: Record<SkillsLocaleKey, string> = {
   editValidationFailed: 'This content is not a valid skill: {reason}',
   editSecurityBlocked: 'This content is blocked by the security policy.',
   editSaveAnyway: 'Save anyway',
-  editConflict: 'A skill with this name already exists.',
-  editReplace: 'Replace existing',
   editError: 'The skill was not saved: {message}',
   versionsTitle: 'Versions',
   versionsActive: 'Active',
@@ -108,6 +107,10 @@ export const en: Record<SkillsLocaleKey, string> = {
   versionsEmpty: 'No versions yet.',
   versionsRolledBack: 'Rolled back to {version}.',
   versionsError: 'Rollback failed: {message}',
+  versionsActivate: 'Use as default',
+  versionsActivating: 'Setting as default…',
+  versionsActivated: '{version} is now the default version.',
+  versionsActivateError: 'Activation failed: {message}',
   benchmarkTitle: 'Benchmark',
   benchmarkTaskModel: 'Task model',
   benchmarkEvaluatorModel: 'Evaluator model',
@@ -218,8 +221,6 @@ export const zh: Record<SkillsLocaleKey, string> = {
   editValidationFailed: '该内容不是有效技能：{reason}',
   editSecurityBlocked: '该内容被安全策略阻止。',
   editSaveAnyway: '仍然保存',
-  editConflict: '已存在同名技能。',
-  editReplace: '替换现有',
   editError: '技能未保存：{message}',
   versionsTitle: '版本',
   versionsActive: '当前',
@@ -228,6 +229,10 @@ export const zh: Record<SkillsLocaleKey, string> = {
   versionsEmpty: '还没有版本。',
   versionsRolledBack: '已回滚到 {version}。',
   versionsError: '回滚失败：{message}',
+  versionsActivate: '设为默认',
+  versionsActivating: '设置默认中…',
+  versionsActivated: '{version} 已成为默认版本。',
+  versionsActivateError: '设置失败：{message}',
   benchmarkTitle: '评测',
   benchmarkTaskModel: '任务模型',
   benchmarkEvaluatorModel: '评估模型',
@@ -338,8 +343,6 @@ export const ru: Record<SkillsLocaleKey, string> = {
   editValidationFailed: 'Это содержимое не является корректным навыком: {reason}',
   editSecurityBlocked: 'Это содержимое заблокировано политикой безопасности.',
   editSaveAnyway: 'Всё равно сохранить',
-  editConflict: 'Навык с таким именем уже существует.',
-  editReplace: 'Заменить существующий',
   editError: 'Навык не сохранён: {message}',
   versionsTitle: 'Версии',
   versionsActive: 'Активная',
@@ -348,6 +351,10 @@ export const ru: Record<SkillsLocaleKey, string> = {
   versionsEmpty: 'Версий пока нет.',
   versionsRolledBack: 'Выполнен откат к {version}.',
   versionsError: 'Не удалось откатить: {message}',
+  versionsActivate: 'По умолчанию',
+  versionsActivating: 'Установка версии по умолчанию…',
+  versionsActivated: 'Версия {version} теперь используется по умолчанию.',
+  versionsActivateError: 'Не удалось установить версию: {message}',
   benchmarkTitle: 'Бенчмарк',
   benchmarkTaskModel: 'Модель задач',
   benchmarkEvaluatorModel: 'Модель-оценщик',

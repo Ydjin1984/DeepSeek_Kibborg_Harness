@@ -54,7 +54,12 @@ export function apply(ctx: Context, config: SkillManagerConfig = {}): void {
   registerSkillManageTool(ctx, () => ctx.get('skillManager'))
   ctx.effect(() => {
     const disposers: Array<() => void> = []
+    let disposed = false
     void loadSkillCreate().then((parsed) => {
+      // A fiber teardown (HMR) that lands before the async load resolves must
+      // not register the skill onto a dead scope.
+      // v8 ignore next -- the dispose-race arm needs a teardown before the microtask, which specs cannot schedule deterministically.
+      if (disposed) return
       disposers.push(ctx.skills.register({
         name: parsed.name,
         description: parsed.description,
@@ -71,6 +76,7 @@ export function apply(ctx: Context, config: SkillManagerConfig = {}): void {
       ctx.logger.warn(`skill-manager: failed to load the system skill: ${String(error)}`)
     })
     return () => {
+      disposed = true
       for (const dispose of disposers.splice(0)) dispose()
     }
   }, 'skill-manager: bundled system skill')

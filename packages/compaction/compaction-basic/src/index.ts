@@ -79,6 +79,9 @@ const retainTokensSchema = z.number().step(1).min(0)
 const summarizationProviderSchema = z.string()
 const summarizationModelSchema = z.string()
 const maxTokensSchema = z.number().step(1).min(1)
+const summarizationSuppressReasoningSchema = z.boolean()
+const summarizationTimeoutMsSchema = z.number().step(1).min(1)
+const automaticRetryDelayMsSchema = z.number().step(1).min(0)
 const compactionRetriesSchema = z.number().step(1).min(0)
 const maxOverflowRetriesSchema = z.number().step(1).min(0)
 
@@ -91,6 +94,9 @@ const modelPolicy: z<ModelCompactPolicyConfig> = z.object({
   summarizationProvider: summarizationProviderSchema,
   summarizationModel: summarizationModelSchema,
   maxTokens: maxTokensSchema,
+  summarizationSuppressReasoning: summarizationSuppressReasoningSchema,
+  summarizationTimeoutMs: summarizationTimeoutMsSchema,
+  automaticRetryDelayMs: automaticRetryDelayMsSchema,
   compactionRetries: compactionRetriesSchema,
   maxOverflowRetries: maxOverflowRetriesSchema,
 })
@@ -113,6 +119,9 @@ export class BasicCompactionEngine extends CompactionEngine {
     summarizationProvider: summarizationProviderSchema,
     summarizationModel: summarizationModelSchema,
     maxTokens: maxTokensSchema,
+    summarizationSuppressReasoning: summarizationSuppressReasoningSchema,
+    summarizationTimeoutMs: summarizationTimeoutMsSchema,
+    automaticRetryDelayMs: automaticRetryDelayMsSchema,
     compactionRetries: compactionRetriesSchema,
     maxOverflowRetries: maxOverflowRetriesSchema,
     modelPolicies: z.array(modelPolicy),
@@ -125,6 +134,8 @@ export class BasicCompactionEngine extends CompactionEngine {
   private readonly warnedPressureConfigTargets = new Set<string>()
   private readonly overflowRetries = new WeakMap<Agent, number>()
   private readonly overflowAgents = new WeakMap<Session, Agent>()
+  /** Agent wall-clock timestamp of the last failed step-pressure attempt. */
+  private readonly pressureFailureAt = new WeakMap<Agent, number>()
 
   constructor(ctx: Context, config: BasicCompactionConfig = {}) {
     super(ctx)
@@ -159,16 +170,26 @@ export class BasicCompactionEngine extends CompactionEngine {
       next,
     ): Promise<PreStepDecision> => {
       if (!signal.aborted) {
-        try {
-          const result = await this.compactIfNeeded(agent, 'pressure', signal)
-          if (result !== null) logResult(result, 'step pressure')
-        } catch (error: unknown) {
-          if (error instanceof TargetPressureConfigError) {
-            if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
-            this.warnedPressureConfigTargets.add(error.targetKey)
+        // A failed pressure attempt is not retried on every following step:
+        // a slow or failing summarizer would otherwise stall each step of the
+        // turn. The gap is the resolved automaticRetryDelayMs policy field.
+        const retryDelay = this.config.automaticRetryDelayMs
+        const lastFailure = this.pressureFailureAt.get(agent)
+        const withinBackoff = lastFailure !== undefined && Date.now() - lastFailure < retryDelay
+        if (!withinBackoff) {
+          try {
+            const result = await this.compactIfNeeded(agent, 'pressure', signal)
+            this.pressureFailureAt.delete(agent)
+            if (result !== null) logResult(result, 'step pressure')
+          } catch (error: unknown) {
+            if (error instanceof TargetPressureConfigError) {
+              if (this.warnedPressureConfigTargets.has(error.targetKey)) return next()
+              this.warnedPressureConfigTargets.add(error.targetKey)
+            }
+            this.pressureFailureAt.set(agent, Date.now())
+            const message = error instanceof Error ? error.message : String(error)
+            ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
           }
-          const message = error instanceof Error ? error.message : String(error)
-          ctx.logger.warn(`step compaction failed: ${message}; continuing the turn`)
         }
       }
       return next()

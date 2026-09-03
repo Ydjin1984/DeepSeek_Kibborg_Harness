@@ -36,6 +36,9 @@
 | `summarizationProvider` | 否（默认 `''`） | 与 `summarizationModel` 一起设置；空对会解析为最新已记录请求目标，再回退到 `AgentOptions` 对。 |
 | `summarizationModel` | 否（默认 `''`） | 与 `summarizationProvider` 一起设置；空对会解析为最新已记录请求目标，再回退到 `AgentOptions` 对。 |
 | `maxTokens` | 否（默认 `8192`） | 摘要调用的提供方生成上限；可包含推理 token。 |
+| `summarizationSuppressReasoning` | 否（默认 `true`） | 当摘要目标暴露 `off` 档位时要求其关闭推理，避免思考型模型把一次压缩拖到数分钟。 |
+| `summarizationTimeoutMs` | 否（默认 `120000`） | 单次摘要调用的挂钟预算；超时后本次尝试以明确错误结束，而不是卡住步骤。 |
+| `automaticRetryDelayMs` | 否（默认 `60000`） | 某 agent 一次自动压力压缩失败后，到下一次自动尝试之间的最小间隔。 |
 | `compactionRetries` | 否（默认 `1`） | 压力仍高于阈值时，在首次尝试后进行的额外尝试次数。 |
 | `maxOverflowRetries` | 否（默认 `1`） | 规范上下文窗口溢出后的最大重试次数；`0` 只禁用恢复。 |
 | `modelPolicies` | 否（默认 `[]`） | 精确的 `{ provider, model, ...partialPolicy }` 覆盖；匹配使用两个字段，不依赖 `listModels()`。 |
@@ -47,7 +50,7 @@
 
 ## 用法
 
-`BasicCompactionEngine` 需要 `ctx.llm`、`ctx.tokenMeter` 和 `ctx.sessions`。以下组合从其宿主接收 `ctx.llm`，并安装另外两项服务：
+`BasicCompactionEngine` 声明 `inject = ['llm', 'tokenMeter', 'sessions']`。只有宿主没有自行挂载 `token-meter` 与 `sessions` 时，下面的组合才需要自己安装这两项服务——官方 preset 会分别挂载它们，因此在其中只需引擎一个条目即可：
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'

@@ -90,6 +90,8 @@ export interface SkillsActions {
   versions: (sessionId: SessionId, name: string) => Promise<readonly SkillVersionView[]>
   /** Roll one managed skill back to an earlier version; returns the new active version. */
   rollback: (sessionId: SessionId, name: string, version: string) => Promise<string>
+  /** Make one published version the active default; returns the activated version. */
+  activate: (sessionId: SessionId, name: string, version: string) => Promise<string>
   /** Validate raw SKILL.md content with the shared parser. */
   validate: (content: string) => Promise<{ ok: boolean; reason?: string }>
   /** Run the static security check over raw SKILL.md content. */
@@ -142,6 +144,9 @@ export function createSkillsActions(api: Pick<IApiClient, 'skills' | 'llm'>): Sk
     },
     async rollback(sessionId, name, version) {
       return unwrap(await api.skills.rollback({ sessionId, name, version })).activeVersion
+    },
+    async activate(sessionId, name, version) {
+      return unwrap(await api.skills.activate({ sessionId, name, version })).activeVersion
     },
     async validate(content) {
       return unwrap(await api.skills.validate({ content }))

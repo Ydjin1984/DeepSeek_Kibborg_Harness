@@ -15,7 +15,8 @@ import { rpcReceiptSchema, serverRequestSchema, serverResponseSchema } from '../
 import { hostFrameSchema, muxFrameSchema } from '../api/events.schema.ts'
 import {
   hostCreateDirectoryValueSchema, hostDescribeValueSchema,
-  hostListDirectoryValueSchema, hostOpenPathValueSchema, hostPickDirectoryValueSchema,
+  hostListChildrenValueSchema, hostListDirectoryValueSchema, hostOpenPathValueSchema,
+  hostPickDirectoryValueSchema, hostReadTextFileValueSchema, hostWriteTextFileValueSchema,
 } from '../api/host.schema.ts'
 import {
   sessionCancelValueSchema,
@@ -41,6 +42,7 @@ import {
   workspaceRenameValueSchema,
 } from '../api/workspace.schema.ts'
 import {
+  skillActivateValueSchema,
   skillAutoImproveValueSchema,
   skillBenchmarkBatchStartValueSchema,
   skillBenchmarkCancelValueSchema,
@@ -134,6 +136,9 @@ export interface IApiClient {
     listDirectory(payload: RequestPayload<'host.listDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.listDirectory'>>>
     createDirectory(payload: RequestPayload<'host.createDirectory'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.createDirectory'>>>
     openPath(payload: RequestPayload<'host.openPath'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.openPath'>>>
+    listChildren(payload: RequestPayload<'host.listChildren'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.listChildren'>>>
+    readTextFile(payload: RequestPayload<'host.readTextFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.readTextFile'>>>
+    writeTextFile(payload: RequestPayload<'host.writeTextFile'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'host.writeTextFile'>>>
   }
   workspace: {
     list(payload: RequestPayload<'workspace.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.list'>>>
@@ -156,6 +161,7 @@ export interface IApiClient {
     setEnabled(payload: RequestPayload<'skill.setEnabled'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.setEnabled'>>>
     versions(payload: RequestPayload<'skill.versions'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.versions'>>>
     rollback(payload: RequestPayload<'skill.rollback'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.rollback'>>>
+    activate(payload: RequestPayload<'skill.activate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.activate'>>>
     validate(payload: RequestPayload<'skill.validate'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.validate'>>>
     securityCheck(payload: RequestPayload<'skill.securityCheck'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.securityCheck'>>>
     benchmarkStart(payload: RequestPayload<'skill.benchmarkStart'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.benchmarkStart'>>>
@@ -236,6 +242,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'host.listDirectory': hostListDirectoryValueSchema,
   'host.createDirectory': hostCreateDirectoryValueSchema,
   'host.openPath': hostOpenPathValueSchema,
+  'host.listChildren': hostListChildrenValueSchema,
+  'host.readTextFile': hostReadTextFileValueSchema,
+  'host.writeTextFile': hostWriteTextFileValueSchema,
   'workspace.list': workspaceListValueSchema,
   'workspace.create': workspaceCreateValueSchema,
   'workspace.rename': workspaceRenameValueSchema,
@@ -254,6 +263,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'skill.setEnabled': skillSetEnabledValueSchema,
   'skill.versions': skillVersionsValueSchema,
   'skill.rollback': skillRollbackValueSchema,
+  'skill.activate': skillActivateValueSchema,
   'skill.validate': skillValidateValueSchema,
   'skill.securityCheck': skillSecurityCheckValueSchema,
   'skill.benchmarkStart': skillBenchmarkStartValueSchema,
@@ -508,6 +518,9 @@ export abstract class AbstractApiClient implements IApiClient {
     listDirectory: (payload, signal) => this.callUnary('host.listDirectory', payload, signal),
     createDirectory: (payload, signal) => this.callUnary('host.createDirectory', payload, signal),
     openPath: (payload, signal) => this.callUnary('host.openPath', payload, signal),
+    listChildren: (payload, signal) => this.callUnary('host.listChildren', payload, signal),
+    readTextFile: (payload, signal) => this.callUnary('host.readTextFile', payload, signal),
+    writeTextFile: (payload, signal) => this.callUnary('host.writeTextFile', payload, signal),
   }
 
   readonly workspace: IApiClient['workspace'] = {
@@ -532,6 +545,7 @@ export abstract class AbstractApiClient implements IApiClient {
     setEnabled: (payload, signal) => this.callUnary('skill.setEnabled', payload, signal),
     versions: (payload, signal) => this.callUnary('skill.versions', payload, signal),
     rollback: (payload, signal) => this.callUnary('skill.rollback', payload, signal),
+    activate: (payload, signal) => this.callUnary('skill.activate', payload, signal),
     validate: (payload, signal) => this.callUnary('skill.validate', payload, signal),
     securityCheck: (payload, signal) => this.callUnary('skill.securityCheck', payload, signal),
     benchmarkStart: (payload, signal) => this.callUnary('skill.benchmarkStart', payload, signal),

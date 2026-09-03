@@ -159,7 +159,7 @@ function SkillsSectionBody(
       const running = batchRuns.filter(run => run.status === 'running')
       void Promise.all(running.map(run => actions.benchmarkPoll(run.id))).then(
         (updated) => {
-          setBatchRuns(previous => {
+          setBatchRuns((previous) => {
             // v8 ignore next -- a batch is never cleared while its poll is in flight.
             if (previous === null) return previous
             const byId = new Map(updated.map(run => [run.id, run]))
@@ -184,6 +184,24 @@ function SkillsSectionBody(
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause))
       return undefined
+    } finally {
+      setBusyName(null)
+    }
+  }
+
+  /**
+   * Run one version-dialog selection. Unlike card actions, the error is
+   * re-thrown after surfacing: the versions dialog awaits the promise and
+   * must not paint a success notice for a failed activation or rollback.
+   */
+  const runVersionSelection = async (key: string, fn: () => Promise<void>): Promise<void> => {
+    setActionError(null)
+    setBusyName(key)
+    try {
+      await fn()
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : String(cause))
+      throw cause
     } finally {
       setBusyName(null)
     }
@@ -276,7 +294,7 @@ function SkillsSectionBody(
     const target = versionsOf
     /* v8 ignore next -- the dialog is mounted only while versionsOf is set */
     if (target === null) return
-    await runAction(`rollback:${target.name}`, async () => {
+    await runVersionSelection(`rollback:${target.name}`, async () => {
       await actions.rollback(sessionId, target.name, version)
       // A fresh read, not the cache: rollback moved the active version.
       const [detail, versions] = await Promise.all([
@@ -284,6 +302,25 @@ function SkillsSectionBody(
         actions.versions(sessionId, target.name),
       ])
       /* v8 ignore next -- a skill removed between rollback and refresh keeps the last dialog view. */
+      if (detail !== undefined) {
+        setDetails(previous => new Map(previous).set(target.name, detail))
+        setVersionsOf({ name: target.name, versions, activeVersion: detail.version })
+      }
+    })
+  }
+
+  const activateTo = async (version: string): Promise<void> => {
+    const target = versionsOf
+    /* v8 ignore next -- the dialog is mounted only while versionsOf is set */
+    if (target === null) return
+    await runVersionSelection(`activate:${target.name}`, async () => {
+      await actions.activate(sessionId, target.name, version)
+      // A fresh read, not the cache: activation moved the active version.
+      const [detail, versions] = await Promise.all([
+        actions.read(sessionId, target.name),
+        actions.versions(sessionId, target.name),
+      ])
+      /* v8 ignore next -- a skill removed between activation and refresh keeps the last dialog view. */
       if (detail !== undefined) {
         setDetails(previous => new Map(previous).set(target.name, detail))
         setVersionsOf({ name: target.name, versions, activeVersion: detail.version })
@@ -336,7 +373,7 @@ function SkillsSectionBody(
     // v8 ignore stop
     void runAction('benchmark-all', async () => {
       const cancelled = await Promise.all(running.map(run => actions.benchmarkCancel(run.id)))
-      setBatchRuns(previous => {
+      setBatchRuns((previous) => {
         // v8 ignore next -- a batch is never cleared while its runs are being cancelled.
         if (previous === null) return previous
         // v8 ignore next -- a cancel response always names a batch run, so the keep-arm is defensive.
@@ -500,13 +537,13 @@ function SkillsSectionBody(
                     t={t}
                     onToggle={() => { setExpanded(current => current === skill.name ? null : skill.name) }}
                     onView={() => { openView(skill) }}
-                    /* v8 ignore start -- built-in cards are read-only: SkillCard never fires these callbacks. */
+                    /* v8 ignore start -- built-in cards are read-only: SkillCard renders no lifecycle action that fires these callbacks. */
                     onEdit={() => { openEdit(skill) }}
                     onDelete={() => { deleteSkill(skill) }}
-                    /* v8 ignore stop */
                     onToggleEnabled={() => { toggleEnabled(skill) }}
                     onVersions={() => { openVersions(skill) }}
                     onBenchmark={() => { openBenchmark(skill) }}
+                    /* v8 ignore stop */
                   />
                 ))}
               </ul>
@@ -552,7 +589,9 @@ function SkillsSectionBody(
           activeVersion={versionsOf.activeVersion}
           locale={locale}
           t={t}
+          activating={busyName === `activate:${versionsOf.name}`}
           rolling={busyName === `rollback:${versionsOf.name}`}
+          onActivate={activateTo}
           onRollback={rollbackTo}
           onClose={() => { setVersionsOf(null) }}
         />

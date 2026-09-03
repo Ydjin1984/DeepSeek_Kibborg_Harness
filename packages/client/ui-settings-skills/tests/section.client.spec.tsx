@@ -232,7 +232,7 @@ describe('SkillsSettingsSection', () => {
     await waitFor(() => { expect(screen.queryByRole('button', { name: en.actionView })).toBeNull() })
   })
 
-  it('expands a built-in card and exercises its read-only actions', async () => {
+  it('expands a built-in card read-only: only the viewer action is offered', async () => {
     const actions = renderSection({
       listManaged: vi.fn(async () => [
         summary({ name: 'built', scope: 'built-in' }),
@@ -242,22 +242,17 @@ describe('SkillsSettingsSection', () => {
     fireEvent.click(screen.getByText('built'))
     await waitFor(() => { expect(screen.getByRole('button', { name: en.actionView })).toBeTruthy() })
 
+    // Built-ins are immutable: no lifecycle action that the host protects.
+    expect(screen.queryByRole('button', { name: en.actionEdit })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.actionDelete })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.actionVersions })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.actionBenchmark })).toBeNull()
+    expect(screen.queryByRole('button', { name: en.actionDisable })).toBeNull()
+
+    // The viewer still works and closes again.
     fireEvent.click(screen.getByRole('button', { name: en.actionView }))
     await waitFor(() => { expect(actions.read).toHaveBeenCalledWith('session-1', 'built') })
     fireEvent.click(screen.getAllByRole('button', { name: en.actionClose })[0]!)
-
-    fireEvent.click(screen.getByRole('button', { name: en.actionVersions }))
-    await screen.findByRole('dialog', { name: en.versionsTitle })
-    fireEvent.click(screen.getAllByRole('button', { name: en.actionClose })[0]!)
-
-    fireEvent.click(screen.getByRole('button', { name: en.actionBenchmark }))
-    await waitFor(() => { expect(actions.listModels).toHaveBeenCalled() })
-    fireEvent.click(screen.getAllByRole('button', { name: en.actionClose })[0]!)
-
-    fireEvent.click(screen.getByRole('button', { name: en.actionDisable }))
-    await waitFor(() => { expect(actions.setEnabled).toHaveBeenCalledWith('session-1', 'built', false) })
-    expect(screen.queryByRole('button', { name: en.actionEdit })).toBeNull()
-    expect(screen.queryByRole('button', { name: en.actionDelete })).toBeNull()
 
     // Toggling the header again collapses the built-in card.
     fireEvent.click(screen.getByText('built'))
@@ -291,7 +286,7 @@ describe('SkillsSettingsSection', () => {
         name: 'demo-skill',
         content: 'edited body',
         scope: 'user',
-        replace: false,
+        replace: true,
         force: false,
       })
     })
@@ -325,6 +320,57 @@ describe('SkillsSettingsSection', () => {
     await waitFor(() => { expect(rollback).toHaveBeenCalledExactlyOnceWith('session-1', 'demo-skill', 'v1') })
     await waitFor(() => { expect(versions).toHaveBeenCalledTimes(2) })
     expect(screen.getAllByText(en.versionsActive)).toHaveLength(1)
+  })
+
+  it('activates a published version as the default and refreshes the dialog', async () => {
+    const actions = renderSection({
+      read: vi.fn(async () => detail({ version: 'v2' })),
+      versions: vi.fn(async () => [version({ id: 'v2', reason: 'Updated' }), version()]),
+      activate: vi.fn(async () => 'v1'),
+    })
+    const { activate, versions } = actions
+    await openFirstCard(actions)
+    fireEvent.click(screen.getByRole('button', { name: en.actionVersions }))
+    fireEvent.click(await screen.findByRole('button', { name: en.versionsActivate }))
+
+    // v2 is active (the read says so), so the one activation targets v1.
+    await waitFor(() => { expect(activate).toHaveBeenCalledExactlyOnceWith('session-1', 'demo-skill', 'v1') })
+    await waitFor(() => { expect(versions).toHaveBeenCalledTimes(2) })
+    expect(screen.getByText(en.versionsActivated.replace('{version}', 'v1'))).toBeTruthy()
+    expect(screen.getAllByText(en.versionsActive)).toHaveLength(1)
+  })
+
+  it('surfaces a failed activation in the versions dialog instead of success', async () => {
+    const actions = renderSection({
+      read: vi.fn(async () => detail({ version: 'v2' })),
+      versions: vi.fn(async () => [version({ id: 'v2', reason: 'Updated' }), version()]),
+      activate: vi.fn(async () => { throw new Error('host denied') }),
+    })
+    await openFirstCard(actions)
+    fireEvent.click(screen.getByRole('button', { name: en.actionVersions }))
+    fireEvent.click(await screen.findByRole('button', { name: en.versionsActivate }))
+
+    await waitFor(() => {
+      expect(screen.getByText(en.versionsActivateError.replace('{message}', 'host denied'))).toBeTruthy()
+    })
+    // No success notice is painted for the failed activation.
+    expect(screen.queryByText(en.versionsActivated.replace('{version}', 'v1'))).toBeNull()
+  })
+
+  it('surfaces a failed rollback in the versions dialog instead of success', async () => {
+    const actions = renderSection({
+      read: vi.fn(async () => detail({ version: 'v2' })),
+      versions: vi.fn(async () => [version({ id: 'v2', reason: 'Updated' }), version()]),
+      rollback: vi.fn(async () => { throw new Error('host denied') }),
+    })
+    await openFirstCard(actions)
+    fireEvent.click(screen.getByRole('button', { name: en.actionVersions }))
+    fireEvent.click(await screen.findByRole('button', { name: en.versionsRollback }))
+
+    await waitFor(() => {
+      expect(screen.getByText(en.versionsError.replace('{message}', 'host denied'))).toBeTruthy()
+    })
+    expect(screen.queryByText(en.versionsRolledBack.replace('{version}', 'v1'))).toBeNull()
   })
 
   it('opens the benchmark dialog, loads the model catalog, and starts a run', async () => {
@@ -464,16 +510,16 @@ describe('SkillsSettingsSection', () => {
     expect(screen.getByText(en.benchmarkRunning)).toBeTruthy()
   })
 
-  it('maps manager conflict failures to the in-dialog replace flow', async () => {
+  it('surfaces a manager save failure inline in the editor', async () => {
     const actions = renderSection({
-      save: vi.fn().mockRejectedValue(new SkillApiError('skill-conflict', 'exists')),
+      save: vi.fn().mockRejectedValue(new SkillApiError('skill-blocked', 'still blocked')),
     })
     await openFirstCard(actions)
     fireEvent.click(screen.getByRole('button', { name: en.actionEdit }))
     await screen.findByRole('textbox')
     fireEvent.click(screen.getByRole('button', { name: en.editSave }))
 
-    expect(await screen.findByText(en.editConflict)).toBeTruthy()
+    expect(await screen.findByText(en.editError.replace('{message}', 'still blocked'))).toBeTruthy()
   })
 
   it('disables run-all when only built-in skills exist', async () => {

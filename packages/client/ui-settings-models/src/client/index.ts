@@ -17,6 +17,10 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { ModelsSection } from './ModelsSection.tsx'
 import type { ModelsSectionInjected } from './ModelsSection.tsx'
+import { OrchestratorSection } from './OrchestratorSection.tsx'
+import type {
+  OrchestratorSectionInjected, OrchestratorSettingsView,
+} from './OrchestratorSection.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -125,6 +129,47 @@ export function apply(ctx: ClientContext): void {
     label: () => t('nav'),
     inject: injected,
   }, ModelsSection))
+
+  // Orchestrator role settings: read/write the `orchestrator` settings
+  // namespace consumed by @deepseek-ai/dsh-orchestrator (mode toggle + the
+  // local executor route). The head role is the session's live chat model, so
+  // no head route is configured here. Catalog reads are live via llm.models.
+  const orchestratorInjected = (): OrchestratorSectionInjected => ({
+    async load() {
+      const response = await connection.api.settings.describe({})
+      const namespaces = response.result.ok ? response.result.value.namespaces : []
+      const entry = namespaces.find(namespace => namespace.ns === 'orchestrator')
+      const value = (entry?.value ?? {}) as Partial<OrchestratorSettingsView>
+      return {
+        enabled: value.enabled === true,
+        executorProvider: value.executorProvider ?? '',
+        executorModel: value.executorModel ?? '',
+      }
+    },
+    async save(patch) {
+      const response = await connection.api.settings.update({
+        ns: 'orchestrator',
+        patch,
+      })
+      if (!response.result.ok) {
+        throw new Error(`${response.result.error.code}: ${response.result.error.message}`)
+      }
+    },
+    async listModels() {
+      const response = await connection.api.llm.models({})
+      if (!response.result.ok) return []
+      return response.result.value.groups
+    },
+  })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'orchestrator',
+    order: 15,
+    locale: NS,
+    label: () => t('orchestratorNav'),
+    inject: orchestratorInjected,
+  }, OrchestratorSection))
+
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',
     id: 'welcome-notice',

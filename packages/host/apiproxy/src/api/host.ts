@@ -32,6 +32,30 @@ export interface DirectoryListing {
   truncated: boolean
 }
 
+/** One child of a workspace folder, typed for a file-tree surface. */
+export interface WorkspaceChildEntry {
+  /** Base name shown in the tree row. */
+  readonly name: string
+  /** Absolute host path — the client never joins path segments itself. */
+  readonly path: string
+  /** Directory or regular file. */
+  readonly kind: 'directory' | 'file'
+  /** Hidden by the host platform's convention (dot-prefixed); the client owns whether to show it. */
+  readonly hidden: boolean
+  /** File size in bytes; absent for directories. */
+  readonly size?: number
+}
+
+/** host.readTextFile response value. */
+export interface ReadTextFileValue {
+  /** Absolute host path that was read (containment-resolved). */
+  readonly path: string
+  /** File base name. */
+  readonly name: string
+  /** UTF-8 text content. */
+  readonly text: string
+}
+
 /** Host-level unary methods. */
 export interface HostApi {
   /**
@@ -95,4 +119,41 @@ export interface HostApi {
     request: RpcRequest<{ path: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ opened: true }>>
+
+  /**
+   * List one folder level of the current session's project for the file-tree
+   * surface: child directories and files, name-sorted. The target path must
+   * resolve inside the session's recorded project (`session.header.cwd`), so
+   * the panel can never browse outside the project the user opened. Failures:
+   * `session-not-found`, `internal` (the session has no project cwd, or its
+   * recorded cwd is missing on disk), `file-outside-project`,
+   * `directory-unreadable`. The request carries an AbortSignal; the backend
+   * checks it after each folder read (an in-flight directory scan is not
+   * cancellable at the syscall level).
+   */
+  listChildren(
+    request: RpcRequest<{ sessionId: string; path: string }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ path: string; entries: readonly WorkspaceChildEntry[]; truncated: boolean }>>
+
+  /**
+   * Read a UTF-8 text file inside the current session's project. Served for
+   * the Markdown viewer/editor and for attaching workspace files to a prompt;
+   * binary or oversized content fails with `file-not-text` /
+   * `file-too-large`. Every other filesystem failure reports
+   * `file-unreadable`.
+   */
+  readTextFile(
+    request: RpcRequest<{ sessionId: string; path: string; maxBytes?: number }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<ReadTextFileValue>>
+
+  /**
+   * Replace the content of a UTF-8 text file inside the current session's
+   * project. The parent directory must already exist; oversized writes fail
+   * with `file-too-large` and filesystem failures with `file-unwritable`.
+   */
+  writeTextFile(
+    request: RpcRequest<{ sessionId: string; path: string; text: string; maxBytes?: number }>,
+  ): Promise<RpcResponse<{ path: string }>>
 }

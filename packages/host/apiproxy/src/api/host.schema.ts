@@ -73,3 +73,52 @@ export const hostOpenPathRequestSchema = z.object({
 export const hostOpenPathValueSchema = z.object({
   opened: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.openPath'>>>
+
+/** One child row of the workspace file-tree listing. */
+export const workspaceChildEntrySchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  kind: z.enum(['directory', 'file']),
+  hidden: z.boolean(),
+  size: z.number().int().nonnegative().optional(),
+}) satisfies z.ZodType<Wire<import('./host.ts').WorkspaceChildEntry>>
+
+/** host.listChildren request payload. */
+export const hostListChildrenRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  path: z.string().min(1),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.listChildren'>>>
+
+/** host.listChildren response value. */
+export const hostListChildrenValueSchema = z.object({
+  path: z.string(),
+  entries: z.array(workspaceChildEntrySchema),
+  truncated: z.boolean(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.listChildren'>>>
+
+/** host.readTextFile request payload. */
+export const hostReadTextFileRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  path: z.string().min(1),
+  maxBytes: z.number().int().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.readTextFile'>>>
+
+/** host.readTextFile response value. */
+export const hostReadTextFileValueSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  text: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.readTextFile'>>>
+
+/** host.writeTextFile request payload. */
+export const hostWriteTextFileRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  path: z.string().min(1),
+  text: z.string(),
+  maxBytes: z.number().int().min(1).optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.writeTextFile'>>>
+
+/** host.writeTextFile response value. */
+export const hostWriteTextFileValueSchema = z.object({
+  path: z.string(),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.writeTextFile'>>>

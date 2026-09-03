@@ -80,6 +80,7 @@
     { "path": "./packages/client/ui-directory-picker-native" },
     { "path": "./packages/client/ui-goal" },
     { "path": "./packages/client/ui-compact" },
+    { "path": "./packages/client/ui-files" },
     { "path": "./packages/client/ui-message-feedback" },
     { "path": "./packages/client/ui-model-selection" },
     { "path": "./packages/client/ui-agent-preset" },

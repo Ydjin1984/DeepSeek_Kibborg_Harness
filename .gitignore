@@ -45,3 +45,8 @@ worktrees/
 .dsh-*.log
 .dsh-pty-probe.ts
 .dsh-skill-descriptions.tsv
+
+# local dev artifacts (Ydjin1984 fork)
+.dsh/
+.planning/
+REVIEW-FINDINGS.md

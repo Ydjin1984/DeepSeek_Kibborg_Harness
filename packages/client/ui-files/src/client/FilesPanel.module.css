@@ -1,0 +1,392 @@
+/* Workspace file panel (ui-files): composer trigger + right drawer + dialog. */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-fill-hover);
+}
+
+.trigger:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-info-primary);
+  outline-offset: 1px;
+}
+
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--dsw-alias-scrim, rgba(0, 0, 0, 0.18));
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: 80vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--dsw-alias-bg-layer-1);
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  box-shadow: -12px 0 24px rgba(0, 0, 0, 0.16);
+  animation: filesDrawerIn 180ms var(--ds-ease-in-out, ease-in-out);
+}
+
+@keyframes filesDrawerIn {
+  from { transform: translateX(24px); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer { animation: none; }
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.drawerTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.drawerClose {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.drawerClose:hover {
+  background: var(--dsw-alias-fill-hover);
+}
+
+.drawerBody {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+/* One tree row: folder rows hold a full-width toggle button; file rows are
+   plain draggable rows. Both share the twist column so folder and file
+   glyphs line up vertically like the VSCode explorer. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding-right: 8px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--dsw-alias-fill-hover);
+}
+
+/* Hidden (dot) entries are listed but visually muted. */
+.muted {
+  opacity: 0.55;
+}
+
+.dirToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.dirToggle:disabled {
+  cursor: default;
+}
+
+/* Twist column (chevron for folders, blank slot for files). */
+.twist,
+.twistSlot {
+  flex: none;
+  width: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.twist {
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 120ms var(--ds-ease-in-out, ease-in-out);
+}
+
+.twistOpen {
+  transform: rotate(90deg);
+}
+
+/* Shared row label: truncates and stretches to the row's full width. */
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Glyph size and neutral colour; tinted badges override their own fill via
+   --file-tint / --file-ink below, so the neutral page colour only applies to
+   the generic outline glyph. */
+.folderGlyph,
+.fileGlyphSvg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.fileGlyphSvg {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Amber folder, the VSCode default-theme tint. */
+.folderGlyph {
+  color: #dcb67a;
+}
+
+/* Monogram badge palette (vscode-icons style). Colours are glyph art, not
+   theme semantics, so they live here as literal values and can be restyled
+   as a whole by overriding the custom properties. */
+.tintTypescript { --file-tint: #3178c6; --file-ink: #ffffff; }
+.tintJavascript { --file-tint: #f1e05a; --file-ink: #1f2328; }
+.tintJson { --file-tint: #cbcb41; --file-ink: #1f2328; }
+.tintMarkdown { --file-tint: #1976d2; --file-ink: #ffffff; }
+.tintHtml { --file-tint: #e34c26; --file-ink: #ffffff; }
+.tintCss { --file-tint: #42a5f5; --file-ink: #102027; }
+.tintYaml { --file-tint: #d84315; --file-ink: #ffffff; }
+.tintShell { --file-tint: #4eaa25; --file-ink: #ffffff; }
+.tintPython { --file-tint: #306998; --file-ink: #ffd43b; }
+.tintImage { --file-tint: #546e7a; --file-ink: #ffffff; }
+.tintArchive { --file-tint: #8d6e63; --file-ink: #ffffff; }
+.tintPdf { --file-tint: #e53935; --file-ink: #ffffff; }
+
+/* Inline folder load indicator (pending children). */
+.spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--dsw-alias-label-tertiary);
+  animation: filesSpin 700ms linear infinite;
+}
+
+@keyframes filesSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Failed listing row with its retry action. */
+.rowError {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  padding-right: 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+  white-space: nowrap;
+}
+
+.retry {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-state-info-primary);
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.empty {
+  padding: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.notice {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-error, var(--dsw-alias-state-error-primary));
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--dsw-alias-scrim, rgba(0, 0, 0, 0.24));
+}
+
+.markdownDialog {
+  width: min(860px, 92vw);
+  height: min(640px, 86vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.dialogTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+  margin: 0;
+}
+
+.dialogTabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tab {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tabActive {
+  background: var(--dsw-alias-fill-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.dialogHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.savedNote {
+  font-size: 12px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.savingNote {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.buttonPrimary,
+.buttonSecondary {
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.buttonPrimary {
+  border-color: var(--dsw-alias-state-info-primary);
+  color: var(--dsw-alias-state-info-primary);
+}
+
+.buttonPrimary:disabled,
+.buttonSecondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.failure {
+  margin: 8px 14px 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dialogBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.markdownPreview {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdownPreview :global(p) {
+  margin: 0 0 0.6em;
+}
+
+.markdownEditor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: 13px/1.6 var(--dsw-font-mono, monospace);
+  padding: 10px;
+  outline: none;
+}
+
+.markdownEditor:focus-visible {
+  border-color: var(--dsw-alias-state-info-primary);
+}

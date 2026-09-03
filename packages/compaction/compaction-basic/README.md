@@ -36,6 +36,9 @@ Every setting is optional. Top-level policy fields are defaults for every routed
 | `summarizationProvider` | no (default `''`) | Set together with `summarizationModel`; an empty pair resolves the latest logged request target, then the `AgentOptions` pair. |
 | `summarizationModel` | no (default `''`) | Set together with `summarizationProvider`; an empty pair resolves the latest logged request target, then the `AgentOptions` pair. |
 | `maxTokens` | no (default `8192`) | Provider generation cap for the summarization call; may include reasoning tokens. |
+| `summarizationSuppressReasoning` | no (default `true`) | Ask the summarization target to disable reasoning when it exposes an `off` effort, so thinking models do not stretch a compaction to minutes. |
+| `summarizationTimeoutMs` | no (default `120000`) | Wall-clock budget for one summarization call; on expiry the attempt fails with a clear error instead of hanging the step. |
+| `automaticRetryDelayMs` | no (default `60000`) | Minimum gap between automatic step-pressure attempts for one agent after an attempt failed. |
 | `compactionRetries` | no (default `1`) | Extra attempts after the first when pressure remains above threshold. |
 | `maxOverflowRetries` | no (default `1`) | Maximum retries after canonical context-window overflow; `0` disables recovery only. |
 | `modelPolicies` | no (default `[]`) | Exact `{ provider, model, ...partialPolicy }` overrides; matching uses both fields and does not depend on `listModels()`. |
@@ -47,7 +50,7 @@ An adapter may return no capacity for a valid dynamic route, and resolved capaci
 
 ## Usage
 
-`BasicCompactionEngine` requires `ctx.llm`, `ctx.tokenMeter`, and `ctx.sessions`. The composition below receives `ctx.llm` from its host and installs the other two services:
+`BasicCompactionEngine` declares `inject = ['llm', 'tokenMeter', 'sessions']`. The composition below only needs to install `token-meter` and `sessions` itself when the host does not already mount them — the shipped presets mount both as separate entries, so there the engine entry alone is enough:
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'

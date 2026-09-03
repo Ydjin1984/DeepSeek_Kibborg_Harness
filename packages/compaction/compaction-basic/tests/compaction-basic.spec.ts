@@ -295,6 +295,9 @@ describe('compact configuration and defaults', () => {
       summarizationProvider: '',
       summarizationModel: '',
       maxTokens: 8192,
+      summarizationSuppressReasoning: true,
+      summarizationTimeoutMs: 120_000,
+      automaticRetryDelayMs: 60_000,
       compactionRetries: 1,
       maxOverflowRetries: 1,
       modelPolicies: [],
@@ -1218,6 +1221,48 @@ describe('default one-shot summarizer', () => {
     })
     const instruction = adapter.lastOptions?.messages.at(-1)?.content[0]
     expect(instruction?.type === 'text' ? instruction.text : '').toContain('## Primary Request and Intent')
+  })
+
+  it('pins reasoning off for the summarization call when the target supports it', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    void new TokenMeter(ctx)
+    class ReasoningAdapter extends ScriptedAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({
+          provider,
+          id: model,
+          name: model,
+          reasoning: {
+            efforts: [
+              { id: 'off' as never, name: 'Off' },
+              { id: 'high' as never, name: 'High' },
+            ],
+            defaultEffort: 'high' as never,
+          },
+        })
+      }
+    }
+    const adapter = new ReasoningAdapter([{ type: 'text', text: 'summary' }])
+    ctx.llm.registerAdapter([MODEL], adapter)
+    const compact = new ExposedCompactionEngine(ctx, {
+      auto: false,
+      summarizationProvider: MODEL,
+      summarizationModel: MODEL,
+    })
+    await compact.runSummarize(promptInput('history'), agent(conversation(1), 'fallback'))
+    expect(adapter.lastOptions?.reasoningEffort).toBe('off')
+  })
+
+  it('leaves reasoning at the model default when no off effort is exposed', async () => {
+    const { adapter, compact } = await summarizerHarness([{ type: 'text', text: 'summary' }], undefined, MODEL, {
+      auto: false,
+      summarizationProvider: MODEL,
+      summarizationModel: MODEL,
+    })
+    // ScriptedAdapter's base resolveModel advertises no reasoning capability.
+    await compact.runSummarize(promptInput('history'), agent(conversation(1), 'fallback'))
+    expect(adapter.lastOptions).not.toHaveProperty('reasoningEffort')
   })
 
   it('replays the conversation prefix and appends the instruction as the final message', async () => {

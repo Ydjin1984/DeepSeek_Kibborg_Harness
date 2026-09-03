@@ -5,7 +5,13 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { contentHasImage, createUserMessage, BlockAssembler, LlmError } from '@deepseek-ai/dsh-llm'
+import {
+  contentHasImage,
+  createUserMessage,
+  BlockAssembler,
+  LlmError,
+  ReasoningEffortId,
+} from '@deepseek-ai/dsh-llm'
 import type {
   ContentBlock, FinishReason, GenerateOptions, Message, TokenUsage, ToolSchema,
 } from '@deepseek-ai/dsh-llm'
@@ -15,6 +21,10 @@ interface SummaryConfig {
   readonly summarizationProvider: string
   readonly summarizationModel: string
   readonly maxTokens: number
+  /** Disable the summarization target's reasoning mode when it supports `off`. */
+  readonly summarizationSuppressReasoning: boolean
+  /** Wall-clock budget for one summarization call. */
+  readonly summarizationTimeoutMs: number
 }
 
 /** Tags wrapping the structured summary inside the landed checkpoint node. */
@@ -159,9 +169,62 @@ export async function summarizeWithLlm(
     maxTokens: config.maxTokens,
     sessionId: agent.session.id,
     purpose: 'compaction',
-    ...signal === undefined ? {} : { signal },
   }
-  for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
+  // The signal lands on the SAME options object the adapter sees, so an
+  // llm/stream listener rewriting the route is what the result records.
+  if (signal !== undefined) options.signal = signal
+
+  // Summarization is mechanical; a thinking model would burn its reasoning
+  // budget on it and stretch a compaction to minutes. When the routed target
+  // exposes an `off` reasoning effort, pin it for this call only.
+  if (config.summarizationSuppressReasoning) {
+    try {
+      const info = await ctx.llm.resolveModelInfo(target.provider, target.model, signal)
+      if (info.reasoning?.efforts.some(effort => effort.id === 'off')) {
+        options.reasoningEffort = ReasoningEffortId('off')
+      }
+    } catch {
+      // Capability lookup failure leaves the default effort: the summarization
+      // must not fail because describing the model's reasoning options did.
+    }
+  }
+
+  // A hard budget keeps one compaction from stalling a step indefinitely on a
+  // slow or wedged summarizer. The budget races the adapter's chunk wait; the
+  // caller's own signal still reaches the adapter unchanged for real
+  // cancellation. Any stream error (budget or adapter) closes the abandoned
+  // iterator so the provider call cannot outlive the failed summarization.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const budgetMs = config.summarizationTimeoutMs > 0 ? config.summarizationTimeoutMs : undefined
+  const timeout = budgetMs === undefined
+    ? undefined
+    : new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(
+          `summarization exceeded its ${String(budgetMs)}ms budget `
+          + '(summarizationTimeoutMs); the conversation is unchanged',
+        ))
+      }, budgetMs)
+      // A summarization timeout never keeps the process alive by itself.
+      if (typeof timer.unref === 'function') timer.unref()
+    })
+  const iterator = ctx.llm.stream(options)[Symbol.asyncIterator]()
+  try {
+    while (true) {
+      const result = timeout === undefined
+        ? await iterator.next()
+        : await Promise.race([iterator.next(), timeout])
+      if (result.done) break
+      assembler.push(result.value)
+    }
+  } catch (error: unknown) {
+    // The adapter may still be producing after a budget rejection: close its
+    // iterator so the abandoned stream does not outlive the summarization.
+    await iterator.return?.().catch(() => undefined)
+    throw error
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
   const error = finishError(assembler.finish)
   if (error !== undefined) throw error
 

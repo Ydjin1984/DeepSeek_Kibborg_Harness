@@ -44,6 +44,11 @@ export interface RpcErrorDetailsMap {
   'directory-unreadable': { path: string }
   'directory-exists': { path: string }
   'directory-create-failed': { path: string }
+  'file-outside-project': { path: string }
+  'file-not-text': { path: string }
+  'file-too-large': { path?: string }
+  'file-unreadable': { path: string }
+  'file-unwritable': { path: string }
   'directory-picker-unavailable': { capability: string }
   'agent-preset-read-only': { agentPreset: string; reason: string }
   'agent-preset-locked': { sessionId: SessionId; agentPreset: string }

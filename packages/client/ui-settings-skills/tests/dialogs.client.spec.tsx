@@ -12,7 +12,6 @@ import type { SkillVersionsDialogProps } from '../src/client/SkillVersionsDialog
 import { SkillViewDialog } from '../src/client/SkillViewDialog.tsx'
 import type { SkillViewDialogProps } from '../src/client/SkillViewDialog.tsx'
 import { en } from '../src/client/locales.ts'
-import { SkillApiError } from '../src/client/skills-api.ts'
 import { benchmarkRun, benchmarkRunWithoutResult, detail, modelGroups, t, version } from './helpers.client.ts'
 
 afterEach(cleanup)
@@ -86,7 +85,9 @@ describe('SkillEditDialog', () => {
     await vi.waitFor(() => { expect(save).toHaveBeenCalledOnce() })
     expect(validate).toHaveBeenCalledWith('new body')
     expect(securityCheck).toHaveBeenCalledWith('new body')
-    expect(save).toHaveBeenCalledWith('new body', { replace: false, force: false })
+    // Editing an existing skill is an in-place update: replace is always set,
+    // so the first save never bounces back with a skill-conflict step.
+    expect(save).toHaveBeenCalledWith('new body', { replace: true, force: false })
     expect(onSaved).toHaveBeenCalledOnce()
     expect(screen.getByText(en.editSaved)).toBeTruthy()
   })
@@ -135,29 +136,7 @@ describe('SkillEditDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: en.editSaveAnyway }))
 
     await vi.waitFor(() => {
-      expect(save).toHaveBeenCalledExactlyOnceWith(BODY, { replace: false, force: true })
-    })
-  })
-
-  it('offers replace past a same-name conflict', async () => {
-    renderEdit({
-      save: vi.fn().mockRejectedValueOnce(new Error('conflict'))
-        .mockResolvedValueOnce(undefined),
-    })
-    // A non-SkillApiError rejection surfaces the message instead of the panel.
-    fireEvent.click(screen.getByRole('button', { name: en.editSave }))
-    await vi.waitFor(() => { expect(screen.getByText(en.editError.replace('{message}', 'conflict'))).toBeTruthy() })
-
-    const conflictSave = vi.fn<SkillEditDialogProps['save']>()
-    conflictSave.mockRejectedValueOnce(new SkillApiError('skill-conflict', 'already exists'))
-    cleanup()
-    renderEdit({ save: conflictSave })
-    fireEvent.click(screen.getByRole('button', { name: en.editSave }))
-
-    await vi.waitFor(() => { expect(screen.getByText(en.editConflict)).toBeTruthy() })
-    fireEvent.click(screen.getByRole('button', { name: en.editReplace }))
-    await vi.waitFor(() => {
-      expect(conflictSave).toHaveBeenLastCalledWith(BODY, { replace: true, force: false })
+      expect(save).toHaveBeenCalledExactlyOnceWith(BODY, { replace: true, force: true })
     })
   })
 
@@ -167,18 +146,6 @@ describe('SkillEditDialog', () => {
 
     await vi.waitFor(() => { expect(screen.getByText(en.editError.replace('{message}', 'denied'))).toBeTruthy() })
     expect(onSaved).not.toHaveBeenCalled()
-  })
-
-  it('dismisses the conflict panel without saving', async () => {
-    const conflictSave = vi.fn<SkillEditDialogProps['save']>()
-      .mockRejectedValueOnce(new SkillApiError('skill-conflict', 'already exists'))
-    renderEdit({ save: conflictSave })
-    fireEvent.click(screen.getByRole('button', { name: en.editSave }))
-    await vi.waitFor(() => { expect(screen.getByText(en.editConflict)).toBeTruthy() })
-
-    fireEvent.click(screen.getByRole('button', { name: en.actionCancel }))
-    await vi.waitFor(() => { expect(screen.queryByText(en.editConflict)).toBeNull() })
-    expect(conflictSave).toHaveBeenCalledOnce()
   })
 
   it('disables save while saving or when the content is blank', async () => {
@@ -202,6 +169,7 @@ describe('SkillVersionsDialog', () => {
   function renderVersions(over: Partial<SkillVersionsDialogProps> = {}) {
     const defaults = {
       onRollback: vi.fn<SkillVersionsDialogProps['onRollback']>().mockResolvedValue(undefined),
+      onActivate: vi.fn<SkillVersionsDialogProps['onActivate']>().mockResolvedValue(undefined),
       onClose: vi.fn(),
     }
     const props = {
@@ -210,6 +178,7 @@ describe('SkillVersionsDialog', () => {
       activeVersion: 'v1',
       t,
       locale: 'en',
+      activating: false,
       rolling: false,
       ...defaults,
       ...over,
@@ -225,7 +194,32 @@ describe('SkillVersionsDialog', () => {
     expect(screen.getByText('v2')).toBeTruthy()
     expect(screen.getAllByText(en.versionsActive)).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: en.versionsRollback })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: en.versionsActivate })).toHaveLength(1)
     expect(screen.getByText('Updated', { exact: false })).toBeTruthy()
+  })
+
+  it('activates the chosen version as the default', async () => {
+    const { onActivate } = renderVersions()
+    fireEvent.click(screen.getByRole('button', { name: en.versionsActivate }))
+    await vi.waitFor(() => { expect(onActivate).toHaveBeenCalledExactlyOnceWith('v2') })
+    await vi.waitFor(() => {
+      expect(screen.getByText(en.versionsActivated.replace('{version}', 'v2'))).toBeTruthy()
+    })
+  })
+
+  it('reports an activation failure inline', async () => {
+    const { onActivate } = renderVersions({ onActivate: vi.fn().mockRejectedValue(new Error('version gone')) })
+    fireEvent.click(screen.getByRole('button', { name: en.versionsActivate }))
+    await vi.waitFor(() => {
+      expect(screen.getByText(en.versionsActivateError.replace('{message}', 'version gone'))).toBeTruthy()
+    })
+    expect(onActivate).toHaveBeenCalledOnce()
+  })
+
+  it('disables activate while one is in flight', () => {
+    renderVersions({ activating: true })
+    expect(screen.getByRole('button', { name: en.versionsActivating })).toHaveProperty('disabled', true)
+    expect(screen.getAllByRole('button', { name: en.versionsRollback })[0]).toHaveProperty('disabled', true)
   })
 
   it('rolls back to the chosen version', async () => {

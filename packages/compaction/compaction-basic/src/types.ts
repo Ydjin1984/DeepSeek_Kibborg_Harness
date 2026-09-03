@@ -20,6 +20,23 @@ export interface CompactionPolicyConfig {
   summarizationModel?: string
   /** Provider generation cap for summarization. Defaults to `8192`. */
   maxTokens?: number
+  /**
+   * Ask the summarization model to disable its reasoning mode when the routed
+   * target supports it, so compaction finishes quickly on thinking models.
+   * Defaults to `true`.
+   */
+  summarizationSuppressReasoning?: boolean
+  /**
+   * Wall-clock budget for one summarization call; the attempt fails with a
+   * clear error instead of hanging a step. Defaults to `120000` (2 minutes).
+   */
+  summarizationTimeoutMs?: number
+  /**
+   * Minimum gap between automatic step-pressure compaction attempts for one
+   * agent after an attempt failed, so a failing summarizer does not stall
+   * every following step. Defaults to `60000` (1 minute).
+   */
+  automaticRetryDelayMs?: number
   /** Extra attempts after the first compaction when pressure remains above threshold. Defaults to `1`. */
   compactionRetries?: number
   /** Maximum retries after canonical context overflow; `0` disables recovery. Defaults to `1`. */
@@ -53,6 +70,9 @@ interface ResolvedPolicyFields {
   readonly summarizationProvider: string
   readonly summarizationModel: string
   readonly maxTokens: number
+  readonly summarizationSuppressReasoning: boolean
+  readonly summarizationTimeoutMs: number
+  readonly automaticRetryDelayMs: number
   readonly compactionRetries: number
   readonly maxOverflowRetries: number
 }

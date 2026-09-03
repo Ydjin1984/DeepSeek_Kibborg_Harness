@@ -270,6 +270,12 @@
     - id: ui-compact
       name: '@deepseek-ai/dsh-client-ui-compact'
 
+    # Workspace file panel: a composer-tool button opens the right-side file
+    # drawer over the session project folder (lazy tree), drags file rows into
+    # the composer as file drafts, and edits Markdown files in place.
+    - id: ui-files
+      name: '@deepseek-ai/dsh-client-ui-files'
+
     # Per-message feedback: Like/Dislike plus an optional note in the
     # assistant-message action strip, over the messageFeedback Remote.
     - id: ui-message-feedback
@@ -405,6 +411,15 @@
 
 - id: tool-result-pruner
   disabled: true
+
+# Orchestrator mode, HOST plane: registers the `executor` tool (pinned to a
+# configured local model) and the head-role prompt section. Disabled by
+# default; enable and set the local executor route in Settings → Plugins
+# (the plugin is configurable; changes re-apply the plugin row). New rows
+# must be inserted, not overridden by id, so this lives in its own insert.
+- insert:
+    - id: orchestrator
+      name: '@deepseek-ai/dsh-orchestrator'
 
 # The subagent registry and its backends STAY in the host plane. `subagents` is
 # a process singleton with a cross-session query surface (`listChildren`,

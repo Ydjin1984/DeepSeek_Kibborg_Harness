@@ -1604,6 +1604,21 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     const name = path.slice(path.lastIndexOf('/') + 1)
     return directoryTree.get(parent)?.includes(name) === true ? [] : undefined
   }
+
+  // Deterministic text files behind the fixture's project file-tree surface
+  // (host.listChildren / readTextFile / writeTextFile): one markdown file in
+  // the demo project so Web tests can walk, open, edit, and save it.
+  const fixtureTextFiles = new Map<string, string>([
+    [`${FIXTURE_HOME}/Documents/project/README.md`, '# Fixture project\n\nHello from the fixture tree.\n'],
+  ])
+  const joinFixturePath = (parent: string, name: string): string => (
+    parent === '/' ? `/${name}` : `${parent}/${name}`
+  )
+  const fixtureDirnameOf = (path: string): string => {
+    const index = path.lastIndexOf('/')
+    return index <= 0 ? '/' : path.slice(0, index)
+  }
+  const fixtureBasenameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
   const crumbsOf = (path: string): { name: string; path: string; hidden: boolean }[] => {
     const crumbs = [{ name: '/', path: '/', hidden: false }]
     let acc = ''
@@ -2661,6 +2676,35 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         return ok(request, { path: target })
       },
       openPath: request => ok(request, { opened: true as const }),
+      listChildren: (request) => {
+        const target = request.payload.path
+        const dirs = childrenOf(target)
+        if (dirs === undefined) {
+          return err(request, { code: 'directory-unreadable', message: `cannot list ${target}: not in the fixture tree`, details: { path: target } })
+        }
+        const entries: { name: string; path: string; kind: 'directory' | 'file'; hidden: boolean; size?: number }[] = dirs
+          .map(name => ({ name, path: joinFixturePath(target, name), kind: 'directory' as const, hidden: name.startsWith('.') }))
+        for (const [path, text] of fixtureTextFiles) {
+          if (fixtureDirnameOf(path) !== target) continue
+          entries.push({ name: fixtureBasenameOf(path), path, kind: 'file', hidden: fixtureBasenameOf(path).startsWith('.'), size: text.length })
+        }
+        entries.sort((left, right) => {
+          if (left.kind !== right.kind) return left.kind === 'directory' ? -1 : 1
+          return left.name.localeCompare(right.name)
+        })
+        return ok(request, { path: target, entries, truncated: false })
+      },
+      readTextFile: (request) => {
+        const text = fixtureTextFiles.get(request.payload.path)
+        if (text === undefined) {
+          return err(request, { code: 'file-not-text', message: `no fixture text file at ${request.payload.path}`, details: { path: request.payload.path } })
+        }
+        return ok(request, { path: request.payload.path, name: fixtureBasenameOf(request.payload.path), text })
+      },
+      writeTextFile: (request) => {
+        fixtureTextFiles.set(request.payload.path, request.payload.text)
+        return ok(request, { path: request.payload.path })
+      },
     },
     workspace: {
       list: request => ok(request, {
@@ -2954,6 +2998,11 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         return ok(request, { versions: [] })
       },
       rollback: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        return ok(request, { activeVersion: request.payload.version })
+      },
+      activate: (request) => {
         const missing = requireSession(request)
         if (missing !== undefined) return missing
         return ok(request, { activeVersion: request.payload.version })
@@ -3346,6 +3395,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'host.listDirectory': return this.api.host.listDirectory(request, new AbortController().signal)
       case 'host.createDirectory': return this.api.host.createDirectory(request)
       case 'host.openPath': return this.api.host.openPath(request, new AbortController().signal)
+      case 'host.listChildren': return this.api.host.listChildren(request, new AbortController().signal)
+      case 'host.readTextFile': return this.api.host.readTextFile(request, new AbortController().signal)
+      case 'host.writeTextFile': return this.api.host.writeTextFile(request)
       case 'workspace.list': return this.api.workspace.list(request)
       case 'workspace.create': return this.api.workspace.create(request)
       case 'workspace.rename': return this.api.workspace.rename(request)
@@ -3364,6 +3416,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'skill.setEnabled': return this.api.skills.setEnabled(request)
       case 'skill.versions': return this.api.skills.versions(request)
       case 'skill.rollback': return this.api.skills.rollback(request)
+      case 'skill.activate': return this.api.skills.activate(request)
       case 'skill.validate': return this.api.skills.validate(request)
       case 'skill.securityCheck': return this.api.skills.securityCheck(request)
       case 'skill.benchmarkStart': return this.api.skills.benchmarkStart(request)

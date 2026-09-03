@@ -41,6 +41,7 @@ function bench() {
     setEnabled: vi.fn(),
     versions: vi.fn(),
     rollback: vi.fn(),
+    activate: vi.fn(),
     validate: vi.fn(),
     securityCheck: vi.fn(),
     benchmarkStart: vi.fn(),
@@ -69,6 +70,7 @@ describe('createSkillsActions', () => {
     skills.setEnabled.mockResolvedValue(ok({}))
     skills.versions.mockResolvedValue(ok({ versions: [] }))
     skills.rollback.mockResolvedValue(ok({ activeVersion: 'v2' }))
+    skills.activate.mockResolvedValue(ok({ activeVersion: 'v3' }))
     skills.validate.mockResolvedValue(ok({ ok: true }))
     skills.securityCheck.mockResolvedValue(ok(VERDICT))
     skills.benchmarkStart.mockResolvedValue(ok({ run: { id: 'r1' } }))
@@ -89,6 +91,7 @@ describe('createSkillsActions', () => {
     await expect(actions.setEnabled('s' as never, 'demo-skill', false)).resolves.toBeUndefined()
     await expect(actions.versions('s' as never, 'demo-skill')).resolves.toEqual([])
     await expect(actions.rollback('s' as never, 'demo-skill', 'v1')).resolves.toBe('v2')
+    await expect(actions.activate('s' as never, 'demo-skill', 'v3')).resolves.toBe('v3')
     await expect(actions.validate('body')).resolves.toEqual({ ok: true })
     await expect(actions.securityCheck('body')).resolves.toEqual(VERDICT)
     await expect(actions.benchmarkStart({

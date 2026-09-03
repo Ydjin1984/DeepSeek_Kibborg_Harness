@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { access, mkdir, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -93,6 +93,14 @@ import { credentialRef } from '@deepseek-ai/dsh-credentials'
 // Value edge: the rename impl narrows the title service's validation failure; the import also resolves `ctx.get('sessionTitle')`.
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import type { CallId } from '@deepseek-ai/dsh-llm/brand'
+// Project-scoped file-tree operations (listChildren / readTextFile /
+// writeTextFile) shared by the host domain handlers below.
+import {
+  listProjectChildren,
+  ProjectFileError,
+  readProjectTextFile,
+  writeProjectTextFile,
+} from './project-files.ts'
 import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
 // Side-effect type import: resolves the `approval/request` waterfall and
@@ -101,7 +109,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
 import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
-import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
+import type { ClientResponse, RpcError, RpcErrorCode, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
 import type {
   AskUserQuestionAnswer, AskUserQuestionItem, AskUserQuestionRequest,
@@ -721,6 +729,59 @@ function directoryError(error: unknown): RpcError {
     return { code: error.code, message: error.message, details: { path: error.path } }
   }
   return { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} }
+}
+
+/** Map a project-file operation failure onto the wire error vocabulary. */
+function projectFileError(error: unknown): RpcError {
+  if (error instanceof ProjectFileError) {
+    const code = error.code as RpcErrorCode
+    return error.path === undefined
+      ? { code, message: error.message, details: {} } as unknown as RpcError
+      : { code, message: error.message, details: { path: error.path } } as unknown as RpcError
+  }
+  return { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} }
+}
+
+/** One project-file request's session resolution outcome. */
+type ProjectRootResolution =
+  | { readonly kind: 'ok'; readonly root: string }
+  | { readonly kind: 'error'; readonly error: RpcError }
+
+/**
+ * Resolve the canonical project root backing one session-addressed file
+ * request: the session must be attached and record a project cwd that still
+ * exists on disk.
+ * @param ctx - gateway context serving the request.
+ * @param sessionId - payload session id.
+ * @returns the realpath of the session's project, or a wire error.
+ */
+async function resolveSessionProjectRoot(ctx: Context, sessionId: SessionId): Promise<ProjectRootResolution> {
+  const session = ctx.sessions.get(sessionId)
+  if (session === undefined) {
+    return {
+      kind: 'error',
+      error: {
+        code: 'session-not-found',
+        message: `session "${sessionId}" not found (not attached)`,
+        details: { sessionId },
+      },
+    }
+  }
+  const cwd = session.header.cwd
+  if (cwd === undefined) {
+    return {
+      kind: 'error',
+      error: { code: 'internal', message: `session "${sessionId}" has no project cwd`, details: {} },
+    }
+  }
+  const root = await realpath(cwd).catch(() => undefined)
+  if (root === undefined) {
+    return {
+      kind: 'error',
+      error: { code: 'internal', message: `session "${sessionId}" project "${cwd}" is missing on disk`, details: {} },
+    }
+  }
+  return { kind: 'ok', root }
 }
 
 /** Resolved Agent model and project-directory defaults consumed by the API implementation. */
@@ -3111,6 +3172,54 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       async openPath(request, signal) {
         return openPath(request, request.payload.path, signal)
       },
+
+      async listChildren(request, signal) {
+        const root = await resolveSessionProjectRoot(ctx, request.payload.sessionId as SessionId)
+        if (root.kind === 'error') return err(request, root.error)
+        try {
+          const listed = await listProjectChildren(root.root, request.payload.path)
+          return ok(request, { path: listed.path, entries: listed.entries, truncated: false })
+        } catch (error: unknown) {
+          if (signal?.aborted === true) {
+            return err(request, { code: 'cancelled', message: 'project listing was aborted', details: {} })
+          }
+          return err(request, projectFileError(error))
+        }
+      },
+
+      async readTextFile(request, signal) {
+        const root = await resolveSessionProjectRoot(ctx, request.payload.sessionId as SessionId)
+        if (root.kind === 'error') return err(request, root.error)
+        try {
+          const value = await readProjectTextFile(
+            root.root,
+            request.payload.path,
+            request.payload.maxBytes,
+          )
+          return ok(request, value)
+        } catch (error: unknown) {
+          if (signal?.aborted === true) {
+            return err(request, { code: 'cancelled', message: 'project read was aborted', details: {} })
+          }
+          return err(request, projectFileError(error))
+        }
+      },
+
+      async writeTextFile(request) {
+        const root = await resolveSessionProjectRoot(ctx, request.payload.sessionId as SessionId)
+        if (root.kind === 'error') return err(request, root.error)
+        try {
+          const path = await writeProjectTextFile(
+            root.root,
+            request.payload.path,
+            request.payload.text,
+            request.payload.maxBytes,
+          )
+          return ok(request, { path })
+        } catch (error: unknown) {
+          return err(request, projectFileError(error))
+        }
+      },
     },
 
     goals: {
@@ -3490,6 +3599,20 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if (resolved.kind === 'error') return err(request, resolved.error)
         try {
           const activeVersion = await resolved.manager.rollback(request.payload.name, request.payload.version, resolved.cwd)
+          return ok(request, { activeVersion })
+        } catch (error: unknown) {
+          return managerError(request, error)
+        }
+      },
+      async activate(request) {
+        const resolved = resolveSkillManager(request, ctx)
+        if (resolved.kind === 'error') return err(request, resolved.error)
+        try {
+          const activeVersion = await resolved.manager.activateVersion(
+            request.payload.name,
+            request.payload.version,
+            resolved.cwd,
+          )
           return ok(request, { activeVersion })
         } catch (error: unknown) {
           return managerError(request, error)

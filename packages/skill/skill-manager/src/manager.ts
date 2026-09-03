@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Service } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -266,8 +266,18 @@ export class SkillManager extends Service {
     if (!isSkillName(name)) throw new SkillManagerError('skill-invalid', `invalid skill name "${name}"`)
     const content = input.content.trim()
     if (content.length === 0) throw new SkillManagerError('skill-invalid', 'skill content is empty')
-    const validation = this.validate(content)
-    if (!validation.ok) throw new SkillManagerError('skill-invalid', validation.reason)
+    const parsed = parseSkillSource(content)
+    if (!parsed.ok) throw new SkillManagerError('skill-invalid', parsed.reason)
+    // The published body's frontmatter name must match the managed name:
+    // renaming through the body would silently desync the on-disk path, the
+    // catalog, and future remove/restore calls (delete and recreate is the
+    // supported rename path).
+    if (parsed.skill.name !== name) {
+      throw new SkillManagerError(
+        'skill-invalid',
+        `frontmatter name "${parsed.skill.name}" does not match skill name "${name}" — renaming is not supported; delete and recreate instead`,
+      )
+    }
     const verdict = securityCheck(content)
     if (verdict.status === 'blocked' && input.force !== true) {
       throw new SkillManagerError('skill-blocked', securityBlockedMessage(verdict))
@@ -327,11 +337,18 @@ export class SkillManager extends Service {
     const root = await this.rootFor(entry.scope, cwd)
     const trashRoot = join(root.path, SKILL_TRASH_DIR)
     await mkdir(trashRoot, { recursive: true })
-    let target = join(trashRoot, entry.name)
+    // A flat `*.md` skill lives directly in the skills root, so its directory
+    // is the root itself; only the file (under its on-disk name) may move to
+    // the trash, never the whole root — that would drag every sibling away.
+    const flatMarkdown = entry.directory === root.path
+    const onDiskName = flatMarkdown ? basename(entry.path) : entry.name
+    let target = join(trashRoot, onDiskName)
     if (await pathExists(target)) {
-      target = join(trashRoot, `${entry.name}-${Date.now()}`)
+      target = join(trashRoot, flatMarkdown
+        ? `${onDiskName.slice(0, -3)}-${Date.now()}.md`
+        : `${onDiskName}-${Date.now()}`)
     }
-    await rename(entry.directory, target)
+    await rename(flatMarkdown ? entry.path : entry.directory, target)
   }
 
   /**
@@ -344,7 +361,11 @@ export class SkillManager extends Service {
     const entry = trash.find(item => item.name === name)
     if (entry === undefined) throw new SkillManagerError('skill-not-found', `trashed skill "${name}" not found`)
     const root = await this.rootFor(entry.scope, cwd)
-    const target = join(root.path, name)
+    // A flat markdown file is restored under its original on-disk name (with
+    // `.md`); directory skills restore under their public name.
+    const target = entry.path.endsWith('.md')
+      ? join(root.path, basename(entry.path))
+      : join(root.path, entry.name)
     if (await pathExists(target)) {
       throw new SkillManagerError('skill-conflict', `skill "${name}" already exists in ${entry.scope} scope`)
     }
@@ -478,8 +499,16 @@ export class SkillManager extends Service {
   async publishVersion(input: SaveSkillInput): Promise<string> {
     const name = input.name.trim()
     const content = input.content.trim()
-    const validation = this.validate(content)
-    if (!validation.ok) throw new SkillManagerError('skill-invalid', validation.reason)
+    const parsed = parseSkillSource(content)
+    if (!parsed.ok) throw new SkillManagerError('skill-invalid', parsed.reason)
+    // Same frontmatter-name guard as save: a candidate body must keep the name
+    // it is published under.
+    if (parsed.skill.name !== name) {
+      throw new SkillManagerError(
+        'skill-invalid',
+        `frontmatter name "${parsed.skill.name}" does not match skill name "${name}" — renaming is not supported; delete and recreate instead`,
+      )
+    }
     const verdict = securityCheck(content)
     if (verdict.status === 'blocked' && input.force !== true) {
       throw new SkillManagerError('skill-blocked', securityBlockedMessage(verdict))
@@ -512,8 +541,9 @@ export class SkillManager extends Service {
    * @param name - skill name.
    * @param version - version id to activate.
    * @param cwd - workspace directory.
+   * @returns the activated version id.
    */
-  async activateVersion(name: string, version: string, cwd: string): Promise<void> {
+  async activateVersion(name: string, version: string, cwd: string): Promise<string> {
     const entry = await this.findLocal(name, cwd)
     if (entry === undefined) throw new SkillManagerError('skill-not-found', `skill "${name}" is not managed`)
     const meta = await this.readMeta(entry.directory)
@@ -529,6 +559,7 @@ export class SkillManager extends Service {
       updatedAt: new Date().toISOString(),
     }
     await this.writeMeta(entry.directory, updated)
+    return version
   }
 
   /** Read a version's body from its version snapshot (or the active file for the active version). */
@@ -623,6 +654,7 @@ export class SkillManager extends Service {
         }, (next) => { this.updateBenchmarkRun(run.id, { ...run, ...next, skillName: name }) }, controller.signal)
         this.updateBenchmarkRun(run.id, { ...run, status: 'completed', phase: 'done', result, skillName: name })
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- external cancelBenchmark aborts can land here.
         const status = controller.signal.aborted ? 'cancelled' : 'failed'
         this.updateBenchmarkRun(run.id, { ...run, status, error: String(error), skillName: name })
       }
@@ -883,7 +915,10 @@ export class SkillManager extends Service {
       }
       for (const name of names) {
         if (name.startsWith('.')) continue
-        entries.push({ name, scope: root.scope, path: join(trashRoot, name) })
+        // A trashed flat markdown file is addressed by its public (frontmatter)
+        // name without the `.md` suffix, matching remove/read/restore.
+        const publicName = name.endsWith('.md') ? name.slice(0, -3) : name
+        entries.push({ name: publicName, scope: root.scope, path: join(trashRoot, name) })
       }
     }
     return entries
