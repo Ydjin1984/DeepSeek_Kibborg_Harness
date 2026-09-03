@@ -15,7 +15,7 @@ export type {} from './conversation-nodes/turn-max-tokens.ts'
 export type {} from './conversation-nodes/turn-tail.ts'
 
 export { apply, inject } from './apply.ts'
-export { ConversationController } from './service.ts'
+export { ConversationController, COMPOSER_FILE_SOURCE_PATH } from './service.ts'
 export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './contract/input.ts'
 

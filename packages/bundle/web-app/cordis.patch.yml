@@ -414,9 +414,10 @@
 
 # Orchestrator mode, HOST plane: registers the `executor` tool (pinned to a
 # configured local model) and the head-role prompt section. Disabled by
-# default; enable and set the local executor route in Settings → Plugins
-# (the plugin is configurable; changes re-apply the plugin row). New rows
-# must be inserted, not overridden by id, so this lives in its own insert.
+# default; enable and set the local executor route in Settings → Models →
+# «Оркестратор» (live `orchestrator` settings namespace; edits apply at
+# runtime without re-applying this row). New rows must be inserted, not
+# overridden by id, so this lives in its own insert.
 - insert:
     - id: orchestrator
       name: '@deepseek-ai/dsh-orchestrator'

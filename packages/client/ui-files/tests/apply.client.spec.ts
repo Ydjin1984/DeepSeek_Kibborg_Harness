@@ -90,7 +90,7 @@ describe('ui-files browser apply', () => {
     await ctx.plugin({ inject: [...inject], apply }).await()
 
     const entry = capture.slots.entries('conversation.input.left')[0]
-    const bind = (entry as { inject?: (sessionId: string) => {
+    const bind = (entry as unknown as { inject?: (sessionId: string) => {
       listChildren: (path: string, signal: AbortSignal) => Promise<unknown>
       readTextFile: (path: string) => Promise<{ ok: boolean; text?: string; code?: string; message?: string }>
       writeTextFile: (path: string, text: string) => Promise<{ ok: boolean; message?: string }>

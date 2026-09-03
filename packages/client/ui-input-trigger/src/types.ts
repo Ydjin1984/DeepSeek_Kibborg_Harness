@@ -71,6 +71,12 @@ export interface SubmitFileAttachment {
   readonly data: string
   /** Display name; the host sanitizes it before materializing, never a path. */
   readonly name: string
+  /**
+   * Absolute project path of a file already inside the session cwd (the
+   * workspace panel stamps this). When present and contained, the host cites
+   * this path instead of copying the bytes under `.dsh/attachments/`.
+   */
+  readonly path?: string
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
@@ -177,6 +177,22 @@ describe('SkillManager trash lifecycle', () => {
     expect((await manager.trash(project)).map(entry => entry.name)).toEqual(['flat-skill'])
     await manager.restore('flat-skill', project)
     expect(await manager.read('flat-skill', project)).toBeDefined()
+  })
+
+  it('restores a collision-timestamped flat Markdown skill under its original name', async () => {
+    const { manager, project } = await setup()
+    const root = join(project, '.dsh', 'skills')
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, 'flat-skill.md'), validSkill('flat-skill', 'Test skill', 'First body'))
+    await manager.remove('flat-skill', project)
+    const trashRoot = join(root, '.system', 'trash')
+    const [trashed] = await readdir(trashRoot)
+    await rename(join(trashRoot, trashed!), join(trashRoot, `flat-skill-${Date.now()}.md`))
+    expect((await manager.trash(project)).map(entry => entry.name)).toEqual(['flat-skill'])
+    await manager.restore('flat-skill', project)
+    const restored = await manager.read('flat-skill', project)
+    expect(restored?.content).toContain('First body')
+    expect(await manager.trash(project)).toEqual([])
   })
 
   it('refuses restore when the target path is occupied and refuses deleting built-ins', async () => {
@@ -434,7 +450,8 @@ it('renames a trashed skill when the trash slot is occupied', async () => {
   await manager.remove('demo-skill', project)
   const trash = await manager.trash(project)
   expect(trash).toHaveLength(2)
-  expect(trash.map(entry => entry.name).sort()).toEqual(['demo-skill', expect.stringMatching(/^demo-skill-\d+$/)])
+  expect(trash.map(entry => entry.name)).toEqual(['demo-skill', 'demo-skill'])
+  expect(new Set(trash.map(entry => entry.path)).size).toBe(2)
 })
 
 it('saves with force past a blocked security verdict', async () => {

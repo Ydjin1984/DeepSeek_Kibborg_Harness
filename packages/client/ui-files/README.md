@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Workspace file panel, browser half: one occupant of the composer tool row (`conversation.input.left`, the list seat behind the paperclip) opens a right-side drawer over the current session's project folder. The drawer shows the project's file tree — folders expand lazily through `host.listChildren`, hidden (dot) files are listed but visually muted — and file rows are draggable onto the composer. A drop reads the file through `host.readTextFile` and attaches it as an ordinary file draft (`inputActions.addFiles`), so the host admission path already used by OS drops materializes the content into the model context unchanged.
+Workspace file panel, browser half: one occupant of the composer tool row (`conversation.input.left`, the list seat behind the paperclip) opens a right-side drawer over the current session's project folder. The drawer shows the project's file tree — folders expand lazily through `host.listChildren`, hidden (dot) files are listed but visually muted — and file rows are draggable onto the composer. A drop reads the file through `host.readTextFile` and attaches it as an ordinary file draft (`inputActions.addFiles`) stamped with the project path, so the host cites that path on the model-visible descriptor instead of copying the bytes under `.dsh/attachments/`.
 
 Double-clicking a file opens the built-in Markdown viewer/editor dialog: preview renders through the shared `MarkdownText` renderer, edit is a plain textarea, and Save writes through `host.writeTextFile`. Preview and edit share one draft, and a dirty close asks before discarding.
 
@@ -10,7 +10,7 @@ All three host verbs are session-routed and containment-checked by the host (`ap
 
 ## Model Experience
 
-Indirectly: a dropped file becomes a regular draft file — on submit the host decodes it and folds the text into the durable user message, exactly as if the user picked it with the paperclip. Editing a Markdown file through the dialog writes the file on disk; neither action adds prompt content by itself.
+Indirectly: a dropped file becomes a regular draft file whose submit path cites the original project path in the durable user message. Editing a Markdown file through the dialog writes the file on disk; neither action adds prompt content by itself.
 
 #### KV Cache effect
 

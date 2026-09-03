@@ -8,7 +8,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  baseNameOf, FilesPanelButton, type FilesInjected, type FileTreeChild,
+  baseNameOf, COMPOSER_FILE_SOURCE_PATH, FilesPanelButton, type FilesInjected, type FileTreeChild,
 } from '../src/client/FilesPanelButton.tsx'
 
 afterEach(cleanup)
@@ -21,18 +21,19 @@ type FilesPanelButtonProps = React.ComponentProps<typeof FilesPanelButton>
 const DROP_TYPE = 'application/x-dsh-file-path'
 
 /** Plain props with stubbed framework hooks over a two-node project. */
-function bench(over: Partial<FilesPanelButtonProps> = {}) {
+function bench(over: object = {}) {
+  const extra = over as Partial<FilesPanelButtonProps> & { inputActions?: { addFiles: ReturnType<typeof vi.fn> } }
   const injected: FilesInjected = {
-    listChildren: over.listChildren
+    listChildren: extra.listChildren
       ?? vi.fn(async () => [
         { name: 'docs', path: '/p/docs', kind: 'directory', hidden: false },
         { name: 'a.md', path: '/p/a.md', kind: 'file', hidden: false, size: 3 },
       ] as FileTreeChild[]),
-    readTextFile: over.readTextFile ?? vi.fn(async () => ({ ok: true as const, text: '# Привет\n' })),
-    writeTextFile: over.writeTextFile ?? vi.fn(async () => ({ ok: true as const })),
+    readTextFile: extra.readTextFile ?? vi.fn(async () => ({ ok: true as const, text: '# Привет\n' })),
+    writeTextFile: extra.writeTextFile ?? vi.fn(async () => ({ ok: true as const })),
   }
   const defaultInputActions = { addFiles: vi.fn(() => null) }
-  const inputActions = (over.inputActions ?? defaultInputActions) as { addFiles: ReturnType<typeof vi.fn> }
+  const inputActions = extra.inputActions ?? defaultInputActions
   const props = ({
     useSession: (selector: (snap: { removed: boolean }) => unknown) => selector({ removed: false }),
     useSessions: (selector: (list: { current: string; byId: Record<string, { cwd?: string }> }) => unknown) =>
@@ -41,7 +42,7 @@ function bench(over: Partial<FilesPanelButtonProps> = {}) {
     inputActions,
     t,
     ...injected,
-    ...over,
+    ...extra,
   }) as unknown as FilesPanelButtonProps
   return { props, injected, inputActions }
 }
@@ -289,7 +290,9 @@ describe('FilesPanelButton drag and drop', () => {
     await waitFor(() => { expect(injected.readTextFile).toHaveBeenCalledWith('/p/a.md') })
     await waitFor(() => {
       expect(inputActions.addFiles).toHaveBeenCalledWith([expect.any(File)])
-      expect((inputActions.addFiles.mock.calls[0]?.[0] as File[])[0]?.name).toBe('a.md')
+      const attached = (inputActions.addFiles.mock.calls[0]?.[0] as File[])[0]
+      expect(attached?.name).toBe('a.md')
+      expect(Reflect.get(attached as object, COMPOSER_FILE_SOURCE_PATH)).toBe('/p/a.md')
     })
   })
 
@@ -335,7 +338,7 @@ describe('FilesPanelButton trigger gating', () => {
       useSession: (selector: (snap: { removed: boolean }) => unknown) => selector({ removed: true }),
     })
     render(<FilesPanelButton {...props} />)
-    expect(screen.getByRole('button', { name: 'openButton' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'openButton' }).disabled).toBe(true)
   })
 
   it('disables the trigger while a message is submitting', async () => {
@@ -343,7 +346,7 @@ describe('FilesPanelButton trigger gating', () => {
       useInput: (selector: (snap: { phase: string }) => unknown) => selector({ phase: 'submitting' }),
     })
     render(<FilesPanelButton {...props} />)
-    expect(screen.getByRole('button', { name: 'openButton' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'openButton' }).disabled).toBe(true)
   })
 
   it('disables the trigger when the session has no project folder', async () => {
@@ -352,7 +355,7 @@ describe('FilesPanelButton trigger gating', () => {
         selector({ current: 's1', byId: { s1: {} } }),
     })
     render(<FilesPanelButton {...props} />)
-    expect(screen.getByRole('button', { name: 'openButton' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'openButton' }).disabled).toBe(true)
   })
 
   it('disables the trigger when no session is current', async () => {
@@ -361,7 +364,7 @@ describe('FilesPanelButton trigger gating', () => {
         selector({ current: undefined as unknown as string, byId: {} }),
     })
     render(<FilesPanelButton {...props} />)
-    expect(screen.getByRole('button', { name: 'openButton' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'openButton' }).disabled).toBe(true)
   })
 })
 

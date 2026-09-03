@@ -7,7 +7,7 @@
  * image+file ordering contract.
  */
 
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -210,6 +210,55 @@ describe('Web session file attachments', () => {
     expect(textBlock(message.content, 2).text).toContain(join(cwd, '.dsh', 'attachments', 'notes-1.txt'))
     const files = await readdir(join(cwd, '.dsh', 'attachments'))
     expect(files.sort()).toEqual(['evil.txt', 'notes-1.txt', 'notes.txt'])
+    await rm(cwd, { recursive: true, force: true })
+    await ctx.fiber.dispose()
+  })
+
+  it('cites an in-project path without copying under attachments', async () => {
+    const { ctx, agent, sessionId, cwd } = await harness()
+    const followup = mount(agent)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'silent', model: 'model' }),
+      cwd,
+    })
+    const source = join(cwd, 'docs', 'note.md')
+    await mkdir(join(cwd, 'docs'))
+    const bytes = new TextEncoder().encode('# Note\n')
+    await writeFile(source, bytes)
+    const result = await prompt(api, sessionId, [
+      { type: 'file', name: 'note.md', mediaType: 'text/markdown', data: base64(bytes), path: source },
+    ])
+    expect(result.result).toMatchObject({ ok: true })
+    const message = followup.mock.calls[0]?.[0] as UserMessage
+    expect(textBlock(message.content, 0).text).toContain(`Path: ${source}`)
+    expect(textBlock(message.content, 0).text).not.toContain('.dsh')
+    await expect(readdir(join(cwd, '.dsh', 'attachments')).catch(() => [])).resolves.toEqual([])
+    await rm(cwd, { recursive: true, force: true })
+    await ctx.fiber.dispose()
+  })
+
+  it('ignores an out-of-project path and materializes a copy', async () => {
+    const { ctx, agent, sessionId, cwd } = await harness()
+    const followup = mount(agent)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'silent', model: 'model' }),
+      cwd,
+    })
+    const outside = await mkdtemp(join(tmpdir(), 'dsh-file-outside-'))
+    const bytes = new TextEncoder().encode('secret')
+    const result = await prompt(api, sessionId, [
+      {
+        type: 'file',
+        name: 'secret.txt',
+        mediaType: 'text/plain',
+        data: base64(bytes),
+        path: join(outside, 'secret.txt'),
+      },
+    ])
+    expect(result.result).toMatchObject({ ok: true })
+    const message = followup.mock.calls[0]?.[0] as UserMessage
+    expect(textBlock(message.content, 0).text).toContain(join(cwd, '.dsh', 'attachments', 'secret.txt'))
+    await rm(outside, { recursive: true, force: true })
     await rm(cwd, { recursive: true, force: true })
     await ctx.fiber.dispose()
   })

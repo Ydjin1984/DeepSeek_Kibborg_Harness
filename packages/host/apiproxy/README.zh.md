@@ -38,7 +38,7 @@ Settings 分节中的 `reasoningEffort` 在 agent-default-model 插件配置中�
 
 `session.prompt` 和 `subagent.prompt` 接受可选的请求本地 `clientTimeZone` 来源信息。若提供该值，Host 会在进入 Agent 前校验 `UTC` 或 IANA Area/Location 并将其规范化；无效输入以 `invalid-time-zone` 拒绝，规范值则与 `rpcId` 一起记录在这条确切的 `user-rpc` 消息上。该值不属于 Session、连接、create、resume 或 fork 状态；非浏览器调用方可以省略它。
 
-`session.prompt` 还接受 `{ type: 'file', name, mediaType, data }` 内容部件（规范 base64），用于附加任意格式的文件。宿主会解码每个上传，执行固定上限（每条消息 20 个文件、每个文件 25 MB、总计 100 MB），把字节写入 `<会话 cwd>/.dsh/attachments/` 以便会话的文件系统工具读取，并把每个文件折叠进持久化的用户消息，作为模型可见的文本描述——包含文件名、声明类型、字节数与绝对路径，若字节能以 UTF-8 解码为文本（64 KB 以内）还会附上内联内容。拒绝以 `attachment-error` 映射，原因为 `TOO_MANY_FILES`、`FILE_TOO_LARGE`、`FILES_TOO_LARGE` 或 `INVALID_FILE_BASE64`。
+`session.prompt` 还接受 `{ type: 'file', name, mediaType, data, path? }` 内容部件（规范 base64），用于附加任意格式的文件。宿主会解码每个上传，执行固定上限（每条消息 20 个文件、每个文件 25 MB、总计 100 MB），并把每个文件折叠进持久化的用户消息，作为模型可见的文本描述——包含文件名、声明类型、字节数与绝对路径，若字节能以 UTF-8 解码为文本（64 KB 以内）还会附上内联内容。可选的 `path` 若能规范化到会话 cwd 之内，则按该路径引用（工作区面板使用此字段），不会复制到 `.dsh/attachments/` 下；其余上传仍写入该目录，以便文件系统工具读取。项目外的 `path` 会被忽略，字节按副本落盘。拒绝以 `attachment-error` 映射，原因为 `TOO_MANY_FILES`、`FILE_TOO_LARGE`、`FILES_TOO_LARGE` 或 `INVALID_FILE_BASE64`。
 
 待处理的 queued 输入属于实时控制平面约定，而非对话历史。网关根据持久 `agent/inbox/spliced` 变更派生完整的 `next-turn` 队列，并在每次变更后及重连时广播权威 `session/queue` 快照；待处理的 `next-step` steering（中途引导）不进入此 Web 投影。在 `next-step` 内，用户来源的消息携带 `steering` placement，而注入上下文（审批通知、任务完成、附加快照）携带 `context`，领取前不对外呈现。面向单条消息的 `agent/inbox/inserted`、`claimed` 与 `discarded` 通知仍供生命周期观察方使用，但不用于构建队列视图。`session.updateQueue` 通过 `MessageId` 寻址单个项；编辑和移除经已挂载 Agent 的 `Inbox.splice()` 修改队列。认领操作的纯删除 splice 会在 pre-step 准入前赢得竞态，因此之后的操作返回 `queue-item-not-found`。`session.cancel` 仅中止活动轮次并保留待处理 inbox 工作；取消达到完全停稳且结束中的轮次完成 flush 后，AgentLoop 按 FIFO 顺序认领下一条可唤醒消息，浏览器绝不重发或提升它。队列操作绝不恢复冷会话，客户端也绝不根据轮次或状态事件推断某项已退出队列。
 
@@ -66,13 +66,17 @@ Workspace 列表与 Session 列表是相互独立的重连基线。`workspace.cr
 
 `AbstractApiClient` 持有全部协议不变量：签发 rpcId、包装／解包信封、Zod 解析、SSE 帧解码、一元请求超时，以及按微任务批处理的信封观测（`subscribeEnvelopes`）；平台子类只提供 `doFetch` 传输环节。`InProcessApiClient` 以 `toFetchHandler(api)` 为基础，仍是同构接点：它运行完整的协议序列化与校验路径而不经过网络，供需要该路径的调用方和载体测试使用。产品的 `dsh --profile headless` 是直连 core 的入口，不挂载本包。
 
+## 工作区文件树界面（`ui-files`）
+
+`host.listChildren` / `host.readTextFile` / `host.writeTextFile` 三元组支撑工作区文件树面板：每个文件夹层级一次按会话路由的列举动词，以及两个文本动词——它们在触盘前把每条路径规范化到该会话已记录的项目 cwd 之内。读取拒绝目录和非 UTF-8 正文，两个文本动词都把内容限制在客户端无法上调的服务端字节上限；写入绝不会跟随符号链接离开项目（已存在的最终分量会先 realpath 再做包含检查）。三者都以稳定的 `file-outside-project` 错误码拒绝根外目标，因此浏览器无法触及用户打开的项目之外。
+
 ## 模型体验
 
-无。该包定义客户端与宿主间的 wire 约定和载体，其中没有任何内容会进入模型请求。
+间接：文件附件准入路径会把附件描述折叠进会话提交的持久用户消息——`describeFile` 写出 `Attached file: <name> (<mediaType>, <bytes> bytes)\nPath: <path>`，因此用户附加的文件（回形针或工作区面板）作为散文经普通 prompt 路径到达模型。该包其余部分定义 wire 约定与载体，自身不组装提供方请求。
 
 #### KV Cache 影响
 
-无；该包既不组装也不发送提供方请求。
+无；该包既不组装也不发送提供方请求。附件散文经调用方的普通用户消息 prompt 路径进入，其缓存效果与任意用户消息相同。
 
 ## 已知限制与暂缓事项
 

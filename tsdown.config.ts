@@ -16,7 +16,18 @@ function isBuildFaceClient(value: unknown): boolean {
 export default defineConfig(({ env }) => {
   const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
   return {
-    workspace: ['vendor/*', 'packages/*/*', 'apps/cli'],
+    workspace: {
+      include: ['vendor/*', 'packages/*/*', 'apps/cli'],
+      // Restate tsdown's default excludes plus graphify-out: `update packages` writes
+      // packages/graphify-out/, which matches packages/*/* and has no package.json.
+      exclude: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/test?(s)/**',
+        '**/t?(e)mp/**',
+        '**/graphify-out/**',
+      ],
+    },
     entry: client ? '' : ['lib/types/{index,invariant,startup}.js'],
     outDir: 'lib',
     format: ['esm'],

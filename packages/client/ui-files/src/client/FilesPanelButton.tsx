@@ -4,8 +4,9 @@
  * One occupant of the `conversation.input.left` tool row (list seat) opens a
  * right-side drawer over the current session's project folder: a lazily
  * loaded file tree (host.listChildren), draggable file rows whose drop onto
- * the composer attaches the file as a draft (host.readTextFile bytes replayed
- * through the ordinary file-draft pipeline), and a double-click Markdown
+ * the composer attaches the file as a draft (host.readTextFile bytes plus the
+ * original project path, so the host cites that path instead of copying under
+ * `.dsh/attachments/`), and a double-click Markdown
  * viewer/editor dialog (host.readTextFile / host.writeTextFile). Everything
  * rides the occupant's own session scope, so the input kit (inputActions,
  * useInput) and the injected host verbs share one session identity.
@@ -31,6 +32,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export type { FilesLocaleKey }
+
+/**
+ * Non-enumerable `File` property this panel stamps so conversation's
+ * `encodeFile` cites the original project path. Must stay equal to
+ * `COMPOSER_FILE_SOURCE_PATH` in `@deepseek-ai/dsh-client-ui-conversation`.
+ */
+export const COMPOSER_FILE_SOURCE_PATH = 'dshSourcePath'
 
 /** One child row of the project file tree. */
 export interface FileTreeChild {
@@ -274,6 +282,7 @@ export function FilesPanelButton(props: FilesPanelButtonProps) {
       void readTextFile(payload.path).then((outcome) => {
         if (!outcome.ok) { showError(outcome, 'dropFailed'); return }
         const file = new File([outcome.text], payload.name, { type: mimeFor(payload.name) })
+        Object.defineProperty(file, COMPOSER_FILE_SOURCE_PATH, { value: payload.path, enumerable: false })
         const rejected = inputActions.addFiles([file])
         if (rejected != null) showNotice(rejected)
       })

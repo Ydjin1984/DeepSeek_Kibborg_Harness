@@ -101,14 +101,12 @@ describe('MarkdownDialog', () => {
   })
 
   it('syncs the draft when a new file opens with fresh content', () => {
-    const props: MarkdownDialogProps = {
-      name: 'note.md', t, onSave: vi.fn(), onClose: vi.fn(),
-    }
+    const props = { name: 'note.md', t, onSave: vi.fn(), onClose: vi.fn() }
     const { rerender } = render(<MarkdownDialog {...props} initialText="first" />)
     rerender(<MarkdownDialog {...props} initialText="second" />)
     rerender(<MarkdownDialog {...props} initialText="second" />)
     fireEvent.click(screen.getByRole('tab', { name: 'markdownEdit' }))
-    expect(screen.getByRole('textbox', { name: 'markdownEdit' }).value).toBe('second')
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'markdownEdit' }).value).toBe('second')
   })
 
   it('ignores extra save clicks while a save is in flight', async () => {

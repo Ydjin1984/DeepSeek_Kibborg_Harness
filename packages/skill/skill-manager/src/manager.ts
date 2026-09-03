@@ -363,9 +363,10 @@ export class SkillManager extends Service {
     const root = await this.rootFor(entry.scope, cwd)
     // A flat markdown file is restored under its original on-disk name (with
     // `.md`); directory skills restore under their public name.
+    const live = liveNameFromTrash(basename(entry.path))
     const target = entry.path.endsWith('.md')
-      ? join(root.path, basename(entry.path))
-      : join(root.path, entry.name)
+      ? join(root.path, `${live}.md`)
+      : join(root.path, live)
     if (await pathExists(target)) {
       throw new SkillManagerError('skill-conflict', `skill "${name}" already exists in ${entry.scope} scope`)
     }
@@ -654,7 +655,6 @@ export class SkillManager extends Service {
         }, (next) => { this.updateBenchmarkRun(run.id, { ...run, ...next, skillName: name }) }, controller.signal)
         this.updateBenchmarkRun(run.id, { ...run, status: 'completed', phase: 'done', result, skillName: name })
       } catch (error: unknown) {
-        // oxlint-disable-next-line typescript/no-unnecessary-condition -- external cancelBenchmark aborts can land here.
         const status = controller.signal.aborted ? 'cancelled' : 'failed'
         this.updateBenchmarkRun(run.id, { ...run, status, error: String(error), skillName: name })
       }
@@ -917,8 +917,7 @@ export class SkillManager extends Service {
         if (name.startsWith('.')) continue
         // A trashed flat markdown file is addressed by its public (frontmatter)
         // name without the `.md` suffix, matching remove/read/restore.
-        const publicName = name.endsWith('.md') ? name.slice(0, -3) : name
-        entries.push({ name: publicName, scope: root.scope, path: join(trashRoot, name) })
+        entries.push({ name: liveNameFromTrash(name), scope: root.scope, path: join(trashRoot, name) })
       }
     }
     return entries
@@ -935,6 +934,19 @@ function freshMeta(activeVersion: string): SkillMetaFile {
     versions: [{ id: activeVersion, createdAt: now, reason: 'Initial', source: 'initial' }],
     benchmarks: {},
   }
+}
+
+/**
+ * Map a trash folder or file name back to the live skill identity. A
+ * collision suffix this manager itself appended (`-<13-digit Date.now()>`,
+ * with `.md` kept for flat markdown) is stripped so restore returns the
+ * original on-disk name.
+ * @param onDisk - basename of the trash entry.
+ * @returns the live skill directory name or markdown stem.
+ */
+function liveNameFromTrash(onDisk: string): string {
+  const base = onDisk.endsWith('.md') ? onDisk.slice(0, -3) : onDisk
+  return base.replace(/-\d{13}$/u, '')
 }
 
 function nextVersionId(meta: SkillMetaFile | undefined): string {

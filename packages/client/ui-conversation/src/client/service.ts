@@ -22,6 +22,13 @@ import type { DraftAttachmentId, SessionInputResolver } from './contract/input.t
 import type { InputSubmitMode } from './contract/composer-submission.ts'
 
 /**
+ * Property the workspace file panel stamps on a draft `File` so submit cites
+ * the original project path instead of copying under `.dsh/attachments/`.
+ * Must stay equal to the same-named export in `@deepseek-ai/dsh-client-ui-files`.
+ */
+export const COMPOSER_FILE_SOURCE_PATH = 'dshSourcePath'
+
+/**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
  * verbs and the input registry other plugins may reach — and exactly what a
  * test fake must supply.
@@ -417,11 +424,13 @@ export class ConversationController extends Service implements IConversation {
 
   /** Canonical base64 wire form of one browser file; unknown types default to octet-stream. */
   private async encodeFile(file: File): Promise<SubmitFileAttachment> {
+    const sourcePath = (file as unknown as Record<string, unknown>)[COMPOSER_FILE_SOURCE_PATH]
     return {
       type: 'file',
       name: file.name === '' ? 'attachment' : file.name,
       mediaType: file.type === '' ? 'application/octet-stream' : file.type,
       data: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+      ...typeof sourcePath === 'string' && sourcePath.length > 0 ? { path: sourcePath } : {},
     }
   }
 }

@@ -41,8 +41,8 @@ function mount(options: {
     }))
     : vi.fn(() => Promise.reject(new Error(options.loadRejects)))
   const save = options.saveRejects === undefined
-    ? vi.fn(() => Promise.resolve())
-    : vi.fn(() => Promise.reject(new Error(options.saveRejects)))
+    ? vi.fn((_patch: Partial<OrchestratorSettingsView>) => Promise.resolve())
+    : vi.fn((_patch: Partial<OrchestratorSettingsView>) => Promise.reject(new Error(options.saveRejects)))
   const listModels = vi.fn(() => Promise.resolve(options.catalog ?? CATALOG))
   const props = {
     close: () => {},
@@ -78,8 +78,8 @@ describe('OrchestratorSection', () => {
     await screen.findByRole('button', { name: t('orchestratorSave') })
     const checkbox = screen.getByRole('checkbox') as HTMLInputElement
     expect(checkbox.checked).toBe(true)
-    expect(screen.getByLabelText(t('orchestratorProvider')).value).toBe('kibborg')
-    expect(screen.getByLabelText(t('orchestratorModel')).value).toBe('Kibborg_Flash_v5.7')
+    expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorProvider')).value).toBe('kibborg')
+    expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorModel')).value).toBe('Kibborg_Flash_v5.7')
   })
 
   it('persists the edited view through save on click', async () => {
@@ -104,7 +104,7 @@ describe('OrchestratorSection', () => {
     await screen.findByRole('button', { name: t('orchestratorSave') })
     fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
     expect((await screen.findByRole('alert')).textContent).toBe('revision conflict')
-    expect(screen.getByRole('checkbox').checked).toBe(true)
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
     expect(save).toHaveBeenCalledTimes(1)
   })
 
@@ -149,7 +149,7 @@ describe('OrchestratorSection', () => {
     expect(fieldsets).toHaveLength(1)
     expect((fieldsets[0] as HTMLFieldSetElement).disabled).toBe(true)
     // The saved route survives even without catalog suggestions.
-    expect(screen.getByLabelText(t('orchestratorProvider')).value)
+    expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorProvider')).value)
       .toBe('deepseek-official')
   })
 })

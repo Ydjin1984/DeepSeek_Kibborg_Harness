@@ -87,7 +87,7 @@ export interface SessionProjectionsBlock {
 export type PromptContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; mediaType: ImageMediaType; data: string; name?: string }
-  | { type: 'file'; name: string; mediaType: string; data: string }
+  | { type: 'file'; name: string; mediaType: string; data: string; path?: string }
 
 /** Complete model selection for one session. */
 export interface ModelSelection {

@@ -96,6 +96,7 @@ import type { CallId } from '@deepseek-ai/dsh-llm/brand'
 // Project-scoped file-tree operations (listChildren / readTextFile /
 // writeTextFile) shared by the host domain handlers below.
 import {
+  canonicalProjectPath,
   listProjectChildren,
   ProjectFileError,
   readProjectTextFile,
@@ -186,6 +187,26 @@ async function pathExists(path: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * Resolve a client-supplied project path for citation. A path outside the
+ * session cwd, missing, or otherwise uncontainable is ignored so the upload
+ * falls back to materializing a copy — the client cannot smuggle an
+ * out-of-project path onto the model-visible descriptor.
+ * @param cwd - session workspace directory.
+ * @param target - client-supplied absolute path.
+ * @returns the canonical in-project path, or undefined to materialize.
+ */
+async function projectFilePath(cwd: string, target: string): Promise<string | undefined> {
+  const root = await realpath(cwd).catch(() => undefined)
+  if (root === undefined) return undefined
+  try {
+    return await canonicalProjectPath(root, target, false)
+  } catch {
+    // Containment/existence failure: treat the part as an ordinary upload.
+    return undefined
   }
 }
 
@@ -281,7 +302,8 @@ async function durablePromptContent(
     }
     const bytes = decodedByPart.get(part) as Uint8Array
     try {
-      const path = await materializeFile(cwd, safeFileName(part.name), bytes)
+      const cited = part.path === undefined ? undefined : await projectFilePath(cwd, part.path)
+      const path = cited ?? await materializeFile(cwd, safeFileName(part.name), bytes)
       blocks.push({ type: 'text', text: describeFile(part, bytes, path) })
     } catch (error: unknown) {
       if (error instanceof AttachmentError) throw error
@@ -3180,7 +3202,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           const listed = await listProjectChildren(root.root, request.payload.path)
           return ok(request, { path: listed.path, entries: listed.entries, truncated: false })
         } catch (error: unknown) {
-          if (signal?.aborted === true) {
+          if (signal.aborted) {
             return err(request, { code: 'cancelled', message: 'project listing was aborted', details: {} })
           }
           return err(request, projectFileError(error))
@@ -3198,7 +3220,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           )
           return ok(request, value)
         } catch (error: unknown) {
-          if (signal?.aborted === true) {
+          if (signal.aborted) {
             return err(request, { code: 'cancelled', message: 'project read was aborted', details: {} })
           }
           return err(request, projectFileError(error))
