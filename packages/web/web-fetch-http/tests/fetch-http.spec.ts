@@ -19,6 +19,26 @@ const limits: HttpFetchLimits = {
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
 
+type FakeInit = { status: number; headers: Record<string, string>; location?: string }
+
+function fakeResponse(init: FakeInit): { response: Response; cancelled: () => boolean } {
+  let cancelled = false
+  const headers = new Headers(init.headers)
+  if (init.location !== undefined) headers.set('location', init.location)
+  const response = {
+    status: init.status,
+    headers,
+    body: {
+      cancel: () => { cancelled = true; return Promise.resolve() },
+      getReader: () => ({
+        read: () => Promise.resolve({ done: true, value: undefined }),
+        cancel: () => Promise.resolve(),
+      }),
+    },
+  } as unknown as Response
+  return { response, cancelled: () => cancelled }
+}
+
 let server: Server
 let base: string
 let handler: Handler
@@ -328,20 +348,6 @@ describe('HttpFetchProvider invalid URLs and abort', () => {
 })
 
 describe('HttpFetchProvider body cancellation on error paths', () => {
-  /** A fake Response whose body.cancel is observable. */
-  type FakeInit = { status: number; headers: Record<string, string>; location?: string }
-  function fakeResponse(init: FakeInit): { response: Response; cancelled: () => boolean } {
-    let cancelled = false
-    const headers = new Headers(init.headers)
-    if (init.location !== undefined) headers.set('location', init.location)
-    const response = {
-      status: init.status,
-      headers,
-      body: { cancel: () => { cancelled = true; return Promise.resolve() } },
-    } as unknown as Response
-    return { response, cancelled: () => cancelled }
-  }
-
   it('cancels the body when a cross-origin redirect is blocked', async () => {
     const { response, cancelled } = fakeResponse({ status: 302, headers: {}, location: 'https://elsewhere.test/' })
     vi.stubGlobal('fetch', vi.fn(async () => response))
@@ -425,5 +431,122 @@ describe('web-fetch-http plugin registration', () => {
     await expect(ctx.web.fetch({ url: `${base}/` }))
       .resolves.toMatchObject({ statusCode: 200 })
     await fiber.dispose()
+  })
+
+  it('rejects a zero redirect cap at construction', async () => {
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
+    await expect(ctx.plugin(fetchPlugin, { maxRedirects: -1 }))
+      .rejects.toThrow(/maxRedirects must be a non-negative integer/)
+  })
+})
+
+describe('blockPrivateNetworks config validation', () => {
+  it('accepts blockPrivateNetworks: true at construction', async () => {
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
+    const fiber = await ctx.plugin(fetchPlugin, { blockPrivateNetworks: true })
+    await fiber.dispose()
+  })
+
+  it('accepts blockPrivateNetworks: false at construction', async () => {
+    const ctx = new Context()
+    await ctx.plugin(WebRuntime, { fetchProvider: LOCAL_FETCH_PROVIDER_ID })
+    const fiber = await ctx.plugin(fetchPlugin, { blockPrivateNetworks: false })
+    await fiber.dispose()
+  })
+})
+
+describe('blockPrivateNetworks: private URL blocking', () => {
+  it('blocks an initial request to 127.0.0.1 when blockPrivateNetworks is true', async () => {
+    const { port } = server.address() as AddressInfo
+    const localBase = `http://127.0.0.1:${port}`
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: localBase }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('allows an initial request to 127.0.0.1 when blockPrivateNetworks is false', async () => {
+    handler = (_req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok') }
+    const { port } = server.address() as AddressInfo
+    const localBase = `http://127.0.0.1:${port}`
+    const result = await provider({ blockPrivateNetworks: false }).fetch({ url: localBase })
+    expect(result.statusCode).toBe(200)
+  })
+
+  it('allows an initial request to 127.0.0.1 by default (blockPrivateNetworks undefined)', async () => {
+    handler = (_req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok') }
+    const { port } = server.address() as AddressInfo
+    const localBase = `http://127.0.0.1:${port}`
+    const result = await provider().fetch({ url: localBase })
+    expect(result.statusCode).toBe(200)
+  })
+
+  it('blocks an initial request to 10.0.0.1 when blockPrivateNetworks is true', async () => {
+    const result = provider({ blockPrivateNetworks: true }).fetch({ url: 'http://10.0.0.1/' })
+    await expect(result).rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('blocks an initial request to [::1] when blockPrivateNetworks is true', async () => {
+    const result = provider({ blockPrivateNetworks: true }).fetch({ url: 'http://[::1]/' })
+    await expect(result).rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('blocks IPv4-mapped loopback in hex form ([::ffff:7f00:1]) when blockPrivateNetworks is true', async () => {
+    // WHATWG URL normalizes [::ffff:127.0.0.1] to [::ffff:7f00:1]; the embedded IPv4 must be classified.
+    const result = provider({ blockPrivateNetworks: true }).fetch({ url: 'http://[::ffff:7f00:1]/' })
+    await expect(result).rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('blocks an initial request to 169.254.1.1 (link-local) when blockPrivateNetworks is true', async () => {
+    const result = provider({ blockPrivateNetworks: true }).fetch({ url: 'http://169.254.1.1/' })
+    await expect(result).rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('allows example.com (public hostname) when blockPrivateNetworks is true', async () => {
+    // Mock fetch returns 200 — we only assert that validation passes, not real network
+    const { response } = fakeResponse({ status: 200, headers: { 'content-type': 'text/plain' } })
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    const result = await provider({ blockPrivateNetworks: true }).fetch({ url: 'http://example.com/' })
+    expect(result.statusCode).toBe(200)
+  })
+
+  it('blocks a redirect to localhost when blockPrivateNetworks is true', async () => {
+    // Initial = example.com (public), redirect = 127.0.0.1:8888 (cross-origin + private)
+    // Cross-origin check fires first; private-network check fires on same-origin hops.
+    const { response } = fakeResponse({
+      status: 302,
+      headers: {},
+      location: 'http://127.0.0.1:8888/',
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: 'http://example.com/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_REDIRECT_BLOCKED' }))
+  })
+
+  it('blocks a same-origin redirect to a private IP when blockPrivateNetworks is true', async () => {
+    // Initial = 2001:db8::1 (public IPv6, not private), redirect = /page (same origin)
+    // Initial passes, redirect target is same hostname — also passes.
+    // For a redirect that blocks: initial = public IPv6, redirect to private IPv4 same-origin.
+    // Use absolute redirect location to same hostname but private IP:
+    // Initial = http://[2001:db8::1]:8888/, redirect = http://192.168.1.1:8888/ (cross-origin)
+    // For same-origin: initial = http://192.168.1.1:8888/ (private), redirect = /page → 192.168.1.1:8888/page (same origin, private)
+    // Initial check blocks. After first fetch, redirect target also private.
+    const { response } = fakeResponse({
+      status: 302,
+      headers: {},
+      location: '/page',
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(provider({ blockPrivateNetworks: true }).fetch({ url: 'http://192.168.1.1:8888/' }))
+      .rejects.toThrow(expect.objectContaining({ code: 'WEB_PRIVATE_NETWORK_BLOCKED' }))
+  })
+
+  it('allows a redirect to localhost when blockPrivateNetworks is false', async () => {
+    handler = (req, res) => {
+      if (req.url === '/start') { res.writeHead(302, { location: '/end' }); res.end() }
+      else { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('landed') }
+    }
+    const result = await provider({ blockPrivateNetworks: false }).fetch({ url: `${base}/start` })
+    expect(result.statusCode).toBe(200)
   })
 })

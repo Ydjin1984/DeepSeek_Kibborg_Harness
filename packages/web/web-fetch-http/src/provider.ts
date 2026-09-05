@@ -3,15 +3,19 @@
  * enforces time and size limits, classifies and decodes text, and leaves presentation to
  * `@deepseek-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
  *
- * Private-network and SSRF protection is not implemented; do not enable this provider where
- * it can reach sensitive internal targets.
+ * Private-network and SSRF protection is optional via the `blockPrivateNetworks` config
+ * field (default `false`). When enabled, the provider rejects URLs targeting loopback,
+ * private IPv4, link-local, ULA, and unspecified addresses — but only for IP-literal
+ * hostnames and `localhost`/`.localhost`. Resolved hostnames are not checked (DNS-rebinding
+ * is a known limitation); full protection requires async DNS resolution with a revalidation
+ * hook.
  * @module @deepseek-ai/dsh-web-fetch-http/provider
  */
 
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@deepseek-ai/dsh-web'
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import { classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
+import { classifyContentType, decoderForCharset, isPrivateNetwork, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
 export interface HttpFetchLimits {
@@ -27,6 +31,8 @@ export interface HttpFetchLimits {
   maxRedirects: number
   /** `User-Agent` header sent on every request. */
   userAgent: string
+  /** Block requests and redirects targeting private/loopback/link-local networks. */
+  blockPrivateNetworks: boolean
 }
 
 /** Stable id this provider registers under. */
@@ -55,6 +61,9 @@ export class HttpFetchProvider implements WebFetchProvider {
   /** Follow same-origin redirects up to the hop cap, then read the final response. */
   private async followAndRead(initialUrl: string, signal: AbortSignal): Promise<WebFetchResult> {
     let currentUrl = validateFetchUrl(initialUrl, this.limits.maxUrlLength)
+    if (this.limits.blockPrivateNetworks) {
+      this.checkPrivateNetwork(currentUrl)
+    }
     let redirectsFollowed = 0
 
     for (;;) {
@@ -93,10 +102,20 @@ export class HttpFetchProvider implements WebFetchProvider {
         await response.body?.cancel()
         currentUrl = validatedTarget
         redirectsFollowed++
+        if (this.limits.blockPrivateNetworks) {
+          this.checkPrivateNetwork(currentUrl)
+        }
         continue
       }
 
       return await this.readBody(response, currentUrl, signal)
+    }
+  }
+
+  /** Throw a {@link WebError} `WEB_PRIVATE_NETWORK_BLOCKED` when the URL targets a private address. */
+  private checkPrivateNetwork(url: URL): void {
+    if (isPrivateNetwork(url)) {
+      throw new WebError(`private network target ${url.origin} blocked`, 'WEB_PRIVATE_NETWORK_BLOCKED')
     }
   }
 

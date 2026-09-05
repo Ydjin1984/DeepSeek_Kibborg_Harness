@@ -103,3 +103,115 @@ export function decoderForCharset(charset: string | undefined): TextDecoder {
     throw new WebError(`unsupported charset "${charset}"`, 'WEB_UNSUPPORTED_CONTENT_TYPE', { cause: error })
   }
 }
+
+/**
+ * Check whether a parsed URL targets a private, loopback, link-local, or
+ * unspecified network address. Returns `false` for hostnames that are
+ * resolved names (e.g. `example.com`) — only IP-literal hostnames and
+ * `localhost`/`.localhost` are classified.
+ *
+ * This is a synchronous check on the hostname string; DNS-rebinding is a
+ * known limitation — a hostname that resolves to a public IP at request time
+ * may resolve to a private IP on subsequent lookups. Full protection requires
+ * async DNS resolution with a revalidation hook.
+ *
+ * @param url - a parsed `URL` whose `.hostname` to classify.
+ * @returns `true` when the hostname is a loopback, private IPv4, link-local,
+ *   ULA, unspecified, or `localhost`/`.localhost`.
+ */
+export function isPrivateNetwork(url: URL): boolean {
+  const host = url.hostname
+
+  // hostname literals
+  if (host === 'localhost' || host.endsWith('.localhost')) return true
+  if (host === '0.0.0.0') return true
+  if (host === '::') return true
+
+  // IPv4-mapped / IPv4-embedded IPv6  ::ffff:<private>
+  const ipv6Mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(host)
+  if (ipv6Mapped) return isPrivateNetwork(new URL(`http://${ipv6Mapped[1]}`))
+
+  // pure IPv6 literals
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return checkIpv6(host.slice(1, -1))
+  }
+
+  // pure IPv4 literals
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+    return checkIpv4(host)
+  }
+
+  return false
+}
+
+/** Return true when the IPv6 literal targets a private/loopback/link-local range. */
+function checkIpv6(addr: string): boolean {
+  // Unspecified
+  if (addr === '::' || addr === '0000:0000:0000:0000:0000:0000:0000:0000') return true
+  // Loopback ::1
+  if (addr === '::1' || addr === '0000:0000:0000:0000:0000:0000:0000:0001') return true
+
+  // Expand full form for comparison
+  const parts = expandIpv6(addr)
+  if (!parts) return false
+
+  const full = parts.join('') // 32 hex chars
+
+  // IPv4-mapped (::ffff:a.b.c.d / ::ffff:7f00:1): WHATWG URL normalizes the
+  // dotted form to hex, so classify the embedded IPv4 as the real target.
+  if (full.startsWith('00000000000000000000ffff')) {
+    const ipv4Hex = full.slice(24)
+    const ipv4 = [0, 2, 4, 6].map(offset => parseInt(ipv4Hex.slice(offset, offset + 2), 16)).join('.')
+    return checkIpv4(ipv4)
+  }
+
+  // link-local fe80::/10  →  fe80-fe10 in first 4 hex digits
+  const first = parseInt(full.slice(0, 4), 16)
+  if (first >= 0xfe80 && first <= 0xfeff) return true
+
+  // ULA fc00::/7  →  fc or fd in first 4 hex digits
+  if (first >= 0xfc00 && first <= 0xfdff) return true
+
+  return false
+}
+
+/** Expand an IPv6 address to 8 groups of 4 hex digits; null on parse failure. */
+function expandIpv6(addr: string): string[] | null {
+  const doubleColon = addr.indexOf('::')
+  if (doubleColon === -1) {
+    const parts = addr.split(':')
+    if (parts.length !== 8) return null
+    return parts.map(p => p.padStart(4, '0'))
+  }
+
+  const [left, right] = addr.split('::')
+  const leftParts = left ? left.split(':') : []
+  const rightParts = right ? right.split(':') : []
+  const missing = 8 - leftParts.length - rightParts.length
+  if (missing < 1) return null
+
+  const full = [...leftParts, ...Array(missing).fill('0000'), ...rightParts]
+  return full.map(p => p.padStart(4, '0'))
+}
+
+/** Return true when the IPv4 address falls in a private/loopback/link-local range. */
+function checkIpv4(ipv4: string): boolean {
+  const parts = ipv4.split('.').map(Number)
+  const [a, b] = parts
+  if (a === undefined || b === undefined || isNaN(a) || isNaN(b)) return false
+
+  // 127.0.0.0/8  loopback
+  if (a === 127) return true
+  // 10.0.0.0/8  private
+  if (a === 10) return true
+  // 172.16.0.0/12  private
+  if (a === 172 && b >= 16 && b <= 31) return true
+  // 192.168.0.0/16  private
+  if (a === 192 && b === 168) return true
+  // 169.254.0.0/16  link-local
+  if (a === 169 && b === 254) return true
+  // 0.0.0.0/8  unspecified
+  if (a === 0) return true
+
+  return false
+}
