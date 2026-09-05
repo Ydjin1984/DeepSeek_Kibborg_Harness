@@ -433,16 +433,28 @@ export class GoalService extends TypertRemoteService {
     return cache
   }
 
+  /** Re-entrancy guard: `session/event` emitted by `append` may invoke a listener that calls `get`,
+   * which re-enters `sync` on the same `session`/`cache` before the outer sync advances `observedSeq`.
+   * The guard is a per-instance flag (single-threaded JS guarantees no concurrent calls), and a no-op
+   * on re-entry is safe because the outer call will apply every event after the guard returns. */
+  private syncing = false
+
   /** Incrementally observe durable events and reconcile local activation intent. */
   private sync(session: Session, cache: GoalCache): void {
-    for (const event of session.events.slice(cache.observedSeq)) {
-      applyGoalEvent(cache.state, event)
-      if (event.type === 'goal/change') {
-        cache.activation = cache.pendingActivation?.seq === event.seq
-          ? cache.pendingActivation.activation
-          : 'disarmed'
+    if (this.syncing) return
+    this.syncing = true
+    try {
+      for (const event of session.events.slice(cache.observedSeq)) {
+        applyGoalEvent(cache.state, event)
+        if (event.type === 'goal/change') {
+          cache.activation = cache.pendingActivation?.seq === event.seq
+            ? cache.pendingActivation.activation
+            : 'disarmed'
+        }
+        cache.observedSeq += 1
       }
-      cache.observedSeq += 1
+    } finally {
+      this.syncing = false
     }
   }
 

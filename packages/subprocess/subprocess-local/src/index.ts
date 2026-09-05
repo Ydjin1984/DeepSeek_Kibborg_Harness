@@ -84,8 +84,11 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
     const pending: Promise<unknown>[] = []
     for (const handle of this.live) {
       handle.terminate()
-      // Spawn-failure rejections already settled and left the live set.
-      pending.push(handle.done.catch(() => {}).then(() => handle.waitForExit()))
+      // Spawn-failure rejections settle without a tree: on rejected `done` the
+      // `.then(ok, fail)` branch returns `undefined` and skips `waitForExit`, so
+      // teardown does not wait for a tree that never existed. The normal path
+      // (resolve) still calls `waitForExit()` to drain TERM-trapping descendants.
+      pending.push(handle.done.then(() => handle.waitForExit(), () => undefined))
     }
     for (const terminal of this.terminals) {
       pending.push(terminal.terminate())

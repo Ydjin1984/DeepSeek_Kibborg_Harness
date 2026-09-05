@@ -83,10 +83,10 @@ type CommandSettlement =
 function withinMs(settlement: Promise<CommandSettlement>, timeoutMs: number): Promise<CommandSettlement | undefined> {
   return new Promise<CommandSettlement | undefined>((resolve) => {
     const timer = setTimeout(() => { resolve(undefined) }, timeoutMs)
-    void settlement.then((value) => {
-      clearTimeout(timer)
-      resolve(value)
-    })
+    void settlement.then(
+      (value) => { clearTimeout(timer); resolve(value) },
+      (error: unknown) => { clearTimeout(timer); resolve({ kind: 'error', error }) },
+    )
   })
 }
 

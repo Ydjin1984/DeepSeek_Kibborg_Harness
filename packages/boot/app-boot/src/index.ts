@@ -7,9 +7,9 @@
  */
 
 import { pathToFileURL } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { parseEnv } from 'node:util'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import * as yaml from 'js-yaml'
 import { Context, type FiberState } from '@deepseek-ai/cordis'
 import Loader, { type Entry, type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
@@ -49,9 +49,39 @@ export {
   type ProfileManifest,
 } from './profile.ts'
 
+/** Resolve a config path through realpath: if the file exists, realpath it;
+ * otherwise realpath the nearest existing ancestor and re-append the suffix.
+ * Returns the un-resolved absolute path when no ancestor exists.
+ */
+function canonicalizeConfigPath(absolutePath: string): string {
+  try {
+    return realpathSync(absolutePath)
+  } catch {
+    // File absent: walk up to find the nearest existing ancestor and
+    // re-append the missing suffix, preserving it across creation.
+    let ancestor = dirname(absolutePath)
+    while (true) {
+      try {
+        const realAncestor = realpathSync(ancestor)
+        const rel = relative(realAncestor, absolutePath)
+        return rel ? resolve(realAncestor, rel) : realAncestor
+      } catch {
+        const parent = dirname(ancestor)
+        /* v8 ignore next -- the filesystem root always realpaths */
+        if (parent === ancestor) break
+        ancestor = parent
+      }
+    }
+    // Nothing resolved — return the absolute path as-is.
+    return absolutePath
+  }
+}
+
 /**
  * Resolve the config to boot. Replay swaps a `cordis.yml` basename for
  * `cordis.snapshot.yml` in the same directory; every other mode keeps the path.
+ * The result is canonicalized through realpath so symlinked config paths
+ * resolve to their real target (matching fs-local identity semantics).
  * @param configPath - the requested config path (absolute, or relative to `cwd`).
  * @param snapshotMode - the bin's `$DSH_SNAPSHOT` value; only `'replay'` swaps the
  *   basename.
@@ -62,10 +92,11 @@ export function resolveConfigPath(
   configPath: string, snapshotMode: string | undefined, cwd: string = process.cwd(),
 ): string {
   const absolute = resolve(cwd, configPath)
-  if (snapshotMode !== 'replay') return absolute
+  if (snapshotMode !== 'replay') return canonicalizeConfigPath(absolute)
   const dir = dirname(absolute)
   const replayName = basename(absolute).replace(/cordis\.ya?ml$/, 'cordis.snapshot.yml')
-  return resolve(dir, replayName)
+  const replayPath = resolve(dir, replayName)
+  return canonicalizeConfigPath(replayPath)
 }
 
 /**

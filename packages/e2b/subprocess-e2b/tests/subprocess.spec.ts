@@ -1790,3 +1790,68 @@ describe('E2BSubprocessRuntime', () => {
     await fiber.dispose()
   })
 })
+
+describe('withinMs timer cleanup', () => {
+  // Re-creates the `withinMs` closure to test timer cleanup on both settlement paths.
+  function withinMs(settlement: Promise<unknown>, timeoutMs: number): Promise<unknown> {
+    return new Promise<unknown>((resolve) => {
+      const timer = setTimeout(() => { resolve(undefined) }, timeoutMs)
+      void settlement.then(
+        (value) => { clearTimeout(timer); resolve(value) },
+        (error: unknown) => { clearTimeout(timer); resolve({ kind: 'error', error }) },
+      )
+    })
+  }
+
+  it('clears the timer when settlement resolves', async () => {
+    vi.useFakeTimers()
+    const resolvers = Promise.withResolvers<unknown>()
+    let fired = false
+
+    const later = setTimeout(() => { fired = true }, 9999)
+
+    const done = withinMs(resolvers.promise, 100)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(fired).toBe(false)
+
+    resolvers.resolve({ result: 'ok' })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fired).toBe(false)
+    await expect(done).resolves.toEqual({ result: 'ok' })
+
+    clearTimeout(later)
+    vi.useRealTimers()
+  })
+
+  it('clears the timer when settlement rejects', async () => {
+    vi.useFakeTimers()
+    const rejects = Promise.withResolvers<unknown>()
+    let fired = false
+
+    const later = setTimeout(() => { fired = true }, 9999)
+
+    const done = withinMs(rejects.promise, 100)
+    await vi.advanceTimersByTimeAsync(50)
+    expect(fired).toBe(false)
+
+    rejects.reject(new Error('boom'))
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fired).toBe(false)
+    await expect(done).resolves.toEqual({ kind: 'error', error: expect.any(Error) })
+
+    clearTimeout(later)
+    vi.useRealTimers()
+  })
+
+  it('resolves undefined when the timer fires before settlement', async () => {
+    vi.useFakeTimers()
+    const resolvers = Promise.withResolvers<unknown>()
+
+    const done = withinMs(resolvers.promise, 50)
+    await vi.advanceTimersByTimeAsync(50)
+    await expect(done).resolves.toBeUndefined()
+    resolvers.resolve('late')
+
+    vi.useRealTimers()
+  })
+})

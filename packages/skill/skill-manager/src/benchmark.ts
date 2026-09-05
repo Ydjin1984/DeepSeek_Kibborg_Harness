@@ -452,7 +452,7 @@ function deriveCriteria(skill: SkillDefinition): string[] {
 /** Run one task through a fresh agent with the chosen model, optionally with a runtime skill. */
 async function runTask(ctx: Context, input: TaskInput): Promise<TaskMetrics> {
   const controller = new AbortController()
-  // v8 ignore next -- the 120s task timeout requires a live stalled task to observe.
+  // v8 ignore next -- the 300s task timeout requires a live stalled task to observe.
   const timeout = setTimeout(() => { controller.abort(new Error(`benchmark task timed out after ${TASK_TIMEOUT_MS}ms`)) }, TASK_TIMEOUT_MS)
   // v8 ignore next -- the external cancel path is covered by the manager cancel contract.
   const onAbort = (): void => { controller.abort(input.signal.reason) }
@@ -495,7 +495,7 @@ async function runTask(ctx: Context, input: TaskInput): Promise<TaskMetrics> {
     const onTaskAbort = (): void => {
       agent.cancel({ kind: 'user' })
     }
-    // The local controller owns the deadline: both the 120s timeout and the
+    // The local controller owns the deadline: both the 300s timeout and the
     // benchmark-wide cancel abort it, and the abort cancels the running agent so
     // a stalled task settles instead of hanging the whole benchmark.
     controller.signal.addEventListener('abort', onTaskAbort, { once: true })

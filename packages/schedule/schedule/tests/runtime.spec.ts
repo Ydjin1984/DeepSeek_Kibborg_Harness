@@ -795,4 +795,75 @@ describe('Schedule runtime failure and teardown boundaries', () => {
     await settle()
     expect(test.followed).toEqual([])
   })
+
+  it('dispatches an overdue task and avoids a setTimeout(0) microtask-loop', async () => {
+    const test = await harness()
+    appendAfter(test, 'schedule-1', 60, Date.now() - 120_000) // already overdue by ~60 s
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    // The overdue task fires once.
+    expect(test.followed).toHaveLength(1)
+    expect(test.followed[0]?.content).toEqual([{
+      type: 'text',
+      text: expect.stringContaining('schedule-1'),
+    }])
+    // Only one dispatch for one one-shot record.
+    const dispatches = test.agent.session.events.filter(
+      event => event.type === 'schedule/change' && event.data.operation === 'dispatch',
+    )
+    expect(dispatches).toHaveLength(1)
+
+    // Simulate 20 rapid re-drive requests (as if the event loop is starved).
+    // With the queueMicrotask guard each re-drive must not spawn an unbounded
+    // chain — at most one additional dispatch is produced per driveOnce
+    // because the one-shot is removed after its first dispatch.
+    for (let i = 0; i < 20; i += 1) {
+      runtime.requestDrive()
+      await Promise.resolve()
+    }
+    await settle()
+    expect(test.followed).toHaveLength(1) // still exactly one dispatch
+
+    await runtime.dispose()
+  })
+
+  it('does not loop when repeatedly arming with overdue targets', async () => {
+    const test = await harness()
+    // One-shot that will be dispatched (removes from active).
+    appendAfter(test, 'schedule-1', 60, Date.now() - 120_000)
+    // A fixed-rate record that is overdue but re-schedules to future after dispatch.
+    // Its next occurrence is 600 s after its original scheduledAt, which is
+    // 120 000 ms before now → next occurrence is 480 000 ms in the future.
+    appendEvery(test, 'schedule-2', 600, Date.now() - 120_000)
+    let microtaskDriveCount = 0
+    const origQueueMicrotask = globalThis.queueMicrotask
+    globalThis.queueMicrotask = (fn: () => void) => {
+      microtaskDriveCount += 1
+      return origQueueMicrotask(fn)
+    }
+
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    // First driveOnce: dueDecision → one-shot (schedule-1) overdue → dispatch.
+    // schedule-2 (every) is also overdue but one-shots have priority.
+    // Post-dispatch requestDrive → driveOnce → dueDecision → schedule-2 (every,
+    // latest occurrence dispatched) → next occurrence is future → wait with
+    // target > now → arm(delay > 0) → setTimeout (not queueMicrotask).
+    // So microtaskDriveCount stays at 0 after the first startup arm.
+
+    // Fire 20 rapid requestDrive() while settled — no extra microtask-arms.
+    for (let i = 0; i < 20; i += 1) {
+      runtime.requestDrive()
+      await Promise.resolve()
+    }
+    await settle()
+    expect(microtaskDriveCount).toBe(0)
+
+    globalThis.queueMicrotask = origQueueMicrotask
+    await runtime.dispose()
+  })
 })

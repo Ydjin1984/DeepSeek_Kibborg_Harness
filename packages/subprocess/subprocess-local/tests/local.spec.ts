@@ -437,6 +437,40 @@ describe('LocalSubprocessRuntime', () => {
     await expect(handle.done).rejects.toThrow()
   })
 
+  it('spawn-failure does not produce false-positive quiescence via waitForExit', async () => {
+    // When done rejects (spawn failed), the teardown path must skip waitForExit
+    // so that the rejected handle does not signal quiescence as a successful
+    // tree drain — the reject-branch (.then(ok, fail)) returns undefined
+    // instead of calling waitForExit().
+    const ctx = new Context()
+    const fiber = await ctx.plugin(LocalSubprocessRuntime)
+    const service = ctx.subprocess as unknown as {
+      live: Set<{
+        done: Promise<unknown>
+        terminate(): void
+        waitForExit(): Promise<boolean>
+      }>
+    }
+    let waitForExitCallCount = 0
+    const fakeHandle = {
+      done: Promise.reject(new Error('spawn ENOENT')),
+      terminate: vi.fn(),
+      waitForExit: async (): Promise<boolean> => {
+        waitForExitCallCount++
+        return true
+      },
+    }
+    service.live.add(fakeHandle)
+
+    await fiber.dispose()
+
+    // waitForExit is skipped for spawn-failure: the .then(ok, fail) reject
+    // branch returns undefined without calling waitForExit, avoiding a
+    // false-positive quiescence signal from a tree that never existed.
+    expect(waitForExitCallCount).toBe(0)
+    expect(fakeHandle.terminate).toHaveBeenCalledOnce()
+  })
+
   it('loading a second implementation throws (one processes service per context — cordis standard)', async () => {
     const ctx = new Context()
     await ctx.plugin(LocalSubprocessRuntime)

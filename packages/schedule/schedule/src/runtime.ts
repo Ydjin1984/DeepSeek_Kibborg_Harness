@@ -177,6 +177,16 @@ export class ScheduleRuntime {
   /** Arm one bounded timer segment; every wake rechecks the wall clock. */
   private arm(target: number, now: number): void {
     const delay = Math.min(target - now, MAX_TIMER_DELAY_MS)
+    if (delay <= 0) {
+      // Overdue target: use queueMicrotask instead of setTimeout(0) so the
+      // re-drive lands in the current macrotask's microtask queue rather
+      // than spawning a fresh macrotask.  This prevents a setTimeout(0) →
+      // immediate requestDrive → arm(overdue) → setTimeout(0) macro-loop
+      // when the wall clock is permanently behind schedule.
+      this.timer = undefined
+      queueMicrotask(() => this.requestDrive())
+      return
+    }
     this.timer = setTimeout(() => {
       this.timer = undefined
       this.requestDrive()

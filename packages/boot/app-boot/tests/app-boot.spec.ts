@@ -1,6 +1,6 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -29,6 +29,32 @@ describe('resolveConfigPath', () => {
   it('leaves a non-cordis basename alone in replay mode and defaults cwd to the process cwd', () => {
     expect(resolveConfigPath('custom.yml', 'replay', `${sep}base`)).toBe(resolve(`${sep}base`, 'custom.yml'))
     expect(resolveConfigPath('./x.yml', undefined)).toBe(resolve(process.cwd(), 'x.yml'))
+  })
+
+  it.skipIf(process.platform === 'win32')('canonicalizes symlinked config paths through realpath', () => {
+    const realDir = mkdtempSync(join(tmpdir(), 'dsh-real-config-'))
+    const linkDir = mkdtempSync(join(tmpdir(), 'dsh-link-config-'))
+    const realConfig = join(realDir, 'cordis.yml')
+    writeFileSync(realConfig, '# placeholder\n')
+    const linkConfig = join(linkDir, 'cordis.yml')
+    symlinkSync(realConfig, linkConfig, 'file')
+    expect(resolveConfigPath(linkConfig, undefined)).toBe(realConfig)
+    // Also test replay mode swaps basename after realpath
+    const linkReplay = resolveConfigPath(linkConfig, 'replay')
+    expect(linkReplay).toBe(join(realDir, 'cordis.snapshot.yml'))
+    rmSync(linkDir, { recursive: true, force: true })
+    rmSync(realDir, { recursive: true, force: true })
+  })
+
+  it('canonicalizes through the nearest existing ancestor when the config file is absent', () => {
+    const realTmp = realpathSync(tmpdir())
+    const absentDir = join(realTmp, `dsh-absent-${process.pid}`)
+    const target = join(absentDir, 'deep', 'cordis.yml')
+    const expectedSuffix = relative(realTmp, target)
+    // The existing ancestor (tmpdir) is realpathed; the missing suffix is preserved.
+    expect(resolveConfigPath(target, undefined)).toBe(join(realTmp, expectedSuffix))
+    // Replay swaps the basename after canonicalization, in the same directory.
+    expect(resolveConfigPath(target, 'replay')).toBe(join(realTmp, relative(realTmp, join(absentDir, 'deep')), 'cordis.snapshot.yml'))
   })
 })
 

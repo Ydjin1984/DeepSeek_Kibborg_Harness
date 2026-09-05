@@ -794,3 +794,67 @@ describe('goal replay validation', () => {
     })
   })
 })
+
+describe('GoalService re-entrancy guard', () => {
+  it('does not double-apply events when sync is re-entered via a session/event listener', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(GoalService)
+    const stub = stubAgentForSession(ctx.sessions.create(SessionId('reentrancy-guard')))
+    ctx.agents.register(stub.agent)
+
+    let eventCount = 0
+    ctx.on('session/event', (_session, event) => {
+      if (event.type === 'goal/change') {
+        eventCount++
+        // Nested call to get (which calls sync) while append is still in flight
+        ctx.goals.get(stub.agent)
+      }
+    })
+
+    const goal = ctx.goals.create(stub.agent, { objective: 're-entrancy safe' })
+
+    expect(goal.phase).toBe('active')
+    expect(goal.revision).toBe(1)
+    expect(eventCount).toBe(1)
+    // foldGoal should see exactly one create event, no double-apply
+    expect(foldGoal(stub.session.events)).toMatchObject({
+      goal: { id: goal.id, revision: 1, phase: 'active' },
+      roundsStarted: 0,
+    })
+  })
+
+  it('applies subsequent events correctly after a re-entrant sync', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(GoalService)
+    const stub = stubAgentForSession(ctx.sessions.create(SessionId('reentrancy-subsequent')))
+    ctx.agents.register(stub.agent)
+
+    // Listen for the nested sync to confirm guard is exercised
+    let reentrantSyncHappened = false
+    ctx.on('session/event', (_session, event) => {
+      if (event.type === 'goal/change') {
+        const snapshot = ctx.goals.get(stub.agent)
+        if (snapshot?.revision === 1) {
+          reentrantSyncHappened = true
+        }
+      }
+    })
+
+    const created = ctx.goals.create(stub.agent, { objective: 'subsequent', maxGoalRounds: 5 })
+    expect(created.phase).toBe('active')
+    expect(created.revision).toBe(1)
+    expect(reentrantSyncHappened).toBe(true)
+
+    // Edit should be applied correctly even after the nested sync
+    const edited = ctx.goals.edit(stub.agent, created, { objective: 'edited' })
+    expect(edited.revision).toBe(2)
+    expect(edited.objective).toBe('edited')
+    expect(foldGoal(stub.session.events)).toMatchObject({
+      goal: { revision: 2, phase: 'active' },
+    })
+  })
+})
