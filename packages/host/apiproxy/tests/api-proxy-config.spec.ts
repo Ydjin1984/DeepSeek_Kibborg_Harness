@@ -654,7 +654,7 @@ describe('llm domain', () => {
         { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro' },
       ],
     }])
-    expect(value.failures).toEqual([{ id: 'broken', name: 'Broken', message: 'catalog backend down' }])
+    expect(value.failures).toEqual([{ id: 'broken', name: 'Broken', message: 'catalog build failed' }])
   })
 
   it('forwards llm/adapters-updated at every topology commit point', async () => {

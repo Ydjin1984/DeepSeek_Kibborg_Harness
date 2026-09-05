@@ -779,7 +779,7 @@ describe('handler carrier-layer statuses', () => {
     const body = JSON.stringify({ type: 'client-request', rpcId: 'r-11', method: 'session.list', payload: {} })
     const response = await crashing.fetch(new Request('http://x/api/session.list', { method: 'POST', headers: { 'content-type': 'application/json' }, body }))
     expect(response.status).toBe(500)
-    expect(await response.text()).toContain('impl crashed')
+    expect(await response.text()).toContain('handler failure')
   })
 
   it('routes /api/respond, rejecting malformed client-responses as a receipt', async () => {

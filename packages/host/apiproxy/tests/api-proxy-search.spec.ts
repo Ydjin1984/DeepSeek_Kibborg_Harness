@@ -308,7 +308,7 @@ describe('session.search', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error).toMatchObject({ code: 'internal' })
-    expect(response.result.error.message).toContain('100-call work budget')
+    expect(response.result.error.message).toBe('session search failed')
     expect(searchSessions).toHaveBeenCalledTimes(100)
   })
 
@@ -412,7 +412,7 @@ describe('session.search', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error.code).toBe('internal')
-    expect(response.result.error.message).toContain('100-call work budget')
+    expect(response.result.error.message).toBe('session search failed')
     expect(response.result).not.toHaveProperty('value')
     expect(searchSessions).toHaveBeenCalledTimes(100)
   })
@@ -558,7 +558,7 @@ describe('session.search', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error).toMatchObject({ code: 'internal' })
-    expect(response.result.error.message).toContain('returned 21 items; maximum is 20')
+    expect(response.result.error.message).toBe('session search failed')
   })
 
   it('uses the learned provider limit for the overproduction guard', async () => {
@@ -584,7 +584,7 @@ describe('session.search', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error).toMatchObject({ code: 'internal' })
-    expect(response.result.error.message).toContain('returned 11 items; maximum is 10')
+    expect(response.result.error.message).toBe('session search failed')
     expect(searchSessions).toHaveBeenCalledTimes(2)
   })
 
@@ -634,7 +634,7 @@ describe('session.search', () => {
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('unreachable')
     expect(response.result.error).toMatchObject({ code: 'internal' })
-    expect(response.result.error.message).toContain('repeated a continuation cursor')
+    expect(response.result.error.message).toBe('session search failed')
     expect(searchSessions).toHaveBeenCalledTimes(2)
   })
 
@@ -660,7 +660,7 @@ describe('session.search', () => {
     })
     expect(response.result).not.toHaveProperty('value')
     if (response.result.ok) throw new Error('unreachable')
-    expect(response.result.error.message).toContain('repeated a continuation cursor')
+    expect(response.result.error.message).toBe('session search failed')
     expect(searchSessions).toHaveBeenCalledTimes(2)
   })
 
@@ -875,6 +875,6 @@ describe('session.search', () => {
     expect(failed.result.ok).toBe(false)
     if (failed.result.ok) throw new Error('unreachable')
     expect(failed.result.error.code).toBe('internal')
-    expect(failed.result.error.message).toContain('database unavailable')
+    expect(failed.result.error.message).toBe('session search failed')
   })
 })

@@ -483,10 +483,11 @@ async function buildModelCatalog(ctx: Context): Promise<{
       }
       return { kind: 'group' as const, group }
     } catch (error: unknown) {
+      console.error(`api-proxy: model catalog build failed for provider "${provider.id}": ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
       const failure: ModelCatalogFailure = {
         id: provider.id,
         name: provider.name,
-        message: error instanceof Error ? error.message : String(error),
+        message: 'catalog build failed',
       }
       return { kind: 'failure' as const, failure }
     }
@@ -750,7 +751,8 @@ function directoryError(error: unknown): RpcError {
   if (error instanceof DirectoryPickerError) {
     return { code: error.code, message: error.message, details: { path: error.path } }
   }
-  return { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} }
+  console.error(`api-proxy: directory picker failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+  return { code: 'internal', message: 'directory picker failed', details: {} }
 }
 
 /** Map a project-file operation failure onto the wire error vocabulary. */
@@ -761,7 +763,8 @@ function projectFileError(error: unknown): RpcError {
       ? { code, message: error.message, details: {} } as unknown as RpcError
       : { code, message: error.message, details: { path: error.path } } as unknown as RpcError
   }
-  return { code: 'internal', message: error instanceof Error ? error.message : String(error), details: {} }
+  console.error(`api-proxy: project file operation failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+  return { code: 'internal', message: 'project file operation failed', details: {} }
 }
 
 /** One project-file request's session resolution outcome. */
@@ -1282,6 +1285,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     ?? DEFAULT_SESSION_LOG_COMPRESSION_LEVEL
   const coldBlankProbeMaxBytes = defaults.coldBlankProbeMaxBytes
     ?? DEFAULT_COLD_BLANK_PROBE_MAX_BYTES
+  /** Fold an unknown/raw error into a stable wire RpcError; log raw detail under rpcId. */
+  function internalFailure(
+    rpcId: unknown,
+    operation: string,
+    error: unknown,
+  ): RpcError {
+    ctx.logger.error(`[rpc ${String(rpcId)}] ${operation} failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+    return { code: 'internal', message: `${operation} failed`, details: {} }
+  }
   /** The seed model each create/resume declares; re-read so it never goes stale. */
   const agentOptions = (): AgentOptions => {
     const { provider, model } = defaults.defaultModelSelection()
@@ -1982,8 +1994,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
   /** Map one goal-domain rejection to the wire error (stable GoalError codes ride in details). */
   function goalError(request: RpcRequest<unknown>, error: unknown): RpcResponse<never> {
-    const details = error instanceof GoalError ? { goalCode: error.code } : {}
-    return err(request, { code: 'internal', message: String(error), details })
+    if (error instanceof GoalError) {
+      // GoalError carries a seam-authored, human-readable message safe for the wire.
+      return err(request, { code: 'internal', message: error.message, details: { goalCode: error.code } })
+    }
+    return err(request, internalFailure(request.rpcId, 'goal operation', error))
   }
 
   /** Resolve a session's agent, apply one goal mutation, and acknowledge with the new CAS ref. */
@@ -2065,11 +2080,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           details: {},
         })
       }
-      return err(request, {
-        code: 'internal',
-        message: `path open failed: ${error instanceof Error ? error.message : String(error)}`,
-        details: {},
-      })
+      return err(request, internalFailure(request.rpcId, 'path open', error))
     }
   }
 
@@ -2337,11 +2348,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ) return cancelled()
           // XXX: Redact provider details before exposing this gateway beyond
           // its current single-user local deployment.
-          return err(request, {
-            code: 'internal',
-            message: `session search failed: ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, 'session search', error))
         }
       },
 
@@ -2390,19 +2397,16 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof SubagentSessionOwnership) {
             return err(request, subagentOwnershipError(error.sessionId))
           }
-          return err(request, {
-            code: 'internal',
-            message: `failed to create session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `create session "${sessionId}"`, error))
         }
         if (workspace !== undefined) {
           try {
             await workspace.attachSession(sessionId)
           } catch (error: unknown) {
+            ctx.logger.error(`[rpc ${String(request.rpcId)}] attach session "${sessionId}" to workspace "${workspace.id}" failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
             return err(request, {
               code: 'workspace-attach-failed',
-              message: `session "${sessionId}" was created but could not attach to workspace "${workspace.id}": ${String(error)}`,
+              message: `session "${sessionId}" was created but could not attach to workspace "${workspace.id}"`,
               details: { sessionId, workspaceId: workspace.id },
             })
           }
@@ -2442,11 +2446,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof SessionNotFound) {
             return err(request, { code: 'session-not-found', message: error.message, details: { sessionId } })
           }
-          return err(request, {
-            code: 'internal',
-            message: `history unavailable for session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `history unavailable for session "${sessionId}"`, error))
         }
       },
 
@@ -2533,11 +2533,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: { sessionId },
             })
           }
-          return err(request, {
-            code: 'internal',
-            message: `failed to rename session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `rename session "${sessionId}"`, error))
         }
       },
 
@@ -2550,11 +2546,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof SessionNotFound) {
             return err(request, { code: 'session-not-found', message: error.message, details: { sessionId } })
           }
-          return err(request, {
-            code: 'internal',
-            message: `fork source unavailable for session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `fork source unavailable for session "${sessionId}"`, error))
         }
         const events = source.events
         // An in-log anchor belongs to the turn containing it and must never
@@ -2587,11 +2579,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         try {
           workspace = await forkWorkspace(source)
         } catch (error: unknown) {
-          return err(request, {
-            code: 'internal',
-            message: `failed to resolve fork workspace for session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `resolve fork workspace for session "${sessionId}"`, error))
         }
         const childId = `session-${randomUUID()}` as SessionId
         // The child inherits the parent's composition for the same reason a
@@ -2616,11 +2604,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             setup: forkComposition.setup,
           })
         } catch (error: unknown) {
-          return err(request, {
-            code: 'internal',
-            message: `failed to fork session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `fork session "${sessionId}"`, error))
         }
         // An ordinary source keeps its direct Workspace. A subagent source is
         // not listed there, so its ordinary fork joins the nearest owning
@@ -2629,9 +2613,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           try {
             await workspace.attachSession(childId)
           } catch (error: unknown) {
+            ctx.logger.error(`[rpc ${String(request.rpcId)}] attach forked session "${childId}" to workspace "${workspace.id}" failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
             return err(request, {
               code: 'workspace-attach-failed',
-              message: `session "${childId}" was forked but could not attach to workspace "${workspace.id}": ${String(error)}`,
+              message: `session "${childId}" was forked but could not attach to workspace "${workspace.id}"`,
               details: { sessionId: childId, workspaceId: workspace.id },
             })
           }
@@ -2714,11 +2699,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: { sessionId },
             })
           }
-          return err(request, {
-            code: 'internal',
-            message: `attachment authorization unavailable for session "${sessionId}": ${String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, `attachment authorization for session "${sessionId}"`, error))
         }
         const ref = referencedImage(state.events, String(attachmentId))
         if (ref === undefined) {
@@ -3001,9 +2982,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // The registry rejects a path that does not resolve to an existing
           // directory (realpath ENOENT / not-a-directory) — the business
           // error of the typed-path flow, surfaced as a validation failure.
+          ctx.logger.error(`[rpc ${String(request.rpcId)}] create workspace "${path}" failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
           return err(request, {
             code: 'workspace-invalid-path',
-            message: `cannot create a workspace at "${path}": ${error instanceof Error ? error.message : String(error)}`,
+            message: `cannot create a workspace at "${path}"`,
             details: { path },
           })
         }
@@ -3144,11 +3126,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: {},
             })
           }
-          return err(request, {
-            code: 'internal',
-            message: `directory picker failed: ${error instanceof Error ? error.message : String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, 'directory picker', error))
         }
       },
 
@@ -3349,11 +3327,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           } catch (error: unknown) {
             const refused = presetFailure(request, error)
             if (refused !== undefined) return refused
-            return err(request, {
-              code: 'internal',
-              message: `failed to select agent preset "${agentPreset}": ${String(error)}`,
-              details: {},
-            })
+            return err(request, internalFailure(request.rpcId, `select agent preset "${agentPreset}"`, error))
           }
         }
         const queued = presetSwitches.get(sessionId) ?? Promise.resolve()
@@ -3511,7 +3485,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             })),
           })
         } catch (error: unknown) {
-          return err(request, { code: 'internal', message: `skill listing failed: ${String(error)}`, details: {} })
+          return err(request, internalFailure(request.rpcId, 'skill listing', error))
         }
       },
 
@@ -3751,11 +3725,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: {},
             })
           }
-          return err(request, {
-            code: 'internal',
-            message: `settings document preparation failed: ${error instanceof Error ? error.message : String(error)}`,
-            details: {},
-          })
+          return err(request, internalFailure(request.rpcId, 'settings document preparation', error))
         }
         if (path === undefined) {
           return err(request, {

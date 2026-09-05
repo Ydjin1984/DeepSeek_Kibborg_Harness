@@ -237,7 +237,8 @@ async function handleUnary<K extends keyof RpcMethodMap>(
     return fullResponse(await route.invoke(api, { rpcId: message.rpcId, payload: payload.data }, signal))
   } catch (error: unknown) {
     // The impl never throws business errors; reaching here means the implementation itself crashed — 500, carrier layer.
-    return new Response(`handler failure: ${String(error)}`, { status: 500 })
+    console.error(`api-proxy: handler failure on "${method}": ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+    return new Response('handler failure', { status: 500 })
   }
 }
 
@@ -266,7 +267,8 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): R
         // Mid-stream impl failure → one stream/error frame, then close: the client must see
         // the failure instead of a silent end (which reads as a normal disconnect). A fresh
         // rpcId is minted — this is a server-initiated push like any other frame.
-        const failure: MuxFrame | HostFrame = { type: 'stream/error', error: { code: 'internal', message: String(error), details: {} } }
+        console.error(`api-proxy: stream error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+        const failure: MuxFrame | HostFrame = { type: 'stream/error', error: { code: 'internal', message: 'stream error', details: {} } }
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame({ rpcId: RpcId(randomUUID()), payload: failure }))}\n\n`))
         } catch {

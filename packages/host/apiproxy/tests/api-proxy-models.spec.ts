@@ -304,12 +304,12 @@ describe('Web session model selection', () => {
       ],
     }])
     expect(catalog.failures).toEqual([
-      { id: 'broken', name: 'Broken Provider', message: 'catalog offline' },
-      { id: 'metadata-broken', name: 'Metadata Broken', message: 'reasoning metadata offline' },
+      { id: 'broken', name: 'Broken Provider', message: 'catalog build failed' },
+      { id: 'metadata-broken', name: 'Metadata Broken', message: 'catalog build failed' },
       {
         id: 'duplicate',
         name: 'Duplicate Provider',
-        message: 'adapter returned invalid or duplicate model metadata for provider "duplicate"',
+        message: 'catalog build failed',
       },
     ])
     await ctx.fiber.dispose()
