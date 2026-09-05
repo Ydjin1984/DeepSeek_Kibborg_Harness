@@ -35,6 +35,7 @@ $Port = 3080
 $Url = "http://127.0.0.1:$Port/"
 $LogDir = Join-Path $Root '.dsh-build'
 $WebLog = Join-Path $LogDir 'web-run.log'
+$PrevWebLog = Join-Path $LogDir 'web-run.prev.log'
 $PhaseLogDir = Join-Path $LogDir 'phases'
 $RecordPath = Join-Path $LogDir 'client-build-environment.json'
 $IndexPath = Join-Path $Root 'apps\web\dist\index.html'
@@ -204,6 +205,12 @@ writeClientBuildRecord(root, env)
 # --- Запуск сервиса (в одном окне: фоновый процесс, вывод в журнал, без отдельного терминала)
 function Start-WebServer {
   New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+  # Ротация журнала: журнал предыдущего запуска (в т.ч. след падения) сохраняется
+  # в $PrevWebLog, иначе оператор ">" в запуске затирает его при каждом старте.
+  if (Test-Path -LiteralPath $WebLog) {
+    Remove-Item -LiteralPath $PrevWebLog -Force -ErrorAction SilentlyContinue
+    Rename-Item -LiteralPath $WebLog -NewName (Split-Path -Leaf $PrevWebLog) -Force -ErrorAction SilentlyContinue
+  }
   # Прямой node без pnpm-обёрток и без пайплайнов PowerShell:
   # вывод сервиса идёт в журнал на уровне ОС, ошибки не превращаются в исключения.
   $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -308,6 +315,9 @@ function Invoke-Start {
   Write-Host ''
   Write-Host ("Сервис готов за {0} — {1}" -f (Format-Elapsed $total), $Url) -ForegroundColor Green
   Write-Host 'Сервис работает в фоне; журнал: .dsh-build\web-run.log' -ForegroundColor DarkGray
+  if (Test-Path -LiteralPath $PrevWebLog) {
+    Write-Host 'Журнал предыдущего запуска: .dsh-build\web-run.prev.log' -ForegroundColor DarkGray
+  }
 }
 
 # --- Диспетчер команд
