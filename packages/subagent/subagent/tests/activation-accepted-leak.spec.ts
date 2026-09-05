@@ -33,7 +33,7 @@ async function setup() {
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
-  const adapter = new MockAdapter(textResponse('ok'))
+  const adapter = new MockAdapter(Array.from({ length: 50 }, () => textResponse('ok')))
   ctx.llm.registerAdapter(['mock'], adapter)
 
   const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
@@ -54,7 +54,6 @@ describe('Activation.accepted cleanup', () => {
       request: {
         prompt: [{ type: 'text', text: 'hello' }],
         parent,
-        signal: new AbortController().signal,
         maxDepth: 10,
       },
       signal: new AbortController().signal,
@@ -84,7 +83,6 @@ describe('Activation.accepted cleanup', () => {
       request: {
         prompt: [{ type: 'text', text: 'hello' }],
         parent,
-        signal: new AbortController().signal,
         maxDepth: 10,
       },
       signal: new AbortController().signal,
@@ -109,7 +107,6 @@ describe('Activation.accepted cleanup', () => {
       request: {
         prompt: [{ type: 'text', text: 'hello' }],
         parent,
-        signal: new AbortController().signal,
         maxDepth: 10,
       },
       signal: new AbortController().signal,
@@ -127,7 +124,6 @@ describe('Activation.accepted cleanup', () => {
       request: {
         prompt: [{ type: 'text', text: 'start' }],
         parent,
-        signal: new AbortController().signal,
         maxDepth: 10,
       },
       signal: new AbortController().signal,

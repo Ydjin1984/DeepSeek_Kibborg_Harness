@@ -14,7 +14,10 @@ import type { SubagentRun, SubagentRunEndInfo, SubagentRunInfo } from '../src/ty
 /** A listener stub receives the emitted info payload (start or end edge). */
 type EdgePayload = SubagentRunInfo | SubagentRunEndInfo
 
-function ctxWithListenerCapture(emitted: Array<{ name: string; stopReason?: string }>): Context {
+/** Captured edge; stopReason present only on end edges (explicit undefined keeps exactOptionalPropertyTypes happy). */
+type CapturedEdge = { name: string; stopReason: string | undefined }
+
+function ctxWithListenerCapture(emitted: Array<CapturedEdge>): Context {
   const ctx = new Context()
   // The emitter dispatches to the 'emit' channel; capture every edge it pushes.
   ctx.events.dispatch = (() => {
@@ -41,7 +44,7 @@ function rejectingRun(id: string, rejection: unknown): SubagentRun {
 
 describe('observeRun error propagation', () => {
   it('emits subagent/end with error when run.result rejects', async () => {
-    const emitted: Array<{ name: string; stopReason?: string }> = []
+    const emitted: Array<CapturedEdge> = []
     const ctx = ctxWithListenerCapture(emitted)
     const emitter = createLifecycleEmitter(ctx, (_agent: Agent) => ({}))
 
@@ -79,7 +82,7 @@ describe('observeRun error propagation', () => {
   })
 
   it('observeRun does not swallow non-standard error codes', async () => {
-    const emitted: Array<{ name: string; stopReason?: string }> = []
+    const emitted: Array<CapturedEdge> = []
     const ctx = ctxWithListenerCapture(emitted)
     const emitter = createLifecycleEmitter(ctx, (_agent: Agent) => ({}))
 

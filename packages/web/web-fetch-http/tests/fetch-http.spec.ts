@@ -15,6 +15,7 @@ const limits: HttpFetchLimits = {
   timeoutMs: 5_000,
   maxRedirects: 5,
   userAgent: 'test-agent/1.0',
+  blockPrivateNetworks: false,
 }
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void
