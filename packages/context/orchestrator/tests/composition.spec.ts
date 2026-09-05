@@ -158,6 +158,8 @@ describe('dsh-orchestrator composition', () => {
     const text = section.text as (context: { agent?: Agent }) => string
 
     expect(text({})).toContain('Исполнительная (локальная) модель')
+    expect(text({})).toContain('зрение (vision)')
+    expect(text({})).toContain('127.0.0.1:9222')
     expect(text({ agent: agentAt(1) })).toBe('')
     // Disabled: no instructions regardless of depth.
     h.settings.enabled = false
@@ -175,6 +177,8 @@ describe('dsh-orchestrator composition', () => {
     expect(request.maxDepth).toBe(1)
     expect(request.toolFilter).toEqual({ deny: ['executor'] })
     expect(request.persona).toContain('ИСПОЛНИТЕЛЬ')
+    expect(request.persona).toContain('зрение (vision)')
+    expect(request.persona).toContain('127.0.0.1:9222')
     await h.dispose()
   })
 
