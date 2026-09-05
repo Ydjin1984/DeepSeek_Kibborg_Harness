@@ -1727,4 +1727,70 @@ describe('todo/write event', () => {
     expect(replayed.events.slice(0, original.seq)).toEqual(original.events)
     expect(replayed.firstLiveSeq).toBe(original.seq)
   })
+
+  it('emits session/disposed exactly once when detach is triggered from both announce-finally and append-finally', async () => {
+    // Regression for suspected double-emit: detachRequested could be true during
+    // announce-finally (calling detach → detachEntered → emitDisposed), and then
+    // append-finally could call detach again while entry.announced is still true.
+    // The guard is: detachEntered sets detachRequested=false and removes the entry
+    // from the store; a second call returns early at the store-identity check.
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+
+    const disposedCount = { value: 0 }
+    const createdSessions: Session[] = []
+    ctx.on('session/created', (session) => {
+      createdSessions.push(session)
+    })
+    ctx.on('session/disposed', () => {
+      disposedCount.value += 1
+    })
+
+    const session = ctx.sessions.prepare(SessionId('double-dispose'))
+    const detach = ctx.sessions.enter(session)
+
+    // First listener calls detach() while announcing is still true, setting
+    // detachRequested. Then append() fires inside the same announce dispatch;
+    // its finally checks detachRequested but announcing is still true, so it
+    // skips detach. Finally of announce() runs next: announcing drops,
+    // detachRequested is true, appending is false → detach() → emitDisposed #1.
+    // The append finally runs next (already unwound): appending false,
+    // detachRequested still true, announcing now false → detach() →
+    // detachEntered: store.delete (already deleted) → early return.
+    ctx.on('session/created', (created) => {
+      detach() // sets detachRequested=true because announcing is true
+      created.append('turn/start', { turn: 1 }) // append while announcing
+    })
+
+    ctx.sessions.announce(session)
+
+    expect(disposedCount.value).toBe(1)
+    expect(ctx.sessions.get(SessionId('double-dispose'))).toBeUndefined()
+  })
+
+  it('emits session/disposed exactly once on normal create-and-fiber-dispose lifecycle', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+
+    let disposedCount = 0
+    ctx.on('session/disposed', () => { disposedCount += 1 })
+
+    let session!: Session
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      session = inner.sessions.create(SessionId('normal-dispose'))
+    }, { inject: ['sessions'] }))
+
+    expect(disposedCount).toBe(0)
+    expect(ctx.sessions.get(SessionId('normal-dispose'))).toBe(session)
+
+    session.append('turn/start', { turn: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    await fiber.dispose()
+    expect(disposedCount).toBe(1)
+    expect(ctx.sessions.get(SessionId('normal-dispose'))).toBeUndefined()
+
+    // Late append on detached session is a no-op for observers
+    session.append('turn/start', { turn: 2 })
+  })
 })

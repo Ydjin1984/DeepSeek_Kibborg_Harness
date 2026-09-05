@@ -318,6 +318,9 @@ export class ReactLoopAgent implements Agent {
         // oxlint-disable-next-line typescript/no-non-null-assertion -- every exit assigns a turn ending
         this.session.append('turn/end', { turn, reason: turnEnds! })
       } catch (error: unknown) {
+        // A failing turn/end append (session already closed) replaces the step error
+        // on purpose: the step error was already delivered to agent/error listeners by
+        // throwError, and the durable turn ending is what the driver must see now.
         this.throwError(error)
       }
     }
