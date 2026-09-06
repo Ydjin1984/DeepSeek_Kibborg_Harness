@@ -108,7 +108,7 @@ describe('ExecutionService', () => {
     it('returns a deep copy of state', () => {
       service.register('job', 'get:1')
       const s1 = service.get('get:1')!
-      s1.status = 'HACKED'
+      s1.status = 'FAILED'
       const s2 = service.get('get:1')!
       expect(s2.status).toBe('CREATED')
     })
@@ -125,8 +125,8 @@ describe('ExecutionService', () => {
       const all = service.list()
       expect(all).toHaveLength(2)
       // Mutating returned copy does not affect internal state
-      all[0].status = 'HACKED'
-      expect(service.list()[0].status).toBe('CREATED')
+      all[0]!.status = 'FAILED'
+      expect(service.list()[0]!.status).toBe('CREATED')
     })
   })
 
@@ -147,8 +147,8 @@ describe('ExecutionService', () => {
       const dispose = service.on((ev) => { events.push(ev) })
       service.register('job', 'on:1')
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('execution.created')
-      expect(events[0].executionId).toBe('on:1')
+      expect(events[0]!.type).toBe('execution.created')
+      expect(events[0]!.executionId).toBe('on:1')
       // Disposer removes listener
       dispose()
       service.transition('on:1', 'queue')
@@ -176,7 +176,7 @@ describe('ExecutionService', () => {
       const goodListener: ExecutionEventListener = (ev) => { events.push(ev) }
       service.registryRef.on(badListener)
       service.registryRef.on(goodListener)
-      service.register('throw:1', 'job')
+      service.register('job', 'throw:1')
       expect(events).toHaveLength(1) // good listener still called
       service.registryRef.off(goodListener)
       service.registryRef.off(badListener)
@@ -188,7 +188,7 @@ describe('ExecutionService', () => {
       const goodListener: ExecutionEventListener = (ev) => { events.push(ev) }
       service.registryRef.on(badPromiseListener)
       service.registryRef.on(goodListener)
-      service.register('reject:1', 'job')
+      service.register('job', 'reject:1')
       expect(events).toHaveLength(1) // good listener still called
       service.registryRef.off(goodListener)
       service.registryRef.off(badPromiseListener)

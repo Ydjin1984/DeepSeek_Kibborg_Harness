@@ -88,7 +88,8 @@ async function appendNextTurnStart(root: string, events: readonly SessionEvent[]
   await ctx.plugin(SessionStore)
   await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
   try {
-    const nextSeq = events.length === 0 ? 0 : events[events.length - 1].seq + 1
+    const tail = events.at(-1)
+    const nextSeq = tail === undefined ? 0 : tail.seq + 1
     const lastTurn = events
       .filter(event => event.type === 'turn/start')
       .map(event => (event.data as { turn: number }).turn)

@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import ExecutionService from '../src/index.ts'
-import type { ResourceEvent, ResourceLifecycle } from '../src/resources.ts'
+import type { ResourceEvent } from '../src/resources.ts'
 import { ResourceLeaseRegistry, type ResourceError } from '../src/resources.ts'
 
 // ---------------------------------------------------------------------------
@@ -49,9 +49,9 @@ describe('ResourceLeaseRegistry — full composition', () => {
     it('emits resource.acquired event', () => {
       svc.resources.acquire({ resourceId: 'evt:1', type: 'pty' })
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('resource.acquired')
-      expect(events[0].resourceId).toBe('evt:1')
-      expect(events[0].seq).toBe(1)
+      expect(events[0]!.type).toBe('resource.acquired')
+      expect(events[0]!.resourceId).toBe('evt:1')
+      expect(events[0]!.seq).toBe(1)
     })
 
     it('acquire with options sets provider/owner/recoveryStrategy', () => {
@@ -119,8 +119,8 @@ describe('ResourceLeaseRegistry — full composition', () => {
       events.length = 0
       svc.resources.heartbeat('hb-evt:1')
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('resource.heartbeat')
-      expect(events[0].resourceId).toBe('hb-evt:1')
+      expect(events[0]!.type).toBe('resource.heartbeat')
+      expect(events[0]!.resourceId).toBe('hb-evt:1')
     })
 
     it('throws RESOURCE_NOT_FOUND for unknown resource', () => {
@@ -152,8 +152,8 @@ describe('ResourceLeaseRegistry — full composition', () => {
       events.length = 0
       svc.resources.release('rel-evt:1')
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('resource.released')
-      expect(events[0].resourceId).toBe('rel-evt:1')
+      expect(events[0]!.type).toBe('resource.released')
+      expect(events[0]!.resourceId).toBe('rel-evt:1')
     })
 
     it('is idempotent — repeated release is no-op', () => {
@@ -178,7 +178,7 @@ describe('ResourceLeaseRegistry — full composition', () => {
     it('get returns deep copy — mutation does not affect internal state', () => {
       svc.resources.acquire({ resourceId: 'get:1', type: 'chrome' })
       const s1 = svc.resources.get('get:1')!
-      s1.lifecycle = 'HACKED' as ResourceLifecycle
+      s1.lifecycle = 'released'
       const s2 = svc.resources.get('get:1')!
       expect(s2.lifecycle).toBe('leased')
     })
@@ -192,8 +192,8 @@ describe('ResourceLeaseRegistry — full composition', () => {
       svc.resources.acquire({ resourceId: 'list:2', type: 'pty' })
       const all = svc.resources.list()
       expect(all).toHaveLength(2)
-      all[0].lifecycle = 'HACKED' as ResourceLifecycle
-      expect(svc.resources.list()[0].lifecycle).toBe('leased')
+      all[0]!.lifecycle = 'released'
+      expect(svc.resources.list()[0]!.lifecycle).toBe('leased')
     })
   })
 
@@ -244,8 +244,7 @@ describe('ResourceLeaseRegistry — full composition', () => {
       const orphaned = svc.resources.sweep(future)
 
       expect(orphaned).toHaveLength(2)
-      expect(orphaned[0].lifecycle).toBe('orphaned')
-      expect(orphaned[1].lifecycle).toBe('orphaned')
+      expect(orphaned.map(lease => lease.lifecycle)).toEqual(['orphaned', 'orphaned'])
     })
 
     it('does not touch still-leased resources', () => {
@@ -285,7 +284,7 @@ describe('ResourceLeaseRegistry — full composition', () => {
 
       const orphanedEvents = events.filter(e => e.type === 'resource.orphaned')
       expect(orphanedEvents).toHaveLength(1)
-      expect(orphanedEvents[0].resourceId).toBe('evt-sw:1')
+      expect(orphanedEvents[0]!.resourceId).toBe('evt-sw:1')
     })
 
     it('returns deep copies — mutation of returned list does not affect registry', () => {
@@ -293,7 +292,7 @@ describe('ResourceLeaseRegistry — full composition', () => {
       const future = Date.now() + 60
       const result = svc.resources.sweep(future)
       expect(result).toHaveLength(1)
-      result[0].lifecycle = 'HACKED' as ResourceLifecycle
+      result[0]!.lifecycle = 'released'
       expect(svc.resources.status('dc-sw:1')).toBe('orphaned') // still orphaned, not hacked
     })
   })
@@ -335,16 +334,16 @@ describe('ResourceLeaseRegistry — full composition', () => {
   describe('event seq', () => {
     it('resource events have monotonically increasing seq', () => {
       svc.resources.acquire({ resourceId: 'seq:1', type: 'chrome' })
-      const firstSeq = events[0].seq
+      const firstSeq = events[0]!.seq
       svc.resources.acquire({ resourceId: 'seq:2', type: 'pty' })
-      expect(events[1].seq).toBeGreaterThan(firstSeq)
+      expect(events[1]!.seq).toBeGreaterThan(firstSeq)
     })
 
     it('resource seq is independent from execution seq', () => {
       // Each registry has its own independent sequence counter
       events.length = 0
       svc.resources.acquire({ resourceId: 'seq-res:1', type: 'chrome' })
-      expect(events[0].seq).toBe(1)
+      expect(events[0]!.seq).toBe(1)
     })
   })
 
@@ -359,8 +358,8 @@ describe('ResourceLeaseRegistry — full composition', () => {
     it('resource events are emitted via ctx.emit', () => {
       svc.resources.acquire({ resourceId: 'ctx-evt:1', type: 'chrome' })
       expect(events).toHaveLength(1)
-      expect(events[0].type).toBe('resource.acquired')
-      expect(events[0].lease.resourceId).toBe('ctx-evt:1')
+      expect(events[0]!.type).toBe('resource.acquired')
+      expect(events[0]!.lease.resourceId).toBe('ctx-evt:1')
     })
   })
 })

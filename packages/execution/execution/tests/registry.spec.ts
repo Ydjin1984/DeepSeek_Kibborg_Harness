@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests for ExecutionRegistry: register, transition, end, observe, list.
  * @module @deepseek-ai/dsh-execution/registry.spec
  */
@@ -97,13 +97,13 @@ describe('ExecutionRegistry', () => {
     reg.on((ev) => { events.push(ev) })
 
     reg.register({ executionId: 'ev:1', kind: 'job' })
-    expect(events[0].seq).toBe(1)
-    expect(events[0].type).toBe('execution.created')
+    expect(events[0]!.seq).toBe(1)
+    expect(events[0]!.type).toBe('execution.created')
 
     reg.transition('ev:1', 'queue')
-    expect(events[1].seq).toBe(2)
-    expect(events[1].type).toBe('execution.transition')
-    expect(events[1].seq).toBeGreaterThan(events[0].seq)
+    expect(events[1]!.seq).toBe(2)
+    expect(events[1]!.type).toBe('execution.transition')
+    expect(events[1]!.seq).toBeGreaterThan(events[0]!.seq)
   })
 
   it('observe receives events', () => {
@@ -113,7 +113,7 @@ describe('ExecutionRegistry', () => {
 
     reg.register({ executionId: 'obs:1', kind: 'workflow' })
     expect(received).toHaveLength(1)
-    expect(received[0].executionId).toBe('obs:1')
+    expect(received[0]!.executionId).toBe('obs:1')
 
     dispose()
     reg.transition('obs:1', 'start')
@@ -222,7 +222,7 @@ describe('ExecutionRegistry', () => {
     const reg = new ExecutionRegistry(mockContext())
     reg.register({ executionId: 'dc:1', kind: 'job' })
     const s1 = reg.get('dc:1')!
-    s1.status = 'HACKED'
+    s1.status = 'FAILED'
     const s2 = reg.get('dc:1')!
     expect(s2.status).toBe('CREATED') // original unchanged
   })
