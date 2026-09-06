@@ -96,24 +96,9 @@
 
 ### T7 Engagement stub
 **Цель:** scope-файл + deny сети вне allowlist (минимальный ROE, до полного Engagement Mode).
-- [ ] Формат scope-файла (пример ниже); загрузка в сессию; политика для web/tool-тулов.
-- [ ] Hard deny + audit event для network/exploit вне scope.
-- **Пример (scope):**
-  ```yaml
-  engagement:
-    id: eng-2026-09-001
-    scope:
-      targets: ["10.0.0.0/24", "example.test"]
-      allowed_networks: ["127.0.0.1", "10.0.0.0/24"]
-      allowed_ports: [80, 443, 8080]
-      binaries: ["samples/*.exe"]
-    exclusions: ["10.0.0.5"]
-    exfil: forbidden
-    rate_limits: { req_per_min: 60 }
-    time_window: "2026-09-06T00:00:00Z/2026-09-30T23:59:59Z"
-    evidence_policy: "hash_all_artifacts"
-  ```
-- **Статус:** pending.
+- [x] **Реализовано (коммит 123ff0c26d):** новый пакет `packages/guard/engagement-stub` (`@deepseek-ai/dsh-engagement-stub`). Плагин с Config `{enabled (default false), allowedHosts[], blockedTools[] (default nmap/metasploit/msfconsole/nc/netcat)}`. При enabled: listener на `tools/pre-execute` (до approval) → чистая `engagementDecision`: blockedTools всегда deny; URL-подобные аргументы (url/endpoint/host/target/uri/domain/link/input) хост-извлекаются (protocol/port/path/userinfo стрипятся, IPv6 brackets), localhost/127.0.0.1/::1 всегда allow, иначе точное совпадение с allowlist; без URL — fail-open. Deny → audit-событие `engagement/denied` + logger.warn. 53 теста, coverage 100%, lint clean; полный build и рестарт сервера.
+- [ ] **Дальше (к 61-90-дневному Engagement Mode):** scope-файл (CIDR/порты/тайм-окна/rate limits) вместо плоского списка хостов; интеграция с T6-политикой оркестратора; UI-статус контура.
+- **Статус:** stub реализован; полный Engagement Mode — спринт 61-90.
 
 ### T8 Crash/restart тесты
 - [x] **Q3 решён (при 1:1 выбрана позиция Grok — фундаментальнее):** порядок — (1) **kill mid-write session** (сначала укрепить запись: fsync + атомарный rotate + «хвост битый = truncate до последнего валидного seq» — иначе порванный JSONL/SQLite не даст стартовать recovery), (2) kill mid-tool (lease + fail-closed: tool не COMPLETED → execution INTERRUPTED → повтор идемпотентен), (3) kill mid-subagent (граф parent/child). От ChatGPT принята методология: **crash injection по durable boundaries** (`BEFORE_START / AFTER_START / AFTER_SIDE_EFFECT / BEFORE_COMMIT / AFTER_COMMIT`), не произвольный process.kill.
@@ -179,3 +164,4 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | Сборка + рестарт сервера | Полный build зелёный (после TS-фиксов тестов, коммит 2d8a1684e1); сервер на 3080 перезапущен супервизором, HTTP 200 |
 | 06.09.2026 | T6: механизм policy-split | **Консенсус**: НЕ tools.restrict (наследование); enforcement на tools/pre-execute до approval (depth 0 × headDenyTools → deny) + видимость-фильтр схемы для depth 0; deny-list в конфиге пресета оркестратора |
 | 06.09.2026 | T6 реализован | Коммит d612296395: policy.ts + headDenyTools listener (enforcement до approval); видимость схемы — deferred; build+рестарт сервера зелёные |
+| 06.09.2026 | T7 реализован | Коммит 123ff0c26d: пакет engagement-stub (blockedTools + allowlist-хостов, deny до approval, audit engagement/denied); 53 теста, coverage 100%; полный Engagement Mode — 61-90 дни |
