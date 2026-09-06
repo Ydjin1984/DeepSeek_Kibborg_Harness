@@ -72,14 +72,34 @@ ctx.executions.get(executionId)                       // → state copy | undefi
 ctx.executions.list()                                 // → all states
 ctx.executions.listByKind(kind)                       // → filtered states
 ctx.executions.on(listener)                           // → subscribe to events
+ctx.executions.resources.acquire(opts)                // → ResourceLease
+ctx.executions.resources.heartbeat(resourceId)        // → extend TTL
+ctx.executions.resources.release(resourceId)          // → released
+ctx.executions.resources.get(resourceId)              // → lease copy | undefined
+ctx.executions.resources.list()                       // → all lease copies
+ctx.executions.resources.status(resourceId, now?)     // → fail-closed status
+ctx.executions.resources.sweep(now?)                  // → orphaned leases
+ctx.executions.resources.isLive(resourceId, now?)     // → boolean health check
 ```
+
+### Resource Lease Registry
+
+Tracks external resource leases (chrome, pty, ida, workspace, subprocess) with:
+
+- **Lease acquisition** — sets TTL, optional provider, owner execution, recovery strategy.
+- **Heartbeat** — extends TTL from the heartbeat moment.
+- **Orphan sweep** — detects expired leases, transitions to `orphaned`.
+- **Fail-closed helpers** — `status()` and `isLive()` for quick health checks without mutation.
 
 ### Events
 
-`ctx.emit('execution/event', { event })` for every appended event.
+`ctx.emit('execution/event', { event })` for every execution lifecycle event.
+
+`ctx.emit('executions/resource', { event })` for every resource lease event (acquire, heartbeat, release, orphan).
 
 ## Known Limitations and Deferred Work
 
 - **Durability** — `ExecutionEvent` is in-memory only; persistence planned for v2.
-- **Leases** — `resourceRef` field is reserved for T3 lease integration (v2).
+- **Resource leases** — `resourceRef` field is reserved for T3 lease integration in `ExecutionState`; the actual linkage from execution to resource (T3-v2) is a future slice.
+- **Resource registry durability** — `ResourceLeaseRegistry` is in-memory only (v1); durable resource events and crash reconciliation from SQLite are planned for v2.
 - **Cross-process** — registry is process-local; no distributed coordination.

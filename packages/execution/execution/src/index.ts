@@ -6,6 +6,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { ExecutionRegistry, type ExecutionEventPayload } from './registry.ts'
+import { ResourceLeaseRegistry, type ResourceEvent } from './resources.ts'
 import type { ExecutionEventTypeCode } from './state-machine.ts'
 import type { ExecutionKind, ExecutionState, ExecutionStatus } from './types.ts'
 import type { ExecutionEvent } from './types.ts'
@@ -24,6 +25,12 @@ declare module '@deepseek-ai/cordis' {
      * @param payload - the appended event wrapped in a payload.
      */
     'execution/event': (payload: ExecutionEventPayload) => void
+    /**
+     * Emitted whenever a resource lease event occurs (acquire, heartbeat,
+     * release, orphan).
+     * @param payload - the resource event wrapped in a payload.
+     */
+    'executions/resource': (payload: { event: ResourceEvent }) => void
   }
 }
 
@@ -32,18 +39,20 @@ declare module '@deepseek-ai/cordis' {
 // ---------------------------------------------------------------------------
 
 /**
- * Unified execution lifecycle service. Observes and projects execution states
- * from multiple subsystems (jobs, goals, workflows, subagents) into a single
- * state machine without owning their lifecycles.
+ * Unified execution lifecycle service. Orchestrates the execution state machine
+ * (registration, transitions, events) and the resource lease registry (external
+ * resource lifecycle: chrome, pty, ida, workspace, subprocess).
  */
 export class ExecutionService extends Service {
   static inject = ['invariants']
 
   private readonly registry: ExecutionRegistry
+  private readonly _resources: ResourceLeaseRegistry
 
   constructor(ctx: Context) {
     super(ctx, 'executions')
     this.registry = new ExecutionRegistry(ctx)
+    this._resources = new ResourceLeaseRegistry(ctx)
   }
 
   /**
@@ -124,10 +133,19 @@ export class ExecutionService extends Service {
   }
 
   /**
-   * Access the underlying registry for advanced operations.
+   * Access the underlying execution registry for advanced operations.
    */
   get registryRef(): ExecutionRegistry {
     return this.registry
+  }
+
+  /**
+   * Resource lease registry for external resources (chrome, pty, ida,
+   * workspace, subprocess). Provides acquire/heartbeat/release/orphan-sweep
+   * with fail-closed status checks.
+   */
+  get resources(): ResourceLeaseRegistry {
+    return this._resources
   }
 }
 
