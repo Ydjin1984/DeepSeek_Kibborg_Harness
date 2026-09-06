@@ -328,6 +328,8 @@ export function ExecutionView({
                     onToggle={() => { toggleRow(key) }}
                     owner={owner}
                     useSession={useSession}
+                    useSessions={useSessions}
+                    sessionId={sessionId}
                     renderChatNode={renderChatNode}
                     t={t}
                     query={query}

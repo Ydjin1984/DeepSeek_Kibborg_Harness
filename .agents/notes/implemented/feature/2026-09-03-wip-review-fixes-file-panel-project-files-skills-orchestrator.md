@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-03-wip-review-fixes-file-panel-project-files-skills-orchestrator.zh.md)
+
 ## Problem
 
 The WIP review (REVIEW-FINDINGS.md) found the working layer partially assembled: the workspace file panel rendered absolute Windows paths and swallowed listing failures, Chromium drag-and-drop was dead, writes could follow a symlink out of the project and clients could raise the read cap above the server bound, the skills manager bounced every existing-skill save through a manual conflict step and painted success on failed version actions while flat `*.md` removal dragged the whole skills root into the trash, and the orchestrator let delegated children inherit the head prompt and the `executor` tool while advertising head model fields that never applied.

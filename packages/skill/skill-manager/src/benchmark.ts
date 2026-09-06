@@ -385,7 +385,10 @@ async function generateImprovement(
   return extractFrontmatterSkill(text)
 }
 
-/** Pull a full SKILL.md out of a model answer, tolerating fenced code blocks. */
+/** Pull a full SKILL.md out of a model answer, tolerating fenced code blocks.
+ * @param text - raw model response text.
+ * @returns the SKILL.md string when the text contains a YAML/markdown fence starting with `---`, otherwise undefined.
+ */
 export function extractFrontmatterSkill(text: string): string | undefined {
   const trimmed = text.trim()
   const fenced = /^```(?:ya?ml|markdown|md)?\s*\n([\s\S]*?\n)```\s*$/.exec(trimmed)
@@ -662,7 +665,11 @@ function aggregate(
   return { summary, cases: caseResults, criteria, reasons }
 }
 
-/** Judge the aggregate outcome without over-claiming a single metric. */
+/** Judge the aggregate outcome without over-claiming a single metric.
+ * @param baselineScore - the baseline aggregate score.
+ * @param skillScore - the skill aggregate score.
+ * @returns 'improvement', 'worse', or 'no-significant-improvement'.
+ */
 export function deriveVerdict(baselineScore: number, skillScore: number): BenchmarkVerdict {
   if (baselineScore <= MIN_BASELINE_SCORE) return 'no-significant-improvement'
   const relative = (skillScore - baselineScore) / baselineScore * 100
@@ -671,7 +678,11 @@ export function deriveVerdict(baselineScore: number, skillScore: number): Benchm
   return 'no-significant-improvement'
 }
 
-/** Human-readable reasons behind the verdict. */
+/** Human-readable reasons behind the verdict.
+ * @param verdict - the computed BenchmarkVerdict.
+ * @param caseResults - individual benchmark case results.
+ * @returns an array of reason strings explaining the verdict.
+ */
 export function reasonsFor(verdict: BenchmarkVerdict, caseResults: readonly BenchmarkCaseResult[]): string[] {
   const reasons: string[] = []
   for (const oneCase of caseResults) {
@@ -733,7 +744,10 @@ async function callText(
     .join(' ')
 }
 
-/** Parse a JSON object from a model answer, tolerating fences and prose. */
+/** Parse a JSON object from a model answer, tolerating fences and prose.
+ * @param text - raw model response text.
+ * @returns the parsed object, or an empty object on failure.
+ */
 export function parseJsonObject(text: string): Record<string, unknown> {
   const candidate = extractJson(text)
   if (candidate === undefined) return {}
@@ -746,7 +760,10 @@ export function parseJsonObject(text: string): Record<string, unknown> {
   return {}
 }
 
-/** Parse a JSON array from a model answer, tolerating fences and prose. */
+/** Parse a JSON array from a model answer, tolerating fences and prose.
+ * @param text - raw model response text.
+ * @returns the parsed array, or an empty array on failure.
+ */
 export function parseJsonArray(text: string): unknown[] {
   const candidate = extractJson(text)
   if (candidate === undefined) return []
@@ -759,7 +776,10 @@ export function parseJsonArray(text: string): unknown[] {
   return []
 }
 
-/** Extract the first balanced JSON value (object or array) from model output. */
+/** Extract the first balanced JSON value (object or array) from model output.
+ * @param text - raw model response text.
+ * @returns the JSON string when a fence or balanced braces are found, otherwise undefined.
+ */
 export function extractJson(text: string): string | undefined {
   const trimmed = text.trim()
   const fenced = /^```(?:json)?\s*\n([\s\S]*?\n)```\s*$/.exec(trimmed)
@@ -821,6 +841,11 @@ function sumTokens(values: readonly TokenMetrics[]): TokenMetrics {
   }
 }
 
+/** Percentage relative improvement between two numeric values.
+ * @param baseline - the baseline value; zero returns 0.
+ * @param skill - the skill value.
+ * @returns the rounded percentage change, or 0 when baseline is zero.
+ */
 export function relativeImprovement(baseline: number, skill: number): number {
   if (baseline <= 0) return 0
   return round1((skill - baseline) / baseline * 100)

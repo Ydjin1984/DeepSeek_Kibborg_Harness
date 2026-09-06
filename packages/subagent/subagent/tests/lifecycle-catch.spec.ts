@@ -25,7 +25,7 @@ function ctxWithListenerCapture(emitted: Array<CapturedEdge>): Context {
       name: 'stopReason' in payload ? 'end' : 'start',
       stopReason: 'stopReason' in payload ? payload.stopReason : undefined,
     })]
-  }) as unknown as Context['events']['dispatch']
+  })
   return ctx
 }
 
@@ -36,7 +36,7 @@ const parent = {} as unknown as Agent
 function rejectingRun(id: string, rejection: unknown): SubagentRun {
   return {
     id: SessionId(id),
-    result: Promise.reject(rejection),
+    result: Promise.reject(rejection instanceof Error ? rejection : new Error(String(rejection))),
     localAgent: undefined,
     dispose: async () => {},
   }
@@ -70,11 +70,11 @@ describe('observeRun error propagation', () => {
       return [
         () => { throw new Error('listener boom') },
       ]
-    }) as unknown as Context['events']['dispatch']
+    })
     const emitter = createLifecycleEmitter(ctx, (_agent: Agent) => ({}))
 
     // Should not throw — synchronous throw is caught by try/catch
-    expect(() => emitter('subagent/provider-removed', 'my-provider')).not.toThrow()
+    expect(() => { emitter('subagent/provider-removed', 'my-provider') }).not.toThrow()
 
     expect(warnMessages.length).toBe(1)
     expect(warnMessages[0]).toContain('subagent: subagent/provider-removed listener threw')

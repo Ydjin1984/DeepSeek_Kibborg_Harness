@@ -23,7 +23,11 @@ export const EXECUTION_FILTERS: readonly ExecutionFilter[] = [
   'all', 'agent', 'tools', 'files', 'terminal', 'git', 'errors', 'success',
 ]
 
-/** Whether an event passes one category chip. */
+/** Whether an event passes one category chip.
+ * @param event - the normalized execution event.
+ * @param filter - the active filter chip value.
+ * @returns true when the event matches the filter category.
+ */
 export function matchesFilter(event: ExecutionEvent, filter: ExecutionFilter): boolean {
   switch (filter) {
     case 'all':
@@ -61,7 +65,10 @@ export function matchesQuery(event: ExecutionEvent, query: string): boolean {
     || event.type.toLowerCase().includes(needle)
 }
 
-/** Count events per status, for the toolbar/header readout. */
+/** Count events per status, for the toolbar/header readout.
+ * @param events - the list of execution events to count.
+ * @returns a record mapping each status to its occurrence count.
+ */
 export function executionStatusCounts(events: readonly ExecutionEvent[]): Record<ExecutionEventStatus, number> {
   const counts: Record<ExecutionEventStatus, number> = {
     running: 0, success: 0, warning: 0, error: 0, info: 0,

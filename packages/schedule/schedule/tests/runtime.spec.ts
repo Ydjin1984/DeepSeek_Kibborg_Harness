@@ -807,7 +807,7 @@ describe('Schedule runtime failure and teardown boundaries', () => {
     expect(test.followed).toHaveLength(1)
     expect(test.followed[0]?.content).toEqual([{
       type: 'text',
-      text: expect.stringContaining('schedule-1'),
+      text: expect.stringContaining('schedule-1') as unknown as string,
     }])
     // Only one dispatch for one one-shot record.
     const dispatches = test.agent.session.events.filter(
@@ -841,7 +841,7 @@ describe('Schedule runtime failure and teardown boundaries', () => {
     const origQueueMicrotask = globalThis.queueMicrotask
     globalThis.queueMicrotask = (fn: () => void) => {
       microtaskDriveCount += 1
-      return origQueueMicrotask(fn)
+      origQueueMicrotask(fn)
     }
 
     const runtime = runtimeFor(test)

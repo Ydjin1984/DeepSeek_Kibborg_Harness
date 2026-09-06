@@ -61,7 +61,7 @@ function taskEvents(caseIndex: number, outputTokens: number, toolCalls: number, 
     type: 'turn/end',
     seq: seq++,
     time: 2500,
-    data: { turn: 1, reason: failed ? { kind: 'error', error: { message: 'boom', code: 'X' } as never } : { kind: 'completed' } },
+    data: { turn: 1, reason: failed ? { kind: 'error', error: { message: 'boom', code: 'X' } } : { kind: 'completed' } },
   })
   return events
 }
@@ -85,10 +85,10 @@ function fakeContext(manager: SkillManager, llmResponses: string[], events: Sess
       const index = harness.streamCalls
       harness.streamCalls += 1
       const text = llmResponses[index] ?? '{}'
-      yield { type: 'block-start', index: 0, blockType: 'text' } as StreamChunk
-      yield { type: 'text-delta', index: 0, text } as StreamChunk
-      yield { type: 'block-end', index: 0, block: { type: 'text', text } } as StreamChunk
-      yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
     },
   } as never)
   target.provide('agents', {
@@ -99,7 +99,7 @@ function fakeContext(manager: SkillManager, llmResponses: string[], events: Sess
       }) => void
     }) => {
       options.setup?.({
-        get: (name) => name === 'skills' ? { register: () => () => {} } : undefined,
+        get: name => name === 'skills' ? { register: () => () => {} } : undefined,
         tools: { restrict: (filter) => { harness.restrictions.push(filter); return () => {} } },
       })
       const index = harness.createCalls
@@ -316,7 +316,7 @@ describe('runBenchmark', () => {
     const target = new Context()
     target.provide('llm', {
       stream: async function* (): AsyncGenerator<StreamChunk> {
-        yield { type: 'finish', reason: { kind: 'error', failure: { message: 'provider dashscope is not registered', code: 'PROVIDER_NOT_FOUND' } } } as StreamChunk
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: 'provider dashscope is not registered', code: 'PROVIDER_NOT_FOUND' } } }
       },
     } as never)
     target.provide('agents', {
@@ -368,15 +368,17 @@ describe('runBenchmark', () => {
     const target = new Context()
     target.provide('llm', {
       stream: async function* (): AsyncGenerator<StreamChunk> {
-        yield { type: 'block-start', index: 0, blockType: 'text' } as StreamChunk
-        yield { type: 'text-delta', index: 0, text: cases } as StreamChunk
-        yield { type: 'block-end', index: 0, block: { type: 'text', text: cases } } as StreamChunk
-        yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk
+        yield { type: 'block-start', index: 0, blockType: 'text' }
+        yield { type: 'text-delta', index: 0, text: cases }
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: cases } }
+        yield { type: 'finish', reason: { kind: 'stop' } }
       },
     } as never)
     let calls = 0
     target.provide('agents', {
-      create: async (options: { setup?: (agentCtx: { get: (name: string) => undefined; tools: { restrict: () => () => void } }) => void }) => {
+      create: async (
+        options: { setup?: (agentCtx: { get: (name: string) => undefined; tools: { restrict: () => () => void } }) => void },
+      ) => {
         calls += 1
         options.setup?.({ get: () => undefined, tools: { restrict: () => () => {} } })
         const agent = {
@@ -994,8 +996,8 @@ describe('benchmark pure helpers', () => {
     const { runAction } = await import('../src/tool.ts')
     const polled = await runAction(manager, { action: 'benchmark-poll', runId: run.id }, project)
     expect(polled.ok).toBe(true)
-    expect(String(polled.message)).toContain('Baseline: 70/100')
-    expect(String(polled.message)).toContain('Verdict: improvement')
+    expect(polled.message).toContain('Baseline: 70/100')
+    expect(polled.message).toContain('Verdict: improvement')
     expect(polled.data?.result).toBeDefined()
     void harness.ctx
   })

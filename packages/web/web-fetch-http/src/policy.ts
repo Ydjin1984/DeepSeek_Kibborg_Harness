@@ -190,7 +190,7 @@ function expandIpv6(addr: string): string[] | null {
   const missing = 8 - leftParts.length - rightParts.length
   if (missing < 1) return null
 
-  const full = [...leftParts, ...Array(missing).fill('0000'), ...rightParts]
+  const full = [...leftParts, ...Array.from({ length: missing }, () => '0000'), ...rightParts]
   return full.map(p => p.padStart(4, '0'))
 }
 

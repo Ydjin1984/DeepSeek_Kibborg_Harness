@@ -10,7 +10,9 @@
 import { readFile } from 'node:fs/promises'
 import { parseSkillSource, type ParsedSkill } from '@deepseek-ai/dsh-skill-filesystem'
 
+/** Stable identifier for the bundled skill-create system skill. */
 export const SKILL_CREATE_NAME = 'skill-create'
+/** One-line description of the skill-create workflow purpose. */
 export const SKILL_CREATE_DESCRIPTION = 'Create, validate, benchmark, and improve reusable agent Skills through an interactive guided workflow. Use when the user invokes /skill-create or asks to create or improve a Skill.'
 
 const BODY_URL = new URL('../assets/skill-create/SKILL.md', import.meta.url)

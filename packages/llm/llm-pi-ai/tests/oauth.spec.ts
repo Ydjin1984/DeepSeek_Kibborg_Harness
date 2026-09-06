@@ -155,7 +155,7 @@ describe('OAuthLoginRegistry', () => {
           userCode: 'WDJB-MJHT',
           verificationUri: 'https://auth.x.ai/activate',
         })
-        return new Promise<OAuthCredential>(resolve => { finish = resolve })
+        return new Promise<OAuthCredential>((resolve) => { finish = resolve })
       },
     })
     delete authNoLabel.loginLabel
@@ -190,7 +190,7 @@ describe('OAuthLoginRegistry', () => {
 
   it('cancel of an unknown login id is a no-op', async () => {
     const logins = registry()
-    expect(() => logins.cancel('missing')).not.toThrow()
+    expect(() => { logins.cancel('missing') }).not.toThrow()
   })
 
   it('a second start for the same provider cancels the first login', async () => {
@@ -311,7 +311,7 @@ describe('OAuthLoginRegistry', () => {
           userCode: 'AAAA-BBBB',
           verificationUri: 'https://auth.x.ai/activate',
         })
-        return new Promise<OAuthCredential>(resolve => {
+        return new Promise<OAuthCredential>((resolve) => {
           interaction.signal?.addEventListener('abort', () => {
             resolve(credential({ access: 'late' }))
           })
@@ -336,7 +336,7 @@ describe('OAuthLoginRegistry', () => {
           userCode: 'WDJB-MJHT',
           verificationUri: 'https://auth.x.ai/activate',
         })
-        return new Promise<OAuthCredential>(resolve => { finishes.push(resolve) })
+        return new Promise<OAuthCredential>((resolve) => { finishes.push(resolve) })
       },
     })
     const logins = registry(['xai', 'other'])

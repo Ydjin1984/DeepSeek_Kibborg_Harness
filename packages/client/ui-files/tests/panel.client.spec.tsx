@@ -321,7 +321,7 @@ describe('FilesPanelButton drag and drop', () => {
   it('surfaces a composer rejection of the attached draft', async () => {
     const { props } = bench({
       inputActions: { addFiles: vi.fn(() => 'too-many') },
-    } as unknown as Partial<FilesPanelButtonProps>)
+    })
     await openDrawer(props)
     const event = dragEventOf('drop', {
       types: [DROP_TYPE],
@@ -465,7 +465,7 @@ describe('FilesPanelButton notices', () => {
     try {
       const { props } = bench({
         inputActions: { addFiles: vi.fn(() => 'denied') },
-      } as unknown as Partial<FilesPanelButtonProps>)
+      })
       render(<FilesPanelButton {...props} />)
       fireEvent.click(screen.getByRole('button', { name: 'openButton' }))
       const drop = (): Event => dragEventOf('drop', {

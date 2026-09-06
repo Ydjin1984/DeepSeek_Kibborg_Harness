@@ -2279,6 +2279,19 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   }
 
   const api: ApiProxy = {
+    mcp: {
+      list: request => ok(request, { servers: [] }),
+      save: request => ok(request, {
+        server: {
+          name: request.payload.name,
+          source: 'user',
+          enabled: true,
+          state: 'starting',
+          toolCount: 0,
+        },
+      }),
+      remove: request => ok(request, {}),
+    },
     sessions: {
       list: request => ok(request, { items: [...sessions].sort((a, b) => b.updatedAt - a.updatedAt) }),
       search: (request, signal) => {
@@ -3386,6 +3399,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.attachment': return this.api.sessions.attachment(request)
       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
       case 'session.cancel': return this.api.sessions.cancel(request)
+      case 'mcp.list': return this.api.mcp.list(request)
+      case 'mcp.save': return this.api.mcp.save(request)
+      case 'mcp.remove': return this.api.mcp.remove(request)
       case 'subagent.list': return this.api.subagents.list(request)
       case 'subagent.history': return this.api.subagents.history(request)
       case 'subagent.prompt': return this.api.subagents.prompt(request, signal)

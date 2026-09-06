@@ -55,7 +55,10 @@ export function executionTypeLabel(type: ExecutionEventType): string {
   return EXECUTION_TYPE_LABELS[type]
 }
 
-/** Map an event status to the primitive StateDot state. */
+/** Map an event status to the primitive StateDot state.
+ * @param status - the execution event status.
+ * @returns the corresponding StateDotState value.
+ */
 export function executionStatusDot(status: ExecutionEventStatus): StateDotState {
   switch (status) {
     case 'running': return 'ongoing'

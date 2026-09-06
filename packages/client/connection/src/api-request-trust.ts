@@ -93,6 +93,7 @@ function isTrustedAuthority(hostUrl: URL, trustedHosts: readonly string[]): bool
  * a remote client can put `Host: 127.0.0.1` on the wire, but it cannot make
  * its socket originate from the loopback interface.
  * @param address - `socket.remoteAddress` as node:http reports it.
+ * @returns true when the address is a loopback IPv4 or IPv6 address.
  */
 export function isLoopbackPeer(address: string): boolean {
   return address === '::1'

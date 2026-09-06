@@ -2,6 +2,32 @@
   border-radius: 6px;
 }
 
+/* Live delegation strip under a running executor/subagent call: one row per
+   running child, indented under the call's own rows. */
+.subagentActivity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0 30px;
+  min-width: 0;
+}
+
+.subagentActivityRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.subagentActivityText {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .subCalls {
   display: flex;
   flex-direction: column;

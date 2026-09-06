@@ -3,7 +3,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import type { HostDescription } from '@deepseek-ai/dsh-client-connection/client'
-import type { ConversationSnapshot, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  ConversationSnapshot, RunningToolCall, SessionId, SessionListState, SessionSummary,
+  SubagentCatalogSnapshot, ToolResultNode,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { ToolTreeProps } from '../src/client/contract/slots.ts'
@@ -13,30 +16,66 @@ import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.t
 afterEach(cleanup)
 
 const t: ToolTreeProps['t'] = makeTranslate(zh, commonZh)
+const sid = (id: string) => id as SessionId
 
 const root = (callId: string, call: ToolResultNode['call']): ToolResultNode => ({
   kind: 'tool-result', seq: 3, time: 3_000, callId, call, callTime: 2_000,
   content: [], isError: false, callView: null, resultView: null, subCalls: [],
 })
 
+const runningCall = (callId: string, name: string): RunningToolCall => ({
+  callId, name, argsRaw: '{}', turn: 1, step: 2, time: 1_000, callView: null, subCalls: [],
+})
+
+const child = (id: string, label: string, detail: string): SessionSummary => ({
+  id: sid(id), displayTitle: id, running: true, blank: false, updatedAt: 1,
+  parentId: sid('s1'), origin: 'subagent',
+  projectionValues: {
+    subagent: { mode: 'one-shot', label, seq: 1 },
+    subagentActivity: { status: 'running', detail },
+  } as unknown as NonNullable<SessionSummary['projectionValues']>,
+})
+
+const sessions = (children: SessionSummary[], catalogLabels: string[]): SessionListState => ({
+  ids: [sid('s1'), ...children.map(item => item.id)],
+  byId: Object.fromEntries(children.map(item => [item.id, item])),
+  current: sid('s1'), phase: 'ready',
+  subagentsByParent: {
+    [sid('s1')]: {
+      state: 'ready', error: null, parentAvailable: true,
+      entries: catalogLabels.map((label, index) => ({
+        kind: 'child', id: children[index]!.id, activity: 'running',
+        hasChildren: false, mode: 'one-shot', label,
+      })),
+    } satisfies SubagentCatalogSnapshot,
+  },
+  jobsBySession: {}, currentAddress: undefined,
+})
+
 function props(
-  block: ToolResultNode,
+  block: ToolResultNode | RunningToolCall,
   selectedCallId?: string,
   description?: HostDescription,
+  state?: SessionListState,
 ): ToolTreeProps {
   const snapshot = {} as ConversationSnapshot
   const useSession = ((selector: (value: ConversationSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
+  const useSessions = (state === undefined
+    ? undefined
+    : ((selector: (value: SessionListState) => unknown) => selector(state))) as ToolTreeProps['useSessions'] | undefined
   const renderSlot = ((_key: string, _owner: object, options?: { fallback?: React.ReactNode }) =>
     options?.fallback ?? null) as unknown as ToolTreeProps['renderSlot']
   return {
     useSession,
+    ...useSessions === undefined ? {} : { useSessions },
+    sessionId: sid('s1'),
     renderSlot,
     node: {
       key: `tool:${block.callId}`,
       kind: 'tool-call',
       id: block.callId,
       target: 'chat',
-      anchorSeq: block.seq,
+      anchorSeq: 'seq' in block ? block.seq : 3,
       location: { kind: 'session' },
       visibility: 'visible',
       data: { root: block },
@@ -88,5 +127,43 @@ describe('ToolCallTree', () => {
       version: '0', cwd: '/tmp', attachedSessions: 0, home: '/h', canOpenPath: false,
     })} />)
     expect(view.getByText('~/docs/a.ts')).toBeTruthy()
+  })
+
+  it('shows the running child activity under a running executor call', () => {
+    const childSession = child('kid-1', 'Recon', 'grep')
+    const view = render(<ToolCallTree {...props(
+      runningCall('c1', 'executor'),
+      undefined,
+      undefined,
+      sessions([childSession], ['Recon']),
+    )} />)
+    expect(view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon：grep')
+  })
+
+  it('falls back to the plain running label when the child has no detail yet', () => {
+    const childSession = child('kid-1', 'Recon', '')
+    const view = render(<ToolCallTree {...props(
+      runningCall('c1', 'executor'),
+      undefined,
+      undefined,
+      sessions([childSession], ['Recon']),
+    )} />)
+    expect(view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon 正在执行…')
+  })
+
+  it('shows no activity strip without running children or for settled calls', () => {
+    const emptyView = render(<ToolCallTree {...props(
+      runningCall('c1', 'executor'),
+      undefined,
+      undefined,
+      sessions([], []),
+    )} />)
+    expect(emptyView.container.querySelector('[data-subagent-activity]')).toBeNull()
+    // Settled delegation calls and running non-delegation calls never mount
+    // the strip, so an absent session-list hook cannot be reached.
+    const settledView = render(<ToolCallTree {...props(root('c2', { name: 'executor', argsRaw: '{}' }))} />)
+    expect(settledView.container.querySelector('[data-subagent-activity]')).toBeNull()
+    const bashView = render(<ToolCallTree {...props(runningCall('c3', 'bash'))} />)
+    expect(bashView.container.querySelector('[data-subagent-activity]')).toBeNull()
   })
 })

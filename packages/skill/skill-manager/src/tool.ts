@@ -116,7 +116,12 @@ export function registerSkillManageTool(ctx: Context, getManager: () => SkillMan
   ctx.tools.register(tool)
 }
 
-/** Execute one action against the skill manager. */
+/** Execute one action against the skill manager.
+ * @param manager - the SkillManager instance.
+ * @param args - raw action arguments from the tool call.
+ * @param cwd - working directory for the operation.
+ * @returns the typed SkillManageResult.
+ */
 export async function runAction(manager: SkillManager, args: Record<string, unknown>, cwd: string): Promise<SkillManageResult> {
   try {
     return await runActionInner(manager, args, cwd)

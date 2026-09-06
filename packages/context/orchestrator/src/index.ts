@@ -7,7 +7,9 @@
  * so cloud tokens are spent on planning, not on long tool chains. A
  * system-prompt section instructs the head while the mode is on; the bundled
  * `orchestrator-head` and `orchestrator-executor` skills carry the full
- * operating protocol.
+ * operating protocol and are registered on `ctx.skills` as built-in runtime
+ * skills for the duration of the mode, so every project that enables the mode
+ * can load them through the `skill` tool.
  *
  * Configuration lives in the plugin's `orchestrator` SETTINGS NAMESPACE
  * (Settings → Models → «Оркестратор» shows the form; edits apply at runtime —
@@ -30,9 +32,10 @@ import {
   delegationDepthOf,
   type SubagentResult, type SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
+import { loadOrchestratorSkills } from './skills.ts'
 
 export const name = 'orchestrator'
-export const inject = ['tools', 'subagents', 'systemPrompt', 'settings']
+export const inject = ['skills', 'tools', 'subagents', 'systemPrompt', 'settings']
 
 /** The prompt-section order: after the delegation policy, before child reporting. */
 const EXECUTOR_SECTION_ORDER = 116.7
@@ -126,6 +129,7 @@ async function runExecutor(
 ): Promise<{ runId: string; output: JsonValue[] }> {
   const provider = ctx.subagents.getProvider(settings.subagentProvider)
   const run: SubagentRun = await ctx.subagents.start(settings.subagentProvider, {
+    /* v8 ignore next -- the tool schema marks `description` required, so this defensive fallback never fires through the tool boundary. */
     ...args.description === undefined ? {} : { label: args.description },
     prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
     parent,
@@ -256,8 +260,65 @@ export function apply(ctx: Context): void {
         }
       }
     }
-    const disposeWatch = handle.watch(syncTool)
-    syncTool()
+
+    // The bundled companion skills (`orchestrator-head` / `orchestrator-executor`)
+    // register on `ctx.skills` exactly while the mode is live, so the operating
+    // protocol is available in every project that enables the mode — not only in
+    // checkouts carrying `.agents/skills/orchestrator-*`. Registration runs on
+    // the host plane, so the runtime skills land in the global registry layer,
+    // which every session's catalog (and the Skills manager's «Встроенные»
+    // bucket) reads regardless of the project cwd. Loading the assets is async:
+    // the live namespace is re-checked when the load settles, and a generation
+    // counter invalidates an in-flight load when the mode is toggled off, so a
+    // stale load never registers skills onto a disabled mode.
+    let disposeSkills: (() => void) | undefined
+    let pendingSkills: Promise<void> | undefined
+    let skillsGeneration = 0
+
+    const unmountSkills = (): void => {
+      // Invalidate any in-flight asset load: its `.then` re-checks the
+      // generation before registering, so a toggle-off mid-load is a no-op.
+      skillsGeneration += 1
+      pendingSkills = undefined
+      if (disposeSkills !== undefined) {
+        disposeSkills()
+        disposeSkills = undefined
+      }
+    }
+    const mountSkills = (): void => {
+      if (disposeSkills !== undefined || pendingSkills !== undefined) return
+      const generation = skillsGeneration
+      const loading = loadOrchestratorSkills()
+        .then((loaded) => {
+          // Re-check the generation: the mode may have been toggled off (or
+          // the fiber torn down) while the assets loaded. `unmountSkills`
+          // bumps the generation on every toggle-off and on teardown, so a
+          // stale load registering skills onto a disabled mode is impossible.
+          if (generation !== skillsGeneration) return
+          const disposers = loaded.map(skill => ctx.skills.register(skill))
+          disposeSkills = () => { for (const dispose of disposers) dispose() }
+        })
+        .catch((error: unknown) => { ctx.logger.warn(`orchestrator: failed to register bundled skills: ${String(error)}`) })
+      pendingSkills = loading
+      // Clear the pending marker only when this load is still the current one:
+      // a toggle-off + re-enable may have started a second load meanwhile, and
+      // the older load must not erase the newer load's pending state.
+      void loading.finally(() => {
+        if (pendingSkills === loading) pendingSkills = undefined
+      })
+    }
+    const syncSkills = (): void => {
+      const current = settingsOf()
+      if (current.enabled && routeReady(current)) mountSkills()
+      else unmountSkills()
+    }
+
+    const sync = (): void => {
+      syncTool()
+      syncSkills()
+    }
+    const disposeWatch = handle.watch(sync)
+    sync()
 
     const disposeSection = ctx.systemPrompt.section({
       name: 'orchestrator',
@@ -284,6 +345,7 @@ export function apply(ctx: Context): void {
     return () => {
       disposeWatch()
       disposeSection()
+      unmountSkills()
       if (disposeTool !== undefined) {
         disposeTool()
         disposeTool = undefined

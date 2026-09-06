@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import type {
   AssistantMessageNode, ConversationSnapshot, RunningToolCall,
-  SessionId, ToolResultNode, UserMessageNode,
+  SessionId, SessionListState, SessionSummary, ToolResultNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import {
@@ -34,6 +34,7 @@ beforeEach(() => {
 })
 
 const SID = 's1' as SessionId
+const sid = (id: string) => id as SessionId
 
 function snapshotBase(): ConversationSnapshot {
   return {
@@ -99,8 +100,51 @@ const runningBash = (callId: string): RunningToolCall => ({
   callId, name: 'bash', argsRaw: '{"command":"npm test"}', turn: 1, step: 2, time: 99_000,
   callView: null, subCalls: [],
 })
+const runningExecutor = (callId: string): RunningToolCall => ({
+  callId, name: 'executor', argsRaw: '{}', turn: 1, step: 2, time: 99_000,
+  callView: null, subCalls: [],
+})
+const executorResult = (seq: number, callId: string): ToolResultNode => ({
+  kind: 'tool-result', seq, time: seq * 1_000 + 30, callId,
+  call: { name: 'executor', argsRaw: '{}' }, callTime: seq * 1_000,
+  content: [{ type: 'text', text: 'ok' }] as never, isError: false,
+  callView: null, resultView: null, subCalls: [],
+})
 
-function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<ConversationSnapshot> = {}) {
+function listState(children: SessionSummary[] = [], catalogLabels: string[] = []): SessionListState {
+  return {
+    ids: [SID, ...children.map(item => item.id)],
+    byId: {
+      [SID]: { id: SID, displayTitle: 'Fix auth bug', cwd: '/ws', running: false, blank: false, updatedAt: 1 },
+      ...Object.fromEntries(children.map(item => [item.id, item])),
+    },
+    current: SID, phase: 'ready',
+    subagentsByParent: {
+      [SID]: {
+        state: 'ready', error: null, parentAvailable: true,
+        entries: catalogLabels.map((label, index) => ({
+          kind: 'child', id: children[index]!.id, activity: 'running',
+          hasChildren: false, mode: 'one-shot', label,
+        })),
+      },
+    },
+    jobsBySession: {}, currentAddress: undefined,
+  }
+}
+
+/** One running direct child summary for the owning session. */
+function runningChild(id: string, label: string, detail: string): SessionSummary {
+  return {
+    id: sid(id), displayTitle: id, running: true, blank: false, updatedAt: 1,
+    parentId: SID, origin: 'subagent',
+    projectionValues: {
+      subagent: { mode: 'one-shot', label, seq: 1 },
+      subagentActivity: { status: 'running', detail },
+    } as unknown as NonNullable<SessionSummary['projectionValues']>,
+  }
+}
+
+function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<ConversationSnapshot> = {}, list?: SessionListState) {
   const source = makeSource({ nodes, ...overrides })
   const chat = createChatStore().create()
   const t = makeTranslate(zh, commonZh)
@@ -117,11 +161,7 @@ function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<Conver
   const props = {
     sessionId: SID,
     useSession: bindSnapshotSelector(source.source),
-    useSessions: bindSnapshotSelector(createSnapshotStore({
-      ids: [SID],
-      byId: { [SID]: { id: SID, displayTitle: 'Fix auth bug', cwd: '/ws', running: false, blank: false, updatedAt: 1 } },
-      current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
-    })),
+    useSessions: bindSnapshotSelector(createSnapshotStore(list ?? listState())),
     useWorkspaces: bindSnapshotSelector(createSnapshotStore({
       items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
       baselinesReady: true, recentWorkspaceId: undefined,
@@ -298,6 +338,39 @@ describe('ExecutionView', () => {
     g.scrollHeight = 400 + (88 - 44) * 2
     act(() => { for (const cb of observers) cb() })
     expect(g.scrollTop).toBe(g.scrollHeight - g.clientHeight)
+  })
+
+  it('shows the live child strip under a running executor call header', () => {
+    const h = harness([], { runningCalls: [runningExecutor('d1')], running: true },
+      listState([runningChild('kid-1', 'Recon', 'grep')], ['Recon']))
+    expect(h.view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon：grep')
+  })
+
+  it('falls back to the plain running label before the child detail lands', () => {
+    const h = harness([], { runningCalls: [runningExecutor('d1')], running: true },
+      listState([runningChild('kid-1', 'Recon', '')], ['Recon']))
+    expect(h.view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon 正在执行…')
+  })
+
+  it('keeps the child strip only while the delegation row stays collapsed', () => {
+    const h = harness([], { runningCalls: [runningExecutor('d1')], running: true },
+      listState([runningChild('kid-1', 'Recon', 'grep')], ['Recon']))
+    const row = h.view.getByTestId('execution-event')
+    expect(h.view.container.querySelector('[data-subagent-activity]')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button'))
+    expect(h.view.container.querySelector('[data-subagent-activity]')).toBeNull()
+  })
+
+  it('shows no child strip without running children or for non-delegation calls', () => {
+    const children = listState([runningChild('kid-1', 'Recon', 'grep')], ['Recon'])
+    const empty = harness([], { runningCalls: [runningExecutor('d1')], running: true }, listState())
+    expect(empty.view.container.querySelector('[data-subagent-activity]')).toBeNull()
+    const bash = harness([], { runningCalls: [runningBash('b1')], running: true }, children)
+    expect(bash.view.container.querySelector('[data-subagent-activity]')).toBeNull()
+    // A settled delegation call stops carrying the strip even while a child
+    // session is still running in the background.
+    const settled = harness([executorResult(3, 'd2')], {}, children)
+    expect(settled.view.container.querySelector('[data-subagent-activity]')).toBeNull()
   })
 })
 

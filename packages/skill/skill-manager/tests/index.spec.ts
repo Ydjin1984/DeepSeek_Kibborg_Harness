@@ -31,7 +31,7 @@ describe('skill-manager plugin', () => {
     ctx.provide('tools', {
       register: (tool: never) => {
         registeredTools.push((tool as { name: string }).name)
-        registeredTool = tool as never
+        registeredTool = tool
       },
     } as never)
     apply(ctx, { dshHome: 'unused' })
@@ -59,7 +59,7 @@ describe('skill-manager plugin', () => {
     // With a mounted manager but no agent workspace, the tool reports the missing cwd.
     const mounted = new Context()
     let mountedTool: { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> } | undefined
-    mounted.provide('tools', { register: (registered: never) => { mountedTool = registered as never } } as never)
+    mounted.provide('tools', { register: (registered: never) => { mountedTool = registered } } as never)
     mounted.provide('skills', { register: () => () => {}, list: async () => [], get: async () => undefined } as never)
     apply(mounted, {})
     await expect(mountedTool?.execute({ action: 'list' }, { agent: undefined, signal: new AbortController().signal }))
@@ -68,7 +68,7 @@ describe('skill-manager plugin', () => {
     // Without a manager service, the tool reports the missing service.
     const absent = new Context()
     let absentTool: { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> } | undefined
-    absent.provide('tools', { register: (registered: never) => { absentTool = registered as never } } as never)
+    absent.provide('tools', { register: (registered: never) => { absentTool = registered } } as never)
     registerSkillManageTool(absent, () => undefined)
     await expect(absentTool?.execute(
       { action: 'list' },

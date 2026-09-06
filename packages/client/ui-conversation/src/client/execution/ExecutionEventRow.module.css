@@ -183,3 +183,28 @@
   padding: 4px 8px 8px 36px;
   min-width: 0;
 }
+
+/* Live delegation strip under a running executor/subagent event header. */
+.subagentActivity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 4px 28px;
+  min-width: 0;
+}
+
+.subagentActivityRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.subagentActivityText {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

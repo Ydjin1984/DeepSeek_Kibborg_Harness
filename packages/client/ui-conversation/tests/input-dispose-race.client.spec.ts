@@ -60,7 +60,7 @@ describe('dispose race on serializeReference (M5)', () => {
     // serializeReference is awaiting; dispose shell NOW
     shell.dispose()
     // Now resolve the serializeReference promise
-    serializeResolve!(mention)
+    serializeResolve(mention)
 
     // After the microtask, the facade should have dropped the settlement
     // because this.disposed === true
@@ -158,10 +158,10 @@ describe('dispose race on serializeReference (M5)', () => {
     expect(shell.snapshot.phase).toBe('submitting')
 
     // resolve only the first, then dispose
-    resolveFirst!(mention)
+    resolveFirst(mention)
     shell.dispose()
     // second resolves after dispose
-    resolveSecond!('serialized-second')
+    resolveSecond('serialized-second')
 
     await vi.waitFor(() => {
       expect(shell.snapshot.phase).toBe('plain')

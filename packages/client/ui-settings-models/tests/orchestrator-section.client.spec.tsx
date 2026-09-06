@@ -104,7 +104,7 @@ describe('OrchestratorSection', () => {
     await screen.findByRole('button', { name: t('orchestratorSave') })
     fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
     expect((await screen.findByRole('alert')).textContent).toBe('revision conflict')
-    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('checkbox').checked).toBe(true)
     expect(save).toHaveBeenCalledTimes(1)
   })
 

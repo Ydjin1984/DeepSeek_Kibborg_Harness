@@ -184,7 +184,7 @@ export class ScheduleRuntime {
       // immediate requestDrive → arm(overdue) → setTimeout(0) macro-loop
       // when the wall clock is permanently behind schedule.
       this.timer = undefined
-      queueMicrotask(() => this.requestDrive())
+      queueMicrotask(() => { this.requestDrive() })
       return
     }
     this.timer = setTimeout(() => {

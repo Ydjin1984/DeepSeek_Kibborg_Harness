@@ -78,12 +78,14 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose }: PanelP
       // cycles inside the panel instead of escaping into the application.
       // Visited-but-hidden sections stay mounted for their local state, so
       // their controls are excluded from the cycle.
-      const focusables = [...panelRef.current!.querySelectorAll<HTMLElement>(
+      const panel = panelRef.current
+      if (panel === null) return
+      const focusables = [...panel.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       )].filter(el => el.closest('[hidden]') === null)
-      if (focusables.length === 0) return
-      const first = focusables[0]!
-      const last = focusables[focusables.length - 1]!
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (first === undefined || last === undefined) return
       const active = document.activeElement
       if (e.shiftKey) {
         if (active === first || !panelRef.current?.contains(active)) {

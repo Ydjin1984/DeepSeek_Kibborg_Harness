@@ -38,8 +38,11 @@ import type {
   VersionSource,
 } from './types.ts'
 
+/** On-disk metadata file name for skill manager state. */
 export const SKILL_MANAGER_META_FILE = 'SKILL.manager.json'
+/** File name for the `.disabled` marker inside a skill directory. */
 export const SKILL_DISABLED_MARKER = '.disabled'
+/** Subdirectory name for trashed versions inside a skill directory. */
 export const SKILL_TRASH_DIR = '.system/trash'
 
 /** Stable error codes raised by the skill manager. */
@@ -56,6 +59,7 @@ export type SkillManagerErrorCode =
 
 /** Typed skill manager failure carrying a stable machine-routable code. */
 export class SkillManagerError extends Error {
+  /** Stable machine-routable error code for programmatic handling. */
   readonly code: SkillManagerErrorCode
 
   constructor(code: SkillManagerErrorCode, message: string) {
@@ -573,7 +577,12 @@ export class SkillManager extends Service {
     return body
   }
 
-  /** Read the persisted benchmark for a version, if any. */
+  /** Read the persisted benchmark for a version, if any.
+   * @param name - skill name.
+   * @param cwd - working directory to search for the skill entry.
+   * @param version - version identifier to look up.
+   * @returns the benchmark summary for the given version, or undefined when absent.
+   */
   async benchmarkFor(name: string, cwd: string, version: string): Promise<BenchmarkSummary | undefined> {
     const entry = await this.findLocal(name, cwd)
     if (entry === undefined) return undefined
@@ -581,7 +590,10 @@ export class SkillManager extends Service {
     return meta?.benchmarks[version]
   }
 
-  /** Resolve the active model route snapshot: provider and model pair required. */
+  /** Resolve the active model route snapshot: provider and model pair required.
+   * @param route - the model route to validate.
+   * @returns the route when both provider and model are non-empty strings.
+   */
   assertRoute(route: ModelRoute): ModelRoute {
     if (typeof route.provider !== 'string' || route.provider.length === 0
       || typeof route.model !== 'string' || route.model.length === 0) {
@@ -590,7 +602,9 @@ export class SkillManager extends Service {
     return route
   }
 
-  /** Snapshot of one run identity for the benchmark engine. */
+  /** Snapshot of one run identity for the benchmark engine.
+   * @returns a uniquely prefixed run identifier string.
+   */
   newRunId(): string {
     return `bench-${randomUUID()}`
   }
@@ -655,6 +669,7 @@ export class SkillManager extends Service {
         }, (next) => { this.updateBenchmarkRun(run.id, { ...run, ...next, skillName: name }) }, controller.signal)
         this.updateBenchmarkRun(run.id, { ...run, status: 'completed', phase: 'done', result, skillName: name })
       } catch (error: unknown) {
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- a cancellation can abort the signal during the awaited run
         const status = controller.signal.aborted ? 'cancelled' : 'failed'
         this.updateBenchmarkRun(run.id, { ...run, status, error: String(error), skillName: name })
       }

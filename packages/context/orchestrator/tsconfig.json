@@ -36,6 +36,12 @@
       "path": "../../settings/settings"
     },
     {
+      "path": "../../skill/skill"
+    },
+    {
+      "path": "../../skill/skill-filesystem"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

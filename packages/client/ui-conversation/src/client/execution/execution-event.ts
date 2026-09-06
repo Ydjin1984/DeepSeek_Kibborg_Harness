@@ -95,7 +95,10 @@ export interface ExecutionEvent {
   readonly durationMs?: number
 }
 
-/** Default collapsed state of one event kind: heavy technical rows start folded. */
+/** Default collapsed state of one event kind: heavy technical rows start folded.
+ * @param kind - the event type identifier.
+ * @returns true for user, steering, context, assistant-step, and command kinds.
+ */
 export function isDefaultExpanded(kind: string): boolean {
   switch (kind) {
     case 'user':

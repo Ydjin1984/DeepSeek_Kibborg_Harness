@@ -1461,7 +1461,7 @@ describe('provider OAuth sign-in', () => {
   it('runs the device-code flow and closes with changed on success', async () => {
     const wire = oauthFace()
     let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
-    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise((resolve) => { finishWait = resolve }))
     const { onClose } = await mountOAuthEditor(wire.face)
     fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
 
@@ -1509,7 +1509,7 @@ describe('provider OAuth sign-in', () => {
   it('cancels an in-flight challenge', async () => {
     const wire = oauthFace()
     let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
-    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise((resolve) => { finishWait = resolve }))
     await mountOAuthEditor(wire.face)
     fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
     await waitFor(() => { expect(screen.getByText(en.oauthOpenLink)).toBeTruthy() })
@@ -1545,7 +1545,7 @@ describe('provider OAuth sign-in', () => {
   it('cancels the in-flight login when the editor unmounts', async () => {
     const wire = oauthFace()
     let finishWait: ((value: RpcResponse<Record<string, never>>) => void) | undefined
-    wire.oauthLoginWait.mockImplementationOnce(() => new Promise(resolve => { finishWait = resolve }))
+    wire.oauthLoginWait.mockImplementationOnce(() => new Promise((resolve) => { finishWait = resolve }))
     const { unmount } = await mountOAuthEditor(wire.face)
     fireEvent.click(screen.getByRole('button', { name: OAUTH.loginLabel }))
     await waitFor(() => { expect(screen.getByText(en.oauthOpenLink)).toBeTruthy() })

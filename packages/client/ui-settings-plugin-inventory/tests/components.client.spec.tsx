@@ -183,7 +183,7 @@ describe('PluginInventorySettingsTab', () => {
     const busy = await screen.findByRole('button', { name: en.toggleBusy })
     expect((busy as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getAllByRole('button', { name: en.disable })[0] as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: en.enable }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: en.enable }).disabled).toBe(true)
     expect(setEnabled).toHaveBeenCalledTimes(1)
 
     await act(async () => { deferred.resolve(SNAPSHOT) })

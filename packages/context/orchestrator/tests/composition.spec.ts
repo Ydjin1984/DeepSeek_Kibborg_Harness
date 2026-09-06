@@ -16,16 +16,27 @@ import { apply, inject } from '../src/index.ts'
 /** Provider capability presets the fake subagent registry answers with. */
 type Caps = { toolFilter: boolean; depthLimit: boolean; persona: boolean }
 
+/** The full surface the fake tools registry keeps per registered tool. */
+interface RegisteredTool {
+  name: string
+  execute: (args: unknown, exec: unknown) => unknown
+  presentCall?: (args: unknown) => unknown
+  isConcurrencySafe?: (args: unknown) => boolean
+  output?: { render: (args: unknown, value: unknown) => unknown }
+}
+
 interface Harness {
   ctx: Context
   /** Live settings the fake namespace serves. */
   settings: { enabled: boolean; subagentProvider: string; executorProvider: string; executorModel: string }
   /** The result the fake subagent registry resolves for the next start. */
-  fixture: { result: SubagentResult }
+  fixture: { result: SubagentResult; disposeError?: Error }
   /** Registered tool definitions (name → definition). */
-  tools: Map<string, { execute: (args: unknown, exec: unknown) => unknown }>
+  tools: Map<string, RegisteredTool>
   /** Registered prompt sections by name. */
   sections: Map<string, PromptSection>
+  /** Runtime skills currently registered through the fake skill registry. */
+  skills: Map<string, { dispose: () => void }>
   /** Start requests the fake subagents registry received. */
   starts: SubagentStartRequest[]
   /** Dispose the plugin fiber (HMR teardown). */
@@ -57,17 +68,25 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     ...initial,
   }
   const fixture: Harness['fixture'] = { result: resultOf('completed') }
-  const tools = new Map<string, { execute: (args: unknown, exec: unknown) => unknown }>()
+  const tools = new Map<string, RegisteredTool>()
   const sections = new Map<string, PromptSection>()
+  const skills = new Map<string, { dispose: () => void }>()
   const starts: SubagentStartRequest[] = []
   let watcher: (() => void) | undefined
 
   ctx.provide('tools', {
-    register: (tool: { name: string; execute: (args: unknown, exec: unknown) => unknown }): (() => void) => {
+    register: (tool: RegisteredTool): (() => void) => {
       tools.set(tool.name, tool)
       return () => { tools.delete(tool.name) }
     },
   })
+  ctx.provide('skills', {
+    register: (skill: { name: string }): (() => void) => {
+      const entry = { dispose: () => { skills.delete(skill.name) } }
+      skills.set(skill.name, entry)
+      return entry.dispose
+    },
+  } as never)
   ctx.provide('systemPrompt', {
     section: (section: PromptSection): (() => void) => {
       sections.set(section.name, section)
@@ -94,7 +113,9 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
       return {
         id: 'run-1',
         result: Promise.resolve(fixture.result),
-        dispose: vi.fn(async () => undefined),
+        dispose: () => fixture.disposeError !== undefined
+          ? Promise.reject(fixture.disposeError)
+          : Promise.resolve(),
       }
     },
   })
@@ -107,6 +128,7 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     fixture,
     tools,
     sections,
+    skills,
     starts,
     dispose: () => plugin.dispose(),
     applySettings: () => { watcher?.() },
@@ -224,6 +246,106 @@ describe('dsh-orchestrator composition', () => {
       h.fixture.result = resultOf(stopReason)
       await expect(runExecutorTool(h)).rejects.toThrow(new RegExp(fragment))
     }
+    await h.dispose()
+  })
+
+  it('registers the bundled orchestrator skills only while enabled with a model', async () => {
+    const h = await setup(FULL_CAPS)
+    expect(h.skills.has('orchestrator-head')).toBe(false)
+    expect(h.skills.has('orchestrator-executor')).toBe(false)
+
+    h.settings.enabled = true
+    h.applySettings()
+    await vi.waitFor(() => {
+      expect(h.skills.has('orchestrator-head')).toBe(true)
+      expect(h.skills.has('orchestrator-executor')).toBe(true)
+    })
+
+    h.settings.enabled = false
+    h.applySettings()
+    await vi.waitFor(() => {
+      expect(h.skills.has('orchestrator-head')).toBe(false)
+      expect(h.skills.has('orchestrator-executor')).toBe(false)
+    })
+    await h.dispose()
+  })
+
+  it('keeps the bundled skills unregistered while the mode lacks a route', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true, executorProvider: '', executorModel: '' })
+    h.applySettings()
+    // A few macrotask turns let any accidental registration surface.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(h.skills.has('orchestrator-head')).toBe(false)
+    expect(h.skills.has('orchestrator-executor')).toBe(false)
+    await h.dispose()
+  })
+
+  it('tears the bundled skills down with the plugin fiber', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true })
+    h.applySettings()
+    await vi.waitFor(() => {
+      expect(h.skills.has('orchestrator-head')).toBe(true)
+    })
+
+    await h.dispose()
+    expect(h.skills.has('orchestrator-head')).toBe(false)
+    expect(h.skills.has('orchestrator-executor')).toBe(false)
+  })
+
+  it('exposes executor presentation hooks', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true })
+    h.applySettings()
+    const tool = h.tools.get('executor')!
+
+    expect(tool.isConcurrencySafe?.({ description: 'd', prompt: 'p' })).toBe(false)
+    expect(tool.presentCall?.({ description: 'd', prompt: 'p' })).toMatchObject({
+      card: 'generic',
+      title: 'Executor: d',
+      kind: 'execute',
+    })
+    expect(tool.output?.render({}, { output: [{ type: 'text', text: 'result' }] }))
+      .toEqual([{ type: 'text', text: 'result' }])
+    await h.dispose()
+  })
+
+  it('requires a calling agent', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true })
+    h.applySettings()
+    const tool = h.tools.get('executor')!
+    const signal = new AbortController().signal
+
+    await expect(tool.execute({ description: 'task', prompt: 'do it' }, {
+      agent: undefined,
+      signal,
+      overrides: {},
+    })).rejects.toThrow('executor tool requires a calling agent')
+    await h.dispose()
+  })
+
+  it('reports a failed run disposal', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true })
+    h.applySettings()
+    h.fixture.disposeError = new Error('disposal exploded')
+    await expect(runExecutorTool(h)).rejects.toThrow('disposal exploded')
+    await h.dispose()
+  })
+
+  it('logs a warning when the bundled skill assets fail to load', async () => {
+    const h = await setup(FULL_CAPS)
+    const skillsModule = await import('../src/skills.ts')
+    const spy = vi.spyOn(skillsModule, 'loadOrchestratorSkills')
+      .mockRejectedValueOnce(new Error('asset missing'))
+    const warn = vi.spyOn(h.ctx.logger, 'warn').mockImplementation(() => {})
+
+    h.settings.enabled = true
+    h.applySettings()
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed to register bundled skills'))
+    })
+    expect(h.skills.has('orchestrator-head')).toBe(false)
+
+    spy.mockRestore()
+    warn.mockRestore()
     await h.dispose()
   })
 })

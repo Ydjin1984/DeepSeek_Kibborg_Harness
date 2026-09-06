@@ -34,7 +34,14 @@ import type {
 } from '../contract/slots.ts'
 import { executionEventFromNode, type ExecutionEvent } from './execution-event.ts'
 import { executionClock, executionDuration, executionStatusDot, executionTypeLabel } from './execution-labels.ts'
+import { SubagentActivityLine } from './SubagentActivityLine.tsx'
 import css from './ExecutionEventRow.module.css'
+
+/**
+ * Wire tool names whose running call delegates to one or more subagent
+ * children (the local orchestration executor and the generic subagent tool).
+ */
+const SUBAGENT_DELEGATION_TOOLS = new Set(['executor', 'subagent'])
 
 export interface ExecutionEventRowProps {
   /** Stable Chat node context key this row subscribes to. */
@@ -47,6 +54,10 @@ export interface ExecutionEventRowProps {
   readonly owner: ChatNodeOwnerProps
   /** Framework session hook bound to the conversation snapshot. */
   readonly useSession: ChatViewSlotProps['useSession']
+  /** Session list hook for the running-child activity strip. */
+  readonly useSessions: ChatViewSlotProps['useSessions']
+  /** Owning session id (the parent of any displayed subagent children). */
+  readonly sessionId: ChatViewSlotProps['sessionId']
   /** The shared node-seat dispatcher (session body → keyed renderers). */
   readonly renderChatNode: RenderChatNode
   /** The owning view's locale seat. */
@@ -107,7 +118,7 @@ export function highlightText(text: string, query: string): ReactNode {
 }
 
 export const ExecutionEventRow = memo(function ExecutionEventRow({
-  nodeKey, expanded, onToggle, owner, useSession, renderChatNode, t, query,
+  nodeKey, expanded, onToggle, owner, useSession, useSessions, sessionId, renderChatNode, t, query,
 }: ExecutionEventRowProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const event = useMemo(() => node === undefined ? null : executionEventFromNode(node as ChatNode), [node])
@@ -120,6 +131,12 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
   const counts = event.additions !== undefined && event.deletions !== undefined
     ? event.additions + event.deletions > 0
     : false
+  // The running delegation event carries the live strip under its header; the
+  // expanded body dispatches the owning Chat node, whose own Tool renderer
+  // repeats the strip, so the collapsed header shows it exactly once.
+  const delegationRunning = event.status === 'running'
+    && event.toolName !== undefined
+    && SUBAGENT_DELEGATION_TOOLS.has(event.toolName)
   return (
     <div className={css.row} data-status={event.status} data-category={event.category} data-testid="execution-event">
       <button
@@ -153,6 +170,9 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
           {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </span>
       </button>
+      {delegationRunning && !expanded && (
+        <SubagentActivityLine sessionId={sessionId} useSessions={useSessions} t={t} />
+      )}
       {expanded && (
         <div className={css.body}>
           {renderChatNode(routedOwner, {

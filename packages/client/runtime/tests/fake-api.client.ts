@@ -250,6 +250,20 @@ export class FakeApiClient implements IApiClient {
       this.record('agentPreset.remove', payload, Promise.resolve(ok({}))),
   }
 
+  readonly mcp: IApiClient['mcp'] = {
+    list: () => this.record('mcp.list', {}, Promise.resolve(ok({ servers: [] }))),
+    save: (payload: unknown) => this.record('mcp.save', payload, Promise.resolve(ok({
+      server: {
+        name: (payload as { name: string }).name,
+        source: 'user' as const,
+        enabled: true,
+        state: 'starting' as const,
+        toolCount: 0,
+      },
+    }))),
+    remove: (payload: unknown) => this.record('mcp.remove', payload, Promise.resolve(ok({}))),
+  }
+
   readonly skills: IApiClient['skills'] = {
     list: (payload: unknown) => this.record('skill.list', payload, this.onSkillList(payload)),
     listManaged: payload => this.record('skill.listManaged', payload, Promise.resolve(ok({ skills: [] }))),

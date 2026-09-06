@@ -11,7 +11,10 @@ export const name = 'host-plugin-inventory-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/** No runtime invariant: every snapshot is projected directly from Loader-owned state, and enablement writes go through the same Loader entries. */
+/**
+ * No runtime invariant: every snapshot is projected directly from Loader-owned
+ * state, and enablement writes go through the same Loader entries.
+ */
 const install: InvariantInstaller = () => {}
 
 /** Register this package's invariant companion. */

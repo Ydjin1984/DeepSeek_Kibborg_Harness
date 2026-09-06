@@ -383,6 +383,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Root interface of the unified API. New client-request domain = one new file pair + one field here + one map row.',
     methods: [
       {
+        signature: 'mcp: McpApi',
+        description: 'MCP server registry the Host deploys from (list/save/remove user-scope servers).',
+        parameters: [],
+      },
+      {
         signature: 'downloads: DownloadsApi',
         description: 'Host-only download surfaces (GET, no wire envelope); absent from IApiClient.',
         parameters: [],
@@ -1003,6 +1008,38 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Select a provider by the file\'s extension and run one query. Selection is per-query and order-independent; no match throws `LspError` `LSP_UNAVAILABLE`.',
         parameters: [{ name: 'request', description: 'the normalized query.' }, { name: 'signal', description: 'optional cancellation forwarded to the selected provider.' }],
         returns: 'the normalized, closed-union result.',
+      },
+    ],
+  },
+  {
+    key: 'mcpServers',
+    summary: 'Deployment-level MCP server registry.',
+    description: 'Deployment-level MCP server registry.\n\nThe service is one host singleton: its registrations land on the global tool layer, so every agent in every session observes the deployed tools (server-scoped tools register per session through presets instead). The service never blocks Host startup on server connectivity — a server that fails to connect logs through its `mcp-client` supervisor and keeps its slot in `list()` as `starting` until tools appear or the entry is removed.',
+    methods: [
+      {
+        signature: 'requestReconcile(): Promise<void>',
+        description: 'Serialize one reconcile pass behind any running one.',
+        parameters: [],
+        returns: 'a promise resolving when the queued pass (and every pass queued behind it) completes.',
+      },
+      {
+        signature: 'list(): McpServerStatus[]',
+        description: 'Report the current registry and deployment state.\n\nThe read is live: connection state derives from the tools currently registered under each server\'s namespace, so an `mcp-client` reconnect that re-registers tools flips a server back to `connected` without this service observing the supervisor directly.',
+        parameters: [],
+        returns: 'one status per declared server, user scope first.',
+      },
+      {
+        signature: 'async saveUserServer(name: string, entry: RegistryServerEntry): Promise<McpServerStatus>',
+        description: 'Add or replace one server in the user registry and reconcile.',
+        parameters: [{ name: 'name', description: 'server name; must match the `serverName` namespace contract.' }, { name: 'entry', description: 'Claude-Code-compatible server entry.' }],
+        returns: 'the status after the change is deployed.',
+        throws: ['when the name or entry fails validation or the registry file cannot be updated.'],
+      },
+      {
+        signature: 'async removeUserServer(name: string): Promise<void>',
+        description: 'Remove one server from the user registry and reconcile.',
+        parameters: [{ name: 'name', description: 'server name to remove.' }],
+        throws: ['when the registry file cannot be updated.'],
       },
     ],
   },
@@ -3480,6 +3517,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export class LlmRuntime extends Service {\n    constructor(ctx: Context);\n    registerAdapter(providers: string[], adapter: LlmAdapter): AdapterRegistrationHandle;\n    listProviders(): LlmProviderInfo[];\n    registerConfigurableProviders(entries: readonly LlmConfigurableProvider[]): DirectoryRegistrationHandle;\n    listConfigurableProviders(): LlmConfigurableProvider[];\n    registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;\n    async discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;\n    registerOAuthLogin(settingsNs: string, handlers: LlmOAuthLoginHandlers): () => void;\n    startOAuthLogin(settingsNs: string, provider: string, signal?: AbortSignal): Promise<LlmOAuthDeviceChallenge>;\n    waitOAuthLogin(settingsNs: string, loginId: string, signal?: AbortSignal): Promise<void>;\n    cancelOAuthLogin(settingsNs: string, loginId: string): void;\n    logoutOAuth(settingsNs: string, provider: string): Promise<void>;\n    providerRetryPolicy(provider: string): ResolvedRetryPolicy;\n    async listModels(provider: string): Promise<LlmModelInfo[]>;\n    async resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;\n    async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>; /* …truncated — full shape in source */',
   },
   {
+    name: 'LocalizedSkillDescription',
+    declaration: 'export type LocalizedSkillDescription = Readonly<Partial<Record<\'zh\' | \'ru\', string>>>;',
+  },
+  {
     name: 'LspHover',
     declaration: 'export interface LspHover {\n    readonly contents: string;\n    readonly range?: LspRange;\n}',
   },
@@ -3522,6 +3563,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'McpApi',
+    declaration: 'export interface McpApi {\n    list(request: RpcRequest<{}>): Promise<RpcResponse<{\n        servers: McpServerView[];\n    }>>;\n    save(request: RpcRequest<{\n        name: string;\n        entry: McpServerEntryView;\n    }>): Promise<RpcResponse<{\n        server: McpServerView;\n    }>>;\n    remove(request: RpcRequest<{\n        name: string;\n    }>): Promise<RpcResponse<{}>>;\n}',
+  },
+  {
+    name: 'McpServerEntryView',
+    declaration: 'export interface McpServerEntryView {\n    readonly command?: string;\n    readonly args?: string[];\n    readonly env?: Record<string, string>;\n    readonly cwd?: string;\n    readonly url?: string;\n    readonly headers?: Record<string, string>;\n    readonly enabled?: boolean;\n}',
+  },
+  {
+    name: 'McpServerSource',
+    declaration: 'export type McpServerSource = \'user\' | \'project\';',
+  },
+  {
+    name: 'McpServerStatus',
+    declaration: 'export interface McpServerStatus {\n    name: string;\n    source: RegistrySource;\n    kind?: \'stdio\' | \'streamable-http\';\n    enabled: boolean;\n    command?: string;\n    url?: string;\n    state: McpServerState;\n    toolCount: number;\n    error?: string;\n    file: string;\n}',
+  },
+  {
+    name: 'McpServerView',
+    declaration: 'export interface McpServerView {\n    readonly name: string;\n    readonly source: McpServerSource;\n    readonly kind?: \'stdio\' | \'streamable-http\';\n    readonly enabled: boolean;\n    readonly command?: string;\n    readonly url?: string;\n    readonly state: McpServerState;\n    readonly toolCount: number;\n    readonly error?: string;\n}',
   },
   {
     name: 'Message',
@@ -3740,6 +3801,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
   },
   {
+    name: 'RegistryServerEntry',
+    declaration: 'export interface RegistryServerEntry {\n    command?: string;\n    args?: string[];\n    env?: Record<string, string>;\n    cwd?: string;\n    url?: string;\n    headers?: Record<string, string>;\n    enabled?: boolean;\n}',
+  },
+  {
+    name: 'RegistrySource',
+    declaration: 'export type RegistrySource = \'user\' | \'project\';',
+  },
+  {
     name: 'ReplayEnvelope',
     declaration: 'export interface ReplayEnvelope {\n    response: unknown;\n    blocks?: readonly unknown[];\n}',
   },
@@ -3801,7 +3870,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RpcErrorDetailsMap',
-    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-locked\': {\n        sessionId: SessionId;\n        agentPreset: string;\n    };\n    \'agent-preset-conflict\': {\n        sessionId: SessionId;\n        requestedPreset: string;\n        existingPreset?: string;\n    };\n    \'agent-preset-not-found\': {\n        agentPreset: string;\n      /* …truncated — full shape in source */',
+    declaration: 'export interface RpcErrorDetailsMap {\n    \'bad-request\': {\n        issues: ZodIssue[];\n    };\n    \'cancelled\': {};\n    \'session-not-found\': {\n        sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        provider: string;\n        model: string;\n    };\n    \'session-conflict\': {\n        sessionId: SessionId;\n        requestedCwd: string;\n        existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        value: string;\n    };\n    \'workspace-attach-failed\': {\n        sessionId: SessionId;\n        workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        workspaceId: string;\n    };\n    \'workspace-invalid-path\': {\n        path: string;\n    };\n    \'workspace-name-conflict\': {\n        name: string;\n    };\n    \'workspace-move-invalid\': {\n        workspaceId: string;\n        sessionId: SessionId;\n        beforeSessionId?: SessionId;\n    };\n    \'directory-unreadable\': {\n        path: string;\n    };\n    \'directory-exists\': {\n        path: string;\n    };\n    \'directory-create-failed\': {\n        path: string;\n    };\n    \'file-outside-project\': {\n        path: string;\n    };\n    \'file-not-text\': {\n        path: string;\n    };\n    \'file-too-large\': {\n        path?: string;\n    };\n    \'file-unreadable\': {\n        path: string;\n    };\n    \'file-unwritable\': {\n        path: string;\n    };\n    \'directory-picker-unavailable\': {\n        capability: string;\n    };\n    \'agent-preset-read-only\': {\n        agentPreset: string;\n        reason: string;\n    };\n    \'agent-preset-lock /* …truncated — full shape in source */',
   },
   {
     name: 'RpcId',
@@ -3810,6 +3879,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RpcReceipt',
     declaration: 'export type RpcReceipt = {\n    accepted: true;\n} | {\n    accepted: false;\n    reason: \'not-pending\' | \'bad-response\';\n};',
+  },
+  {
+    name: 'RpcRequest',
+    declaration: 'export interface RpcRequest<P> {\n    rpcId: RpcId;\n    payload: P;\n}',
+  },
+  {
+    name: 'RpcResponse',
+    declaration: 'export interface RpcResponse<T> {\n    rpcId: RpcId;\n    result: RpcResult<T>;\n}',
   },
   {
     name: 'RpcResult',
@@ -4233,7 +4310,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SkillSummary',
-    declaration: 'export interface SkillSummary {\n    readonly name: string;\n    readonly description: string;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
+    declaration: 'export interface SkillSummary {\n    readonly name: string;\n    readonly description: string;\n    readonly localizedDescription?: LocalizedSkillDescription;\n    readonly whenToUse?: string;\n    readonly invocation: SkillInvocationPolicy;\n    readonly source: SkillSource;\n    readonly provider: string;\n    readonly resourceBase?: SkillResourceBase;\n}',
   },
   {
     name: 'SkillViewOptions',

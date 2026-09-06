@@ -1837,7 +1837,7 @@ describe('withinMs timer cleanup', () => {
     rejects.reject(new Error('boom'))
     await vi.advanceTimersByTimeAsync(100)
     expect(fired).toBe(false)
-    await expect(done).resolves.toEqual({ kind: 'error', error: expect.any(Error) })
+    await expect(done).resolves.toEqual({ kind: 'error', error: expect.any(Error) as unknown as Error })
 
     clearTimeout(later)
     vi.useRealTimers()

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-25-supergrok-oauth-model-login.md
+2026-08-25-supergrok-oauth-model-login.md: 45d22644f733a90f2059c56f989b2b81539cdc05
+2026-08-25-supergrok-oauth-model-login.zh.md: 0d7a2eb5902b9667e2b80cad7932d07f2a827a90

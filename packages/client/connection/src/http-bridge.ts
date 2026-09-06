@@ -29,7 +29,10 @@ export interface FetchHandler {
  */
 export const REQUEST_PEER: unique symbol = Symbol('dsh-request-peer')
 
-/** Read the socket peer {@link bridge} attached to a request. */
+/** Read the socket peer {@link bridge} attached to a request.
+ * @param request - the fetch-shaped Request carrying the peer symbol.
+ * @returns the OS-reported socket peer, or undefined when absent.
+ */
 export function requestPeer(request: Request): string | undefined {
   return (request as Request & { [REQUEST_PEER]?: string })[REQUEST_PEER]
 }
@@ -40,6 +43,7 @@ export function requestPeer(request: Request): string | undefined {
  * loopback-pinned trust gate; when it is unknown the header fence alone
  * stands.
  * @param req - the node:http request (read structurally, never by type identity).
+ * @returns the remote address string, or undefined when socket is absent.
  */
 export function socketPeer(req: { socket?: unknown }): string | undefined {
   const socket = req.socket as { remoteAddress?: unknown } | undefined
