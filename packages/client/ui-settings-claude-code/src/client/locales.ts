@@ -1,0 +1,167 @@
+/** Locale bundles for the Claude Code technology settings section. */
+
+/** Locale keys the Claude Code section renders. */
+export type ClaudeCodeLocaleKey =
+  | 'nav' | 'title' | 'intro' | 'howTitle' | 'howBody'
+  | 'noSession' | 'loading' | 'error' | 'retry'
+  | 'coreLine' | 'enableCore' | 'enableAll' | 'disableAll' | 'working' | 'done' | 'fail'
+  | 'statusEnabled' | 'statusDisabled' | 'countOf' | 'umbrellaLine' | 'umbrellaHint'
+  | 'catTesting' | 'catTestingDesc'
+  | 'catReview' | 'catReviewDesc'
+  | 'catArchitecture' | 'catArchitectureDesc'
+  | 'catSecurity' | 'catSecurityDesc'
+  | 'catAgentic' | 'catAgenticDesc'
+  | 'catFrontend' | 'catFrontendDesc'
+  | 'catBackend' | 'catBackendDesc'
+  | 'catLanguages' | 'catLanguagesDesc'
+  | 'catDocs' | 'catDocsDesc'
+  | 'catResearch' | 'catResearchDesc'
+  | 'catRoles' | 'catRolesDesc'
+  | 'catOther' | 'catOtherDesc'
+
+/** English copy. */
+export const en: Record<ClaudeCodeLocaleKey, string> = {
+  nav: 'Claude Code',
+  title: 'Claude Code technology',
+  intro: 'A library of 350+ skills and agent roles ported from affaan-m/ECC (Everything Claude Code, v2.2.1, MIT). Skills you enable here appear in the agent catalog and are applied on request.',
+  howTitle: 'How to use it',
+  howBody: 'Write "use the Claude Code technology" (or "apply Claude Code", "work in Claude Code mode") in chat — the agent loads the claude-code skill and follows the methodology: plan → tests → implementation → review → verification.',
+  noSession: 'Open a session first — skills are managed per project.',
+  loading: 'Loading library…',
+  error: 'The skill library is unavailable right now.',
+  retry: 'Retry',
+  coreLine: 'Recommended set ({enabled} of {total} enabled)',
+  enableCore: 'Enable recommended',
+  enableAll: 'Enable all',
+  disableAll: 'Disable all',
+  working: 'Applying…',
+  done: 'Done.',
+  fail: 'Some skills could not be toggled.',
+  statusEnabled: 'enabled',
+  statusDisabled: 'disabled',
+  countOf: '{enabled}/{total}',
+  umbrellaLine: 'claude-code skill: always on, activation by keyword',
+  umbrellaHint: 'This skill stays enabled so the phrase "use the Claude Code technology" works in every session.',
+  catTesting: 'TDD & testing',
+  catTestingDesc: 'Test-first workflows, test frameworks, E2E, browser QA, benchmarks.',
+  catReview: 'Review & quality',
+  catReviewDesc: 'Code review, self-evaluation, verification loops, standards, refactoring.',
+  catArchitecture: 'Architecture & design',
+  catArchitectureDesc: 'ADR, API design, backend patterns, migrations, contract-first.',
+  catSecurity: 'Security & safety',
+  catSecurityDesc: 'Security reviews, safe destructive operations, compliance checks.',
+  catAgentic: 'Agent systems',
+  catAgenticDesc: 'Agent harness design, autonomous loops, orchestration, context budgets.',
+  catFrontend: 'Frontend & UI',
+  catFrontendDesc: 'React/Vite/Next patterns, motion, design systems, accessibility.',
+  catBackend: 'Backend & data',
+  catBackendDesc: 'Databases, Redis, Docker, Kubernetes, deployment, MCP servers.',
+  catLanguages: 'Language stacks',
+  catLanguagesDesc: 'Python, Go, Rust, Java, Kotlin, Swift, C#/F#, PHP, Dart/Flutter and more.',
+  catDocs: 'Documentation & content',
+  catDocsDesc: 'Doc governance, article writing, codebase onboarding, knowledge ops.',
+  catResearch: 'Research & search',
+  catResearchDesc: 'Deep research, market/competitive analysis, scientific literature.',
+  catRoles: 'Agent roles',
+  catRolesDesc: 'Specialist personas: architect, reviewer, explorer, tdd-guide, security-reviewer and more.',
+  catOther: 'Everything else',
+  catOtherDesc: 'Business ops, social, homelab, networks and other niche domains.',
+}
+
+/** Chinese copy. */
+export const zh: Record<ClaudeCodeLocaleKey, string> = {
+  nav: 'Claude Code',
+  title: 'Claude Code 技术',
+  intro: '移植自 affaan-m/ECC（Everything Claude Code, v2.2.1, MIT）的 350+ 技能与代理角色库。在此启用的技能会出现在代理目录中，并可随时按需应用。',
+  howTitle: '如何使用',
+  howBody: '在对话中写「使用 Claude Code 技术」（或「应用 Claude Code」「以 Claude Code 模式工作」）——代理会加载 claude-code 技能并按方法论执行：计划 → 测试 → 实现 → 评审 → 验证。',
+  noSession: '请先打开会话——技能按项目管理。',
+  loading: '正在加载技能库…',
+  error: '技能库当前不可用。',
+  retry: '重试',
+  coreLine: '推荐组合（已启用 {enabled}/{total}）',
+  enableCore: '启用推荐',
+  enableAll: '全部启用',
+  disableAll: '全部禁用',
+  working: '正在应用…',
+  done: '完成。',
+  fail: '部分技能无法切换。',
+  statusEnabled: '已启用',
+  statusDisabled: '已禁用',
+  countOf: '{enabled}/{total}',
+  umbrellaLine: 'claude-code 技能：始终开启，按关键词激活',
+  umbrellaHint: '该技能保持启用，以便「使用 Claude Code 技术」这一短语在每个会话中都生效。',
+  catTesting: 'TDD 与测试',
+  catTestingDesc: '测试优先工作流、测试框架、E2E、浏览器 QA、基准测试。',
+  catReview: '评审与质量',
+  catReviewDesc: '代码评审、自我评估、验证循环、规范、重构。',
+  catArchitecture: '架构与设计',
+  catArchitectureDesc: 'ADR、API 设计、后端模式、迁移、契约优先。',
+  catSecurity: '安全与防护',
+  catSecurityDesc: '安全评审、破坏性操作防护、合规检查。',
+  catAgentic: '代理系统',
+  catAgenticDesc: '代理框架设计、自主循环、编排、上下文预算。',
+  catFrontend: '前端与界面',
+  catFrontendDesc: 'React/Vite/Next 模式、动效、设计系统、无障碍。',
+  catBackend: '后端与数据',
+  catBackendDesc: '数据库、Redis、Docker、Kubernetes、部署、MCP 服务。',
+  catLanguages: '语言技术栈',
+  catLanguagesDesc: 'Python、Go、Rust、Java、Kotlin、Swift、C#/F#、PHP、Dart/Flutter 等。',
+  catDocs: '文档与内容',
+  catDocsDesc: '文档治理、文章写作、代码库入门、知识管理。',
+  catResearch: '研究与搜索',
+  catResearchDesc: '深度研究、市场/竞品分析、学术文献。',
+  catRoles: '代理角色',
+  catRolesDesc: '专家角色：架构师、评审员、探索者、TDD 导师、安全评审员等。',
+  catOther: '其他',
+  catOtherDesc: '业务运营、社交、家庭网络及其他细分领域。',
+}
+
+/** Russian copy. */
+export const ru: Record<ClaudeCodeLocaleKey, string> = {
+  nav: 'Claude Code',
+  title: 'Технология Claude Code',
+  intro: 'Библиотека из 350+ навыков и ролей-агентов, перенесённая из affaan-m/ECC (Everything Claude Code, v2.2.1, MIT). Включённые здесь навыки появляются в каталоге агента и применяются по запросу.',
+  howTitle: 'Как пользоваться',
+  howBody: 'Напишите в чате «используй технологию Claude Code» (или «примени Claude Code», «работай в режиме Claude Code») — агент загрузит навык claude-code и будет работать по методологии: план → тесты → реализация → ревью → проверка.',
+  noSession: 'Сначала откройте сессию — навыки управляются в рамках проекта.',
+  loading: 'Загрузка библиотеки…',
+  error: 'Библиотека навыков сейчас недоступна.',
+  retry: 'Повторить',
+  coreLine: 'Рекомендованный набор (включено {enabled} из {total})',
+  enableCore: 'Включить рекомендованные',
+  enableAll: 'Включить все',
+  disableAll: 'Выключить все',
+  working: 'Применяю…',
+  done: 'Готово.',
+  fail: 'Часть навыков не удалось переключить.',
+  statusEnabled: 'включено',
+  statusDisabled: 'выключено',
+  countOf: '{enabled}/{total}',
+  umbrellaLine: 'навык claude-code: всегда включён, активация по ключевой фразе',
+  umbrellaHint: 'Этот навык остаётся включённым, чтобы фраза «используй технологию Claude Code» работала в любой сессии.',
+  catTesting: 'TDD и тестирование',
+  catTestingDesc: 'Test-first рабочие процессы, тестовые фреймворки, E2E, browser QA, бенчмарки.',
+  catReview: 'Ревью и качество',
+  catReviewDesc: 'Ревью кода, самооценка, verification-циклы, стандарты, рефакторинг.',
+  catArchitecture: 'Архитектура и проектирование',
+  catArchitectureDesc: 'ADR, дизайн API, backend-паттерны, миграции, contract-first.',
+  catSecurity: 'Безопасность и защита',
+  catSecurityDesc: 'Security-ревью, безопасность разрушительных операций, compliance-проверки.',
+  catAgentic: 'Агентные системы',
+  catAgenticDesc: 'Проектирование харнессов, автономные циклы, оркестрация, контекст-бюджет.',
+  catFrontend: 'Фронтенд и UI',
+  catFrontendDesc: 'Паттерны React/Vite/Next, motion, дизайн-системы, доступность.',
+  catBackend: 'Бэкенд и данные',
+  catBackendDesc: 'Базы данных, Redis, Docker, Kubernetes, деплой, MCP-серверы.',
+  catLanguages: 'Языковые стеки',
+  catLanguagesDesc: 'Python, Go, Rust, Java, Kotlin, Swift, C#/F#, PHP, Dart/Flutter и другие.',
+  catDocs: 'Документация и контент',
+  catDocsDesc: 'Управление документацией, статьи, онбординг в кодовую базу, knowledge ops.',
+  catResearch: 'Исследования и поиск',
+  catResearchDesc: 'Deep research, маркетинговый/конкурентный анализ, научная литература.',
+  catRoles: 'Роли-агенты',
+  catRolesDesc: 'Роли-специалисты: архитектор, ревьюер, исследователь кода, tdd-guide, security-reviewer и другие.',
+  catOther: 'Прочее',
+  catOtherDesc: 'Бизнес-операции, соцсети, home-сети и другие ниши.',
+}

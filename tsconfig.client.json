@@ -88,6 +88,7 @@
     { "path": "./packages/client/ui-plan" },
     { "path": "./packages/client/ui-settings-plugins" },
     { "path": "./packages/client/ui-settings-skills" },
+    { "path": "./packages/client/ui-settings-claude-code" },
     { "path": "./packages/client/ui-user-questions" },
     { "path": "./packages/client/ui-trajectory" },
     { "path": "./packages/session-query/session-log-export" },

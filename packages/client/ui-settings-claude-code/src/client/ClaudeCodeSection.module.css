@@ -1,0 +1,175 @@
+/* Claude Code technology section: library summary, bulk toggles, categories. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.heading {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.intro {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+  line-height: 20px;
+}
+
+.how {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.coreRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.coreText {
+  margin-right: auto;
+  font-size: 13px;
+}
+
+.muted {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.done {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.button,
+.buttonPrimary {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.button {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.buttonPrimary {
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.button:disabled,
+.buttonPrimary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.umbrella {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.dotOn {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.umbrellaHint {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.categories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  cursor: pointer;
+}
+
+.category.busy {
+  opacity: 0.6;
+}
+
+.checkbox {
+  flex: 0 0 auto;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.categoryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.categoryName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.categoryDesc {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  line-height: 18px;
+}
+
+.count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}

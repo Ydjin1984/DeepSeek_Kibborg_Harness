@@ -314,6 +314,12 @@
     - id: ui-settings-skills
       name: '@deepseek-ai/dsh-client-ui-settings-skills'
 
+    # The Claude Code technology tab: the Settings section that enables and
+    # disables the ECC-derived skill library (.dsh/skills cc-* and cc-role-*)
+    # through the skill-manager RPC domain.
+    - id: ui-settings-claude-code
+      name: '@deepseek-ai/dsh-client-ui-settings-claude-code'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'
