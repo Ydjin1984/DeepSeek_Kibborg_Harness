@@ -498,6 +498,23 @@ export interface CompactionPolicyConfig {
   summarizationModel?: string
   /** Provider generation cap for summarization. Defaults to `8192`. */
   maxTokens?: number
+  /**
+   * Ask the summarization model to disable its reasoning mode when the routed
+   * target supports it, so compaction finishes quickly on thinking models.
+   * Defaults to `true`.
+   */
+  summarizationSuppressReasoning?: boolean
+  /**
+   * Wall-clock budget for one summarization call; the attempt fails with a
+   * clear error instead of hanging a step. Defaults to `120000` (2 minutes).
+   */
+  summarizationTimeoutMs?: number
+  /**
+   * Minimum gap between automatic step-pressure compaction attempts for one
+   * agent after an attempt failed, so a failing summarizer does not stall
+   * every following step. Defaults to `60000` (1 minute).
+   */
+  automaticRetryDelayMs?: number
   /** Extra attempts after the first compaction when pressure remains above threshold. Defaults to `1`. */
   compactionRetries?: number
   /** Maximum retries after canonical context overflow; `0` disables recovery. Defaults to `1`. */
@@ -1407,6 +1424,34 @@ export interface ReconnectConfig {
 
 来源：[`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
+<a id="deepseek-aidsh-mcp-servers"></a>
+
+## `@deepseek-ai/dsh-mcp-servers`
+
+需要：`tools`
+
+```ts config-catalog
+/** Config for the mcp-servers connector. */
+export interface Config {
+  /**
+   * User-registry file; empty uses `$DSH_HOME/mcpServers.json`, an absolute
+   * path is honored verbatim, a relative path resolves against the home.
+   */
+  userFile: string
+  /** Whether the project `.mcp.json` next to the host working directory is read. */
+  includeProjectFile: boolean
+  /**
+   * Project-registry file name resolved against the host working directory;
+   * empty uses `.mcp.json`.
+   */
+  projectFile: string
+  /** Whether file changes are watched and reconciled automatically. */
+  watch: boolean
+}
+```
+
+来源：[`packages/mcp/mcp-servers/src/index.ts:54`](../packages/mcp/mcp-servers/src/index.ts)
+
 <a id="deepseek-aidsh-message-feedback"></a>
 
 ## `@deepseek-ai/dsh-message-feedback`
@@ -2009,7 +2054,25 @@ export interface Config {
 }
 ```
 
-来源：[`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
+来源：[`packages/skill/skill-filesystem/src/index.ts:50`](../packages/skill/skill-filesystem/src/index.ts)
+
+<a id="deepseek-aidsh-skill-manager"></a>
+
+## `@deepseek-ai/dsh-skill-manager`
+
+需要：`skills` · `tools`
+
+```ts config-catalog
+/** Skill manager configuration. */
+export interface SkillManagerConfig {
+  /** DeepSeek Harness config root; defaults to `$DSH_HOME` or `~/.dsh`. */
+  dshHome?: string
+  /** Shared agent config root; defaults to `$DSH_AGENTS_HOME` or `~/.agents`. */
+  agentsHome?: string
+}
+```
+
+来源：[`packages/skill/skill-manager/src/manager.ts:110`](../packages/skill/skill-manager/src/manager.ts)
 
 <a id="deepseek-aidsh-spill-local"></a>
 
@@ -3075,6 +3138,8 @@ export interface Config {
   maxRedirects?: number
   /** `User-Agent` header sent on every request. */
   userAgent?: string
+  /** Block requests and redirects targeting private/loopback/link-local networks. */
+  blockPrivateNetworks?: boolean
 }
 ```
 
@@ -3200,11 +3265,13 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-attachment`（[`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-brand-official`（[`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-commands`（[`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-compact`（[`packages/client/ui-compact/src/index.ts`](../packages/client/ui-compact/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-deliverables` — 需要 `systemPrompt`（[`packages/client/ui-deliverables/src/index.ts`](../packages/client/ui-deliverables/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-browse`（[`packages/client/ui-directory-picker-browse/src/index.ts`](../packages/client/ui-directory-picker-browse/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-directory-picker-native`（[`packages/client/ui-directory-picker-native/src/index.ts`](../packages/client/ui-directory-picker-native/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-files`（[`packages/client/ui-files/src/index.ts`](../packages/client/ui-files/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-goal`（[`packages/client/ui-goal/src/index.ts`](../packages/client/ui-goal/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-input-trigger`（[`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-jobs`（[`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts)）
@@ -3217,9 +3284,11 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-renderer`（[`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-mcp`（[`packages/client/ui-settings-mcp/src/index.ts`](../packages/client/ui-settings-mcp/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-skills`（[`packages/client/ui-settings-skills/src/index.ts`](../packages/client/ui-settings-skills/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-subagent`（[`packages/client/ui-subagent/src/index.ts`](../packages/client/ui-subagent/src/index.ts)）
@@ -3242,6 +3311,7 @@ export interface Config {
 - `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
+- `@deepseek-ai/dsh-orchestrator` — 需要 `skills` · `tools` · `subagents` · `systemPrompt` · `settings`（[`packages/context/orchestrator/src/index.ts`](../packages/context/orchestrator/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
 - `@deepseek-ai/dsh-session`（[`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts)）
 - `@deepseek-ai/dsh-session-checkpoint-policy` — 需要 `llm` · `sessionPersistence` · `sessions` · `tools`（[`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts)）

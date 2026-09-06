@@ -28,9 +28,9 @@ Web GUI 中的后台 subagent 在用户打开它们之前看起来像卡住了�
 
 新增投影单元折叠 `turn/start`、`tool/call`、`assistant/message`、`turn/end` 为 `{ status: 'running' | 'idle', detail }`，其中 `detail` 是最后一个工具名或一段有界（60 字符）的折叠空白回复片段。api-proxy 的 `session/projection` 广播对非 subagent 会话丢弃该键，因此普通会话不会产生额外帧。subagent 目录行（`SubagentCatalogAction`）在子级运行时于次要行渲染 `detail`。
 
-### 已拒绝：周期性「戳」后台子级
+## 备选方案考虑
 
-每隔几秒重发一条消息的看门狗会在每次戳动时唤醒模型——每个子级每个间隔一次 LLM 请求——而服务端本来就正确执行子级；症状是可见性而非执行。戳动只会烧掉 token 而不修复显示。
+**周期性「戳」后台子级。** 不予采纳：每隔几秒重发一条消息的看门狗会在每次戳动时唤醒模型——每个子级每个间隔一次 LLM 请求——而服务端本来就正确执行子级；症状是可见性而非执行。戳动只会烧掉 token 而不修复显示。
 
 ## 后果
 

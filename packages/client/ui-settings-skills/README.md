@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-client-ui-settings-skills
 
+English | [中文](README.zh.md)
+
 The **Skills** settings section — the Skills Manager tab. The browser plugin registers one localized `settings.section` contribution with id `skills`; the settings shell owns the navigation entry. All skill state is owned host-side by the [`skill-manager`](../../skill/skill-manager/README.md) service and travels over the shared wire client's `skills` and `llm` domains, so this package holds no durable data of its own — it reads a snapshot when the section mounts and re-reads after every mutation it makes.
 
 The section lists the managed catalog in two groups — **My skills** (filesystem-scoped: user, project, agents) and **Built-in** — with real-time filtering across name, description, when-to-use, and the body of any skill whose full content this section has already read. Each card shows name, description, scope, path, status, invocation policy, version, source, and the last benchmark outcome, with Enable/Disable, View, Edit, Versions, Benchmark, and Delete actions. Built-in skills are read-only: they render no Edit or Delete action. A trash section below the catalog restores or permanently deletes trashed skills. The section re-reads the catalog whenever a benchmark run it is polling settles, so the status badge reflects the freshly persisted summary instead of the mount-time snapshot.

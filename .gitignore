@@ -50,3 +50,6 @@ worktrees/
 .dsh/
 .planning/
 REVIEW-FINDINGS.md
+.mcp.json
+browser-demo/
+review-out/

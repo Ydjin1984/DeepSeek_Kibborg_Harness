@@ -475,6 +475,53 @@ type ObjectJsonSchema = JsonSchemaNode & { type: 'object' }
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxmcpservers--mcpservers"></a>
+
+### `ctx.mcpServers` — `McpServers`
+
+Deployment-level MCP server registry.
+
+The service is one host singleton: its registrations land on the global tool layer, so every agent in every session observes the deployed tools (server-scoped tools register per session through presets instead). The service never blocks Host startup on server connectivity — a server that fails to connect logs through its `mcp-client` supervisor and keeps its slot in `list()` as `starting` until tools appear or the entry is removed.
+
+```ts cordis-catalog
+/**
+ * Serialize one reconcile pass behind any running one.
+ * @returns a promise resolving when the queued pass (and every pass queued
+ * behind it) completes.
+ */
+requestReconcile(): Promise<void>
+
+/**
+ * Report the current registry and deployment state.
+ *
+ * The read is live: connection state derives from the tools currently
+ * registered under each server's namespace, so an `mcp-client` reconnect
+ * that re-registers tools flips a server back to `connected` without this
+ * service observing the supervisor directly.
+ * @returns one status per declared server, user scope first.
+ */
+list(): McpServerStatus[]
+
+/**
+ * Add or replace one server in the user registry and reconcile.
+ * @param name - server name; must match the `serverName` namespace contract.
+ * @param entry - Claude-Code-compatible server entry.
+ * @returns the status after the change is deployed.
+ * @throws when the name or entry fails validation or the registry file
+ * cannot be updated.
+ */
+async saveUserServer(name: string, entry: RegistryServerEntry): Promise<McpServerStatus>
+
+/**
+ * Remove one server from the user registry and reconcile.
+ * @param name - server name to remove.
+ * @throws when the registry file cannot be updated.
+ */
+async removeUserServer(name: string): Promise<void>
+```
+
+Source: [`packages/mcp/mcp-servers/src/index.ts:138`](../../packages/mcp/mcp-servers/src/index.ts)
+
 <a id="ctxtools--toolruntime"></a>
 
 ### `ctx.tools` — `ToolRuntime`

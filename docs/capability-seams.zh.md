@@ -9,6 +9,9 @@
 
 ```mermaid
 flowchart LR
+  pkg_mcp_servers["mcp-servers"]
+  svc_mcpServers["ctx.mcpServers<br/>MCP server registry connector"]
+  pkg_tools["tools"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -78,7 +81,6 @@ flowchart LR
   pkg_session_title_all_prompts_llm["session-title-all-prompts-llm"]
   pkg_system_prompt["system-prompt"]
   svc_systemPrompt["ctx.systemPrompt<br/>System prompt assembly registry"]
-  pkg_tools["tools"]
   pkg_tool_fs["tool-fs"]
   pkg_tool_terminal["tool-terminal"]
   pkg_tool_web["tool-web"]
@@ -244,6 +246,7 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_local --> svc_lsp
+  pkg_mcp_servers --> svc_mcpServers
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
   pkg_permission_presets --> svc_permissionPresets
@@ -340,6 +343,7 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_mcpServers --> pkg_tools
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -423,6 +427,7 @@ flowchart LR
 
 | ctx 键 | 角色 | 所属包 | 实现 | 直接消费方 | 配套插件 | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.mcpServers` | `core` | [`mcp-servers`](../packages/mcp/mcp-servers) | - | [`tools`](../packages/core/tools) | - | 读取用户与项目 `mcpServers` 注册表，为每个声明的服务器部署一个 `mcp-client` 实例；工具以 `mcp__<server>__<tool>` 落入全局工具层。 |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 拥有按会话隔离的回放折叠区；压力消费方共享不可变且带修订版本的测量结果。 |

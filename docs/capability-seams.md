@@ -7,6 +7,9 @@ A service can be a core spine service, a swappable capability seam, or a bundle/
 
 ```mermaid
 flowchart LR
+  pkg_mcp_servers["mcp-servers"]
+  svc_mcpServers["ctx.mcpServers<br/>MCP server registry connector"]
+  pkg_tools["tools"]
   pkg_attachment["attachment"]
   svc_attachments["ctx.attachments<br/>Durable binary attachment storage"]
   pkg_attachment_local["attachment-local"]
@@ -76,7 +79,6 @@ flowchart LR
   pkg_session_title_all_prompts_llm["session-title-all-prompts-llm"]
   pkg_system_prompt["system-prompt"]
   svc_systemPrompt["ctx.systemPrompt<br/>System prompt assembly registry"]
-  pkg_tools["tools"]
   pkg_tool_fs["tool-fs"]
   pkg_tool_terminal["tool-terminal"]
   pkg_tool_web["tool-web"]
@@ -242,6 +244,7 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_local --> svc_lsp
+  pkg_mcp_servers --> svc_mcpServers
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
   pkg_permission_presets --> svc_permissionPresets
@@ -338,6 +341,7 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_mcpServers --> pkg_tools
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -421,6 +425,7 @@ flowchart LR
 
 | ctx key | Role | Owner | Implementations | Direct consumers | Companion plugins | Note |
 | --- | --- | --- | --- | --- | --- | --- |
+| `ctx.mcpServers` | `core` | [`mcp-servers`](../packages/mcp/mcp-servers) | - | [`tools`](../packages/core/tools) | - | Reads the user and project `mcpServers` registries and deploys one `mcp-client` instance per declared server; tools land on the global tool layer as `mcp__<server>__<tool>`. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |

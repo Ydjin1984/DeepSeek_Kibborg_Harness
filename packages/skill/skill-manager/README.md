@@ -54,11 +54,33 @@ The benchmark engine runs a symmetric A/B test: for every generated case, one ta
 
 ## Model Experience
 
-The `skill-create` system skill instructs the model through the create → analyze → ask → generate → validate → security → preview → test → improve → save workflow, calling `skill_manage` for every file operation. The tool renders compact text results (validation reasons, security verdicts and findings, save paths, benchmark summaries). Benchmarks and Auto Improve run in the background so the model never blocks on long task executions.
+### skill_manage tool
+
+#### What the model sees
+
+The `skill_manage` tool is the Skill Creator's programming surface: one tool with an action discriminator (validate, security-check, list, read, save, remove, restore, delete, set-enabled, versions, rollback, benchmark-start, benchmark-poll, benchmark-cancel, auto-improve). Its results render as compact text: validation reasons, security verdicts and findings, save paths, and benchmark summaries.
+
+#### Token effect
+
+The tool renders short text results; benchmarks and Auto Improve run in the background so the model never blocks on long task executions.
 
 #### KV Cache effect
 
-No direct effect. The runtime skill registration is per task-agent scope, so benchmark task runs do not change the calling session's request history.
+No direct effect: benchmark task runs are separate sessions (task-agent scope) and do not change the calling session's request history.
+
+### skill-create runtime skill
+
+#### What the model sees
+
+The bundled `skill-create` system skill instructs the model through the create → analyze → ask → generate → validate → security → preview → test → improve → save workflow. It is user-invocable only (the /skill-create gesture), so the model never discovers it on its own.
+
+#### Token effect
+
+Loading the skill body adds its instructions to the invoking session for the duration of the workflow.
+
+#### KV Cache effect
+
+The registration is per task-agent scope; enabling or running the workflow does not change the calling session's request history.
 
 ## Known Limitations and Deferred Work
 

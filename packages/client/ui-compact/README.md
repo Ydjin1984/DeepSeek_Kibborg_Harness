@@ -12,7 +12,7 @@ The `/client` exports are the plugin body (`apply`/`inject`), the `CompactContro
 
 ## Model Experience
 
-Indirectly: the button invokes `/compact`, whose handler performs one summarizing compaction — the model call and the surface replacement are the backend's own, logged as the `compaction/start…end` bracket plus the checkpoint `user/message`. The button itself adds no prompt content and no session events; the two projections it reads are read-side only.
+Indirectly, through the host /compact command the button dispatches: the handler performs one summarizing compaction — the model call and the surface replacement are the compaction backend's own, logged as the `compaction/start…end` bracket plus the checkpoint `user/message`.
 
 #### KV Cache effect
 

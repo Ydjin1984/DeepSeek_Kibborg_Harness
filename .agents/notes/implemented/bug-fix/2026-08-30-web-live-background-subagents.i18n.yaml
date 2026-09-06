@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-30-web-live-background-subagents.md
-2026-08-30-web-live-background-subagents.md: c3721d6e78f0a8512bfa148f851c6b13653eb78c
-2026-08-30-web-live-background-subagents.zh.md: eabb8041cf3d48484383aab7c7fadb01490c49d3
+2026-08-30-web-live-background-subagents.md: 6ffac3d436d36f332352038f1dc7aa526625100c
+2026-08-30-web-live-background-subagents.zh.md: 725acbcc50c63e2ba66a2b8a0790f671e32a45cf

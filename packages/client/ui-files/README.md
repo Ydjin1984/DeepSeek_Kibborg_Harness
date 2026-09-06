@@ -10,7 +10,7 @@ All three host verbs are session-routed and containment-checked by the host (`ap
 
 ## Model Experience
 
-Indirectly: a dropped file becomes a regular draft file whose submit path cites the original project path in the durable user message. Editing a Markdown file through the dialog writes the file on disk; neither action adds prompt content by itself.
+Indirectly, through the host draft-message path: a dropped file becomes a regular draft file whose submit path cites the original project path in the durable user message, and editing a Markdown file through the dialog writes the file on disk.
 
 #### KV Cache effect
 

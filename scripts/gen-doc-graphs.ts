@@ -98,6 +98,14 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'mcpServers',
+    pkg: 'mcp-servers',
+    title: 'MCP server registry connector',
+    mode: 'core',
+    consumers: ['tools'],
+    note: 'Reads the user and project `mcpServers` registries and deploys one `mcp-client` instance per declared server; tools land on the global tool layer as `mcp__<server>__<tool>`.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

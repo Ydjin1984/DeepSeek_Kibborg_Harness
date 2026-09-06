@@ -72,7 +72,7 @@ The `host.listChildren` / `host.readTextFile` / `host.writeTextFile` trio backs 
 
 ## Model Experience
 
-Indirectly: the file-attachment admission path folds an attached-file description into the durable user message the session submits — `describeFile` writes `Attached file: <name> (<mediaType>, <bytes> bytes)\nPath: <path>`, so files the user attaches (paperclip or the workspace panel) reach the model as prose through the ordinary prompt path. The rest of the package defines the wire contract and carriers and assembles no provider request of its own.
+Indirectly, through the file-attachment admission path: `describeFile` folds an attached-file description into the durable user message the session submits (`Attached file: <name> (<mediaType>, <bytes> bytes); Path: <path>`), so attached files reach the model as prose through the ordinary prompt path.
 
 #### KV Cache effect
 

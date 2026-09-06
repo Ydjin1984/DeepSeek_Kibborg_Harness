@@ -423,6 +423,12 @@ interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean
+  /**
+   * Device-code OAuth this adapter offers for the route. Absent means the
+   * Models page shows no subscription sign-in. The credential reference is
+   * the stored OAuth JSON; it is never an API key.
+   */
+  oauth?: LlmProviderOAuth
 }
 ```
 

@@ -2,7 +2,7 @@
 
 Status: implemented
 
-English | [中文](2026-08-31-benchmark-loud-llm-failures.zh.md)
+[English](2026-08-31-benchmark-loud-llm-failures.md) | 中文
 
 ## 问题
 

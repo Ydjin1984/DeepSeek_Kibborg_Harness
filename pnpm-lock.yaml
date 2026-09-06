@@ -150,6 +150,9 @@ importers:
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:^
         version: link:../../packages/boot/app-boot
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../packages/util/atomic-write
       '@deepseek-ai/dsh-base':
         specifier: workspace:^
         version: link:../../packages/bundle/base
@@ -201,6 +204,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-mcp-servers':
+        specifier: workspace:^
+        version: link:../../packages/mcp/mcp-servers
       '@deepseek-ai/dsh-persona':
         specifier: workspace:^
         version: link:../../packages/preset/persona
@@ -1075,6 +1081,9 @@ importers:
       '@deepseek-ai/dsh-llm-retry':
         specifier: workspace:^
         version: link:../../llm/llm-retry
+      '@deepseek-ai/dsh-mcp-servers':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-servers
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../interaction/permission-presets
@@ -1368,6 +1377,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-settings-general':
         specifier: workspace:^
         version: link:../../client/ui-settings-general
+      '@deepseek-ai/dsh-client-ui-settings-mcp':
+        specifier: workspace:^
+        version: link:../../client/ui-settings-mcp
       '@deepseek-ai/dsh-client-ui-settings-models':
         specifier: workspace:^
         version: link:../../client/ui-settings-models
@@ -1449,6 +1461,9 @@ importers:
       '@deepseek-ai/dsh-launch-environment':
         specifier: workspace:^
         version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-client
       '@deepseek-ai/dsh-message-feedback':
         specifier: workspace:^
         version: link:../../feedback/message-feedback
@@ -2737,6 +2752,45 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1
 
+  packages/client/ui-settings-mcp:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../locale
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-test-runtime':
+        specifier: workspace:^
+        version: link:../../test-support/client-runtime
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: workspace:^
+        version: link:../ui-primitives
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:^
+        version: link:../ui-settings
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:^
+        version: link:../ui-slots
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   packages/client/ui-settings-models:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -3681,6 +3735,12 @@ importers:
       '@deepseek-ai/dsh-settings':
         specifier: workspace:^
         version: link:../../settings/settings
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:^
+        version: link:../../skill/skill
+      '@deepseek-ai/dsh-skill-filesystem':
+        specifier: workspace:^
+        version: link:../../skill/skill-filesystem
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../subagent/subagent
@@ -5245,6 +5305,9 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-mcp-servers':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-servers
       '@deepseek-ai/dsh-storage':
         specifier: workspace:^
         version: link:../../storage/storage
@@ -5971,6 +6034,46 @@ importers:
       '@modelcontextprotocol/server-filesystem':
         specifier: ^2026.7.4
         version: 2026.7.10(zod@4.4.3)
+
+  packages/mcp/mcp-servers:
+    dependencies:
+      '@deepseek-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-mcp-client':
+        specifier: workspace:^
+        version: link:../mcp-client
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:^
+        version: link:../../boot/app-boot
+      '@deepseek-ai/dsh-attachment':
+        specifier: workspace:^
+        version: link:../../attachment/attachment
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/plan/plan-mode:
     dependencies:

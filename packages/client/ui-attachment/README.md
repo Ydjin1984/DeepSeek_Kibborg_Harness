@@ -24,7 +24,7 @@ Dynamic attachment presentation plugin for the conversation UI. It waits for the
 
 ## Model Experience
 
-The attach-files button lets the user add files of any format to a message; the host admission converts those bytes into a model-visible text descriptor (plus inline content for text-decodable files) and materializes the bytes under the session workspace so the model can read them with its tools. The plugin itself renders only attachment state supplied by the conversation UI and neither assembles nor sends a provider request.
+None, as this package renders the attach button and reads attachment state supplied by the conversation UI; the host admission converts attached bytes into a model-visible text descriptor and materializes them under the session workspace.
 
 #### KV Cache effect
 

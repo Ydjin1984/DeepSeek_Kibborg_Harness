@@ -54,11 +54,33 @@ DeepSeek Harness 的技能生命周期管理：原生 `SKILL.md` 格式之上的
 
 ## Model Experience
 
-`skill-create` 系统技能指导模型完成 创建 → 分析 → 提问 → 生成 → 校验 → 安全 → 预览 → 测试 → 改进 → 保存 的工作流，所有文件操作都调用 `skill_manage`。工具渲染紧凑的文本结果（校验原因、安全结论与发现、保存路径、基准评测摘要）。基准评测与 Auto Improve 在后台运行，模型不会阻塞于长时间任务执行。
+### skill_manage 工具
 
-#### KV Cache effect
+#### 模型看到的内容
 
-无直接影响。运行时技能注册是每个任务 agent 作用域级的，因此基准评测任务运行不会改变调用会话的请求历史。
+`skill_manage` 工具是 Skill Creator 的程序化接口：一个带动作判别器的工具（validate, security-check, list, read, save, remove, restore, delete, set-enabled, versions, rollback, benchmark-start, benchmark-poll, benchmark-cancel, auto-improve）。其结果以紧凑文本呈现：校验原因、安全结论与发现、保存路径和基准评测摘要。
+
+#### Token 影响
+
+工具渲染简短文本结果；基准评测和 Auto Improve 在后台运行，模型不会阻塞于长时间任务执行。
+
+#### KV Cache 影响
+
+无直接影响：基准评测任务是独立会话（task-agent 作用域），不改变调用会话的请求历史。
+
+### skill-create 运行时技能
+
+#### 模型看到的内容
+
+打包的 `skill-create` 系统技能指导模型完成 create → analyze → ask → generate → validate → security → preview → test → improve → save 工作流。它仅限用户调用（/skill-create 手势），因此模型不会自行发现它。
+
+#### Token 影响
+
+加载技能正文会在工作流持续期间将其指令添加到调用会话中。
+
+#### KV Cache 影响
+
+注册是 per task-agent 作用域级的；启用或运行工作流不改变调用会话的请求历史。
 
 ## 已知限制与后续工作
 

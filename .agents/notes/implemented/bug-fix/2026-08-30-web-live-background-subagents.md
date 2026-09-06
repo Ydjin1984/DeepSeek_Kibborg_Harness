@@ -28,9 +28,9 @@ The address is retained for later navigation (`selectSubagent`), and `SessionRun
 
 A new projection unit folds `turn/start`, `tool/call`, `assistant/message`, and `turn/end` into `{ status: 'running' | 'idle', detail }` where `detail` is the last tool name or a bounded (60-char) whitespace-collapsed reply snippet. The api-proxy's `session/projection` broadcast drops this key for non-subagent sessions, so ordinary sessions push no extra frames. The subagent catalog row (`SubagentCatalogAction`) renders `detail` in the secondary line while the child is running.
 
-### Rejected: periodic "poke" of background children
+## Alternatives considered
 
-A watchdog that re-sends a message every few seconds would wake the model per poke — an LLM request per child per interval — and the server already executes children correctly; the symptom was visibility, not execution. Poking would burn tokens without fixing the display.
+**Periodic "poke" of background children.** Rejected: a watchdog that re-sends a message every few seconds would wake the model per poke — an LLM request per child per interval — and the server already executes children correctly; the symptom was visibility, not execution. Poking would burn tokens without fixing the display.
 
 ## Consequences
 

@@ -72,11 +72,11 @@ Workspace 列表与 Session 列表是相互独立的重连基线。`workspace.cr
 
 ## 模型体验
 
-间接：文件附件准入路径会把附件描述折叠进会话提交的持久用户消息——`describeFile` 写出 `Attached file: <name> (<mediaType>, <bytes> bytes)\nPath: <path>`，因此用户附加的文件（回形针或工作区面板）作为散文经普通 prompt 路径到达模型。该包其余部分定义 wire 约定与载体，自身不组装提供方请求。
+间接，通过文件附件准入路径：`describeFile` 将附件描述折叠进会话提交的持久用户消息（`Attached file: <name> (<mediaType>, <bytes> bytes); Path: <path>`），因此用户附加的文件作为普通文本经标准 prompt 路径到达模型。
 
 #### KV Cache 影响
 
-无；该包既不组装也不发送提供方请求。附件散文经调用方的普通用户消息 prompt 路径进入，其缓存效果与任意用户消息相同。
+无；该包既不组装也不发送提供方请求。附件文本通过调用方的普通用户消息 prompt 路径进入，其缓存效果与任意用户消息相同。
 
 ## 已知限制与暂缓事项
 
