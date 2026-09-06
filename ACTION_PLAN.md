@@ -83,11 +83,15 @@
 
 ### T6 Policy-split оркестратора (голова без heavy tools)
 **Цель:** запрет голове на nmap/idat/тяжёлые цепочки — в `ctx.tools` policy, а не текстом в промпте.
-**Точки внедрения (киборг):** `packages/interaction/user-approval/src/index.ts` — `request()` стр. 257 (уже есть `agent`+`toolName`); `packages/context/orchestrator/src/index.ts` — tool `executor` стр. 193-247 (`delegationDepthOf()` стр. 239 уже есть); waterfall `tools/execute` в guard/timeout-policy стр. 56. Объём S, риск низкий.
-- [ ] Исследовать текущий механизм permission/interaction (киборг: `ApprovalPolicy 'ask'|'never'`, presets, `effectivePolicy()` стр. 285).
-- [ ] Ввести policy matrix: роль (head/executor/subagent) × tool-класс (read/mutate/network/exploit/heavy) → allow/deny/approval.
-- [ ] Голова: deny на тяжёлые/эксплуатационные тулы (только через исполнителя); субагенты — по назначенным правам.
-- **Статус:** pending (после T4).
+**Точки внедрения (киборг):** `packages/context/orchestrator/src/index.ts` (tool `executor` стр. 193-247, `delegationDepthOf()` стр. 239); waterfall `tools/pre-execute` (до approval; образец регистрации — guard/timeout-policy `tools/execute`).
+- [x] **Решение T6-v1 (консенсус: оба против tools.restrict на scope головы — наследование сожрёт тулы executor):**
+  1. **Enforcement** (оба): listener на `tools/pre-execute`: `delegationDepth === 0 && tool ∈ headDenyTools` → `deny` СРАЗУ (до ask/approval/guardReason — approval не должен разрешать запрещённое); детерминированный отказ. depth ≥ 1 (executor) — не трогаем.
+  2. **Видимость** (Grok, defense-in-depth к T4): на preStep/schema snapshot для depth 0 heavy-тулы не попадают в схему модели (голова физически не выбирает то, чего нет в снимке); executor (depth 1) — полная схема. НЕ через tools.restrict (наследование), а фильтрацией схемы по роли.
+  3. **Конфиг** (оба): deny-list `headDenyTools` в конфиге пресета оркестратора (cordis.yml, профиль/bundle) — рядом с тем, что задаёт голову/исполнителя; session может только сузить (добавить deny), не расширить. Терминология — executionPolicy (ChatGPT); не размазывать по permission-preset sandbox/approval.
+  4. **НЕ трогать** ToolDefinition.risk в v1 (класс риска — T7/engagement, Grok).
+- [ ] Исследовать API регистрации waterfall-listener `tools/pre-execute` (образец: guard/timeout-policy `tools/execute`; тип PreToolDecision).
+- [ ] Реализовать: конфиг orchestrator `policy.headDenyTools` + listener deny + фильтрация схемы для depth 0 + тесты (голова deny; executor видит; approval не переопределяет deny).
+- **Статус:** решение принято (см. журнал); реализация — следующий шаг.
 
 ### T7 Engagement stub
 **Цель:** scope-файл + deny сети вне allowlist (минимальный ROE, до полного Engagement Mode).
@@ -171,3 +175,5 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | T2: размещение/объём ctx.executions | **ПОЛНЫЙ консенсус**: новый тонкий пакет packages/execution/execution; v1 = проекция (registry+status+event log), без управления; адаптеры в существующих пакетах без миграции контрактов |
 | 06.09.2026 | T2-v1 реализован | Коммит 8a89e561b1: пакет execution (SM+registry+service+invariant), адаптер jobs; 101+ тест, coverage 100%, lint clean |
 | 06.09.2026 | T3-v1 реализован | Коммит fa30951208: ResourceLeaseRegistry (acquire/heartbeat/release/sweep/status/isLive), ctx.executions.resources; 137 тестов, coverage 100%; durable v2 — следующий срез |
+| 06.09.2026 | Сборка + рестарт сервера | Полный build зелёный (после TS-фиксов тестов, коммит 2d8a1684e1); сервер на 3080 перезапущен супервизором, HTTP 200 |
+| 06.09.2026 | T6: механизм policy-split | **Консенсус**: НЕ tools.restrict (наследование); enforcement на tools/pre-execute до approval (depth 0 × headDenyTools → deny) + видимость-фильтр схемы для depth 0; deny-list в конфиге пресета оркестратора |
