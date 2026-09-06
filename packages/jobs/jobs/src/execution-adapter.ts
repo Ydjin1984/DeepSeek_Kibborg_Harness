@@ -3,8 +3,10 @@
  *
  * Projects JobStatus changes into the unified execution state machine
  * (`ctx.executions`). The adapter is optional: it resolves the execution
- * service via `ctx.get('executions')` (AGENTS.md optional-service pattern),
- * so jobs keeps working unchanged when the execution package is absent.
+ * service lazily on every jobs commit via `ctx.get('executions')`
+ * (AGENTS.md optional-service pattern), so jobs keeps working unchanged when
+ * the execution package is absent — and the projection starts working as soon
+ * as the service mounts, whatever the plugin-mount order.
  *
  * Projection model: re-reads `ctx.jobs.list()` on every `onJobsChanged`
  * commit and maps each observed JobStatus transition onto a state-machine
@@ -59,16 +61,16 @@ function jobStatusEvent(status: JobStatus): ExecutionEventTypeCode | undefined {
  * @returns disposer that unregisters the projection subscription.
  */
 export function registerExecutionAdapter(ctx: Context): ExecutionAdapterRegistration {
-  const executions = ctx.get('executions') as ExecutionSurface | undefined
-  if (!executions?.register || !executions.transition) {
-    // Execution service not available — the adapter stays a no-op.
-    return () => {}
-  }
-
   const registered = new Set<string>()
   const projected = new Map<string, JobStatus>()
 
   const unregisterChanged = ctx.jobs.onJobsChanged(() => {
+    // Resolve the execution service lazily on every commit: plugin mounting is
+    // topology-driven, so `ctx.executions` may become available after this
+    // adapter registered. When the service is absent the projection is a no-op.
+    const executions = ctx.get('executions') as ExecutionSurface | undefined
+    if (executions === undefined) return
+
     const snapshots = ctx.jobs.list()
     for (const snapshot of snapshots) {
       const { id, status } = snapshot

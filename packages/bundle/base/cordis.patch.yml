@@ -69,6 +69,14 @@
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
 
+    - id: execution
+      name: '@deepseek-ai/dsh-execution'
+
+    - id: engagement-stub
+      name: '@deepseek-ai/dsh-engagement-stub'
+      config:
+        enabled: false
+
     - id: llm-retry
       name: '@deepseek-ai/dsh-llm-retry'
 
