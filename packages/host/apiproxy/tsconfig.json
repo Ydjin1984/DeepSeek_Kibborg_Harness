@@ -45,6 +45,9 @@
       "path": "../../preset/agent-presets"
     },
     {
+      "path": "../../mcp/mcp-servers"
+    },
+    {
       "path": "../../core/session"
     },
     {

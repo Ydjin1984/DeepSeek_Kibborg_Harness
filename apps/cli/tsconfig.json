@@ -60,6 +60,9 @@
       "path": "../../packages/mcp/mcp-client"
     },
     {
+      "path": "../../packages/mcp/mcp-servers"
+    },
+    {
       "path": "../../packages/test-support/loader-smoke"
     },
     {

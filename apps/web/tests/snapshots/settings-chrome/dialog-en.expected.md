@@ -7,6 +7,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Orchestrator":
+      - img
+      - text: Orchestrator
     - button "Plugins":
       - img
       - text: Plugins
@@ -16,6 +19,9 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "MCP servers":
+      - img
+      - text: MCP servers
   - button "Open configuration file"
   - button "Close":
     - img

@@ -7,6 +7,9 @@
     - button "Модели":
       - img
       - text: Модели
+    - button "Оркестратор":
+      - img
+      - text: Оркестратор
     - button "Плагины":
       - img
       - text: Плагины
@@ -16,6 +19,9 @@
     - button "Пресеты агента":
       - img
       - text: Пресеты агента
+    - button "MCP-серверы":
+      - img
+      - text: MCP-серверы
   - button "Открыть файл конфигурации"
   - button "Закрыть":
     - img

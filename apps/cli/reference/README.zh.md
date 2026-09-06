@@ -92,6 +92,13 @@ dsh web --help
 
 通过 `dsh plugin --profile <name> add <package-or-git-spec>` 安装外部插件组合包。安装的包拥有其依赖，并贡献其声明的 `cordis.patch.yml` 层。CLI 还随附 `@deepseek-ai/dsh-mcp-client` 作为供 patch 层使用的依赖，但默认不启用 MCP 服务器，因为每条服务器命令都是 agent（智能体）沙箱之外的受信任可执行代码。
 
+MCP 服务器通过注册表连接器管理，而不是手写补丁：`dsh mcp add|list|remove|enable|disable` 以 Claude Code 的 `mcpServers` 格式编辑 `$DSH_HOME/mcpServers.json`（带 `--project` 则编辑项目 `.mcp.json`），每个 profile 的 base 组合包（`@deepseek-ai/dsh-mcp-servers`）会监听这些文件，并为每个声明的服务器部署一个 `@deepseek-ai/dsh-mcp-client` 实例，把它的工具以 `mcp__<server>__<tool>` 暴露给每个 agent。空注册表不部署任何内容。
+
+```sh
+dsh mcp add filesystem --command npx --arg -y --arg @modelcontextprotocol/server-filesystem
+dsh mcp list
+```
+
 ## 源码执行
 
 请在仓库根目录中，于全新 checkout 之后及产物需要更新时单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>`。`package.json` 中的脚本不会构建，而是通过 `node --import tsx/esm` 启动 `apps/cli/src/bin.ts`，并转发所有参数。Typert Host 产物缺失时，profile 启动会因不含构建指引的模块解析错误而失败。这些 Host 产物存在后，如果前端或 Client plugin 组合包缺失，启动会失败并提示运行 `pnpm run build`。启动器不会检查产物是否为最新，因此已有的陈旧组合包可能继续运行旧版浏览器代码，直至重新构建。该进程会继承启动环境；当支持环境代理的 Node 版本必须遵循 `HTTP_PROXY` 和 `HTTPS_PROXY` 时，请设置 `NODE_USE_ENV_PROXY=1`。安装形式会直接启动构建后的 `apps/cli/lib/bin.js`，不会重新构建仓库。

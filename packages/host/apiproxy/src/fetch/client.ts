@@ -67,6 +67,9 @@ import {
   agentPresetReadValueSchema, agentPresetRemoveValueSchema, agentPresetSelectValueSchema,
 } from '../api/agent-presets.schema.ts'
 import {
+  mcpListValueSchema, mcpRemoveValueSchema, mcpSaveValueSchema,
+} from '../api/mcp.schema.ts'
+import {
   goalCreateValueSchema,
   goalEditValueSchema,
   goalPauseValueSchema,
@@ -179,6 +182,11 @@ export interface IApiClient {
     openComposition(payload: RequestPayload<'agentPreset.openComposition'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.openComposition'>>>
     remove(payload: RequestPayload<'agentPreset.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'agentPreset.remove'>>>
   }
+  mcp: {
+    list(payload: RequestPayload<'mcp.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'mcp.list'>>>
+    save(payload: RequestPayload<'mcp.save'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'mcp.save'>>>
+    remove(payload: RequestPayload<'mcp.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'mcp.remove'>>>
+  }
   events: {
     mux(payload: Parameters<ApiProxy['events']['mux']>[0]['payload'], signal: AbortSignal, onOpen?: () => void): AsyncIterable<RpcRequest<MuxFrame>>
     host(payload: Parameters<ApiProxy['events']['host']>[0]['payload'], signal: AbortSignal, onOpen?: () => void): AsyncIterable<RpcRequest<HostFrame>>
@@ -278,6 +286,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'agentPreset.openDocument': agentPresetOpenDocumentValueSchema,
   'agentPreset.openComposition': agentPresetOpenCompositionValueSchema,
   'agentPreset.remove': agentPresetRemoveValueSchema,
+  'mcp.list': mcpListValueSchema,
+  'mcp.save': mcpSaveValueSchema,
+  'mcp.remove': mcpRemoveValueSchema,
   'goal.create': goalCreateValueSchema,
   'goal.edit': goalEditValueSchema,
   'goal.pause': goalPauseValueSchema,
@@ -568,6 +579,12 @@ export abstract class AbstractApiClient implements IApiClient {
     openDocument: (payload, signal) => this.callUnary('agentPreset.openDocument', payload, signal),
     openComposition: (payload, signal) => this.callUnary('agentPreset.openComposition', payload, signal),
     remove: (payload, signal) => this.callUnary('agentPreset.remove', payload, signal),
+  }
+
+  readonly mcp: IApiClient['mcp'] = {
+    list: (payload, signal) => this.callUnary('mcp.list', payload, signal),
+    save: (payload, signal) => this.callUnary('mcp.save', payload, signal),
+    remove: (payload, signal) => this.callUnary('mcp.remove', payload, signal),
   }
 
   readonly goals: IApiClient['goals'] = {

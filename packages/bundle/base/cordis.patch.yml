@@ -449,3 +449,11 @@
     # choice.
     - id: llm-deepseek
       name: '@deepseek-ai/dsh-llm-deepseek'
+
+    # The MCP server registry connector: deploys one mcp-client instance per
+    # server declared in $DSH_HOME/mcpServers.json and the project .mcp.json,
+    # so every profile (web, CLI, headless) exposes the user's MCP servers to
+    # every agent. An empty registry deploys nothing — the row is inert until
+    # a registry declares a server, keeping the trusted-code default intact.
+    - id: mcp-servers
+      name: '@deepseek-ai/dsh-mcp-servers'

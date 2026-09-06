@@ -92,6 +92,13 @@ Session telemetry stays local by default. `DSH_TELEMETRY_MODE=FULL` streams ever
 
 Install external plugin bundles through `dsh plugin --profile <name> add <package-or-git-spec>`. The installed package owns its dependencies and contributes its declared `cordis.patch.yml` layer. The CLI also ships `@deepseek-ai/dsh-mcp-client` as a dependency for patch layers, but no MCP server is enabled by default because each server command is trusted executable code outside the agent sandbox.
 
+MCP servers are managed through the registry connector instead of hand-written patches: `dsh mcp add|list|remove|enable|disable` edits `$DSH_HOME/mcpServers.json` (the project `.mcp.json` with `--project`) in the Claude Code `mcpServers` format, and every profile's base bundle (`@deepseek-ai/dsh-mcp-servers`) watches those files and deploys one `@deepseek-ai/dsh-mcp-client` instance per declared server, exposing its tools as `mcp__<server>__<tool>` to every agent. An empty registry deploys nothing.
+
+```sh
+dsh mcp add filesystem --command npx --arg -y --arg @modelcontextprotocol/server-filesystem
+dsh mcp list
+```
+
 ## Source execution
 
 From the repository root, run `pnpm run build` separately after a fresh checkout and whenever artifacts need updating, then use `pnpm dsh <args...>`. The `package.json` script launches `apps/cli/src/bin.ts` with `node --import tsx/esm` without building and forwards every argument. Missing Typert host artifacts fail profile boot through module-resolution errors without a build instruction. Once those host artifacts exist, missing frontend or client-plugin bundles fail at startup with an instruction to run `pnpm run build`. The launcher does not check freshness, so existing stale bundles can run older browser code until rebuilt. The process inherits the launch environment; set `NODE_USE_ENV_PROXY=1` when a supporting Node version must honor `HTTP_PROXY` and `HTTPS_PROXY`. The installed form launches the built `apps/cli/lib/bin.js` without rebuilding the repository.

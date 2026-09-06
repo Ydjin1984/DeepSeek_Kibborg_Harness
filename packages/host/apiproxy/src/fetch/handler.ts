@@ -69,6 +69,9 @@ import {
   agentPresetReadRequestSchema, agentPresetRemoveRequestSchema, agentPresetSelectRequestSchema,
 } from '../api/agent-presets.schema.ts'
 import {
+  mcpListRequestSchema, mcpRemoveRequestSchema, mcpSaveRequestSchema,
+} from '../api/mcp.schema.ts'
+import {
   goalCreateRequestSchema,
   goalEditRequestSchema,
   goalPauseRequestSchema,
@@ -190,6 +193,9 @@ const UNARY_ROUTES: UnaryRoutes = {
   'llm.oauthLoginWait': { schema: llmOauthLoginWaitRequestSchema, invoke: (api, r, signal) => api.llm.oauthLoginWait(r, signal) },
   'llm.oauthLoginCancel': { schema: llmOauthLoginCancelRequestSchema, invoke: (api, r) => api.llm.oauthLoginCancel(r) },
   'llm.oauthLogout': { schema: llmOauthLogoutRequestSchema, invoke: (api, r) => api.llm.oauthLogout(r) },
+  'mcp.list': { schema: mcpListRequestSchema, invoke: (api, r) => api.mcp.list(r) },
+  'mcp.save': { schema: mcpSaveRequestSchema, invoke: (api, r) => api.mcp.save(r) },
+  'mcp.remove': { schema: mcpRemoveRequestSchema, invoke: (api, r) => api.mcp.remove(r) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */

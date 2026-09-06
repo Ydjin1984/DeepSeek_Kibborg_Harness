@@ -159,6 +159,19 @@ function scriptedApi(overrides: {
     },
     events: { mux: () => empty<MuxFrame>(), host: () => empty<HostFrame>(), ...overrides.events },
     respond: overrides.respond ?? (() => Promise.resolve({ accepted: false as const, reason: 'not-pending' as const })),
+    mcp: {
+      list: async request => ok(request, { servers: [] }),
+      save: async request => ok(request, {
+        server: {
+          name: request.payload.name,
+          source: 'user' as const,
+          enabled: true,
+          state: 'starting' as const,
+          toolCount: 0,
+        },
+      }),
+      remove: async request => ok(request, {}),
+    },
     downloads: { sessionLog: async () => new Response('stub', { status: 404 }) },
   }
 }

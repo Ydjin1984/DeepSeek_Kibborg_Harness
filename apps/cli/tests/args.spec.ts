@@ -104,3 +104,14 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--version'])).toBe(0)
   })
 })
+
+describe('parseDshArgs mcp mode', () => {
+  it('routes mcp subcommands verbatim and rejects an empty one', () => {
+    expect(parse(['mcp', 'add', 'demo', '--command', 'npx', '--arg', '-y']))
+      .toEqual({ mode: 'mcp', args: ['add', 'demo', '--command', 'npx', '--arg', '-y'] })
+    expect(parse(['mcp', 'list', '--json']))
+      .toEqual({ mode: 'mcp', args: ['list', '--json'] })
+    expect(exitCode(['mcp'])).toBe(1)
+    expect(exitCode(['--profile', 'x', 'mcp', 'list'])).toBe(1)
+  })
+})

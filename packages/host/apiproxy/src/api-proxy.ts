@@ -43,9 +43,11 @@ import {
   PresetNotWritableError, resolveSessionPreset, UnknownPresetError,
 } from '@deepseek-ai/dsh-agent-presets'
 import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
+import type { McpServers, McpServerStatus as HostMcpServerStatus } from '@deepseek-ai/dsh-mcp-servers'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
+  McpServerView,
   ModelCatalogFailure, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
@@ -501,6 +503,26 @@ async function buildModelCatalog(ctx: Context): Promise<{
 /** Wrap an error result echoing the request's rpcId. */
 function err<T>(request: RpcRequest<unknown>, error: RpcError): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: false, error } }
+}
+
+/**
+ * Project one registry status into its wire view, dropping the Host-side
+ * registry file path.
+ * @param server - status as the registry service reports it.
+ * @returns the browser-visible view.
+ */
+function mcpServerView(server: HostMcpServerStatus): McpServerView {
+  return {
+    name: server.name,
+    source: server.source,
+    enabled: server.enabled,
+    state: server.state,
+    toolCount: server.toolCount,
+    ...server.kind === undefined ? {} : { kind: server.kind },
+    ...server.command === undefined ? {} : { command: server.command },
+    ...server.url === undefined ? {} : { url: server.url },
+    ...server.error === undefined ? {} : { error: server.error },
+  }
 }
 
 /**
@@ -3428,6 +3450,65 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return ok(request, {})
         } catch (error: unknown) {
           return err(request, presetError(agentPreset, error))
+        }
+      },
+    },
+
+    mcp: {
+      // A deployment without the registry connector answers with an empty
+      // list rather than an error: composing no registry is a valid
+      // deployment, and the browser simply offers no servers.
+      list(request) {
+        const servers: McpServers | undefined = ctx.get('mcpServers')
+        if (servers === undefined) return Promise.resolve(ok(request, { servers: [] }))
+        const statuses = servers.list()
+        return Promise.resolve(ok(request, { servers: statuses.map(server => mcpServerView(server)) }))
+      },
+
+      // Saving is the one write the browser makes: the entry body follows the
+      // mcpServers convention, and the registry service validates the name and
+      // entry before persisting, so no path or command ever reaches the wire
+      // from the browser side.
+      async save(request) {
+        const { name, entry } = request.payload
+        const servers: McpServers | undefined = ctx.get('mcpServers')
+        if (servers === undefined) {
+          return err(request, {
+            code: 'mcp-servers-unavailable',
+            message: 'this deployment composes no MCP server registry',
+            details: {},
+          })
+        }
+        try {
+          return ok(request, { server: mcpServerView(await servers.saveUserServer(name, entry)) })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'mcp-server-invalid',
+            message: error instanceof Error ? error.message : String(error),
+            details: { name },
+          })
+        }
+      },
+
+      async remove(request) {
+        const { name } = request.payload
+        const servers: McpServers | undefined = ctx.get('mcpServers')
+        if (servers === undefined) {
+          return err(request, {
+            code: 'mcp-servers-unavailable',
+            message: 'this deployment composes no MCP server registry',
+            details: {},
+          })
+        }
+        try {
+          await servers.removeUserServer(name)
+          return ok(request, {})
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'mcp-server-remove-failed',
+            message: error instanceof Error ? error.message : String(error),
+            details: { name },
+          })
         }
       },
     },

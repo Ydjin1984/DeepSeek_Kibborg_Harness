@@ -44,8 +44,15 @@ interface PluginInvocation {
   args: string[]
 }
 
+/** Manage MCP servers in the registry files: `add`, `remove`, `enable`, `disable`, `list`. */
+interface McpInvocation {
+  mode: 'mcp'
+  /** Raw `dsh mcp` arguments, verbatim. */
+  args: string[]
+}
+
 /** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
-export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation | McpInvocation
 
 /** Launcher flags shared by the default command and the `web` alias. */
 interface BootOptions {
@@ -69,6 +76,9 @@ Examples:
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
   dsh --profile web --help                   the web app's own flags and help
   dsh plugin --profile tui add <package>     install a plugin into the tui profile
+  dsh mcp list                               list MCP servers in the user and project registries
+  dsh mcp add github --command npx --arg -y --arg @modelcontextprotocol/server-github
+                                             declare one MCP server the running Host deploys
 `
 
 /**
@@ -178,6 +188,19 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       if (options.profile === '') program.error('error: --profile needs a name')
       if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
       resolved = { mode: 'plugin', profile: options.profile, args }
+    })
+
+  const mcp = program.command('mcp').description('manage MCP servers in the registry files (add, remove, enable, disable, list)')
+  mcp
+    .helpOption(false)
+    .allowUnknownOption()
+    .passThroughOptions()
+    .enablePositionalOptions()
+    .argument('[args...]', 'mcp subcommand arguments (add <name> --command …, list, remove <name>, ...)')
+    .action((args: string[]) => {
+      rejectParentOptions('mcp')
+      if (args.length === 0) program.error('error: mcp needs a subcommand (add, remove, enable, disable, list)')
+      resolved = { mode: 'mcp', args }
     })
 
   try {

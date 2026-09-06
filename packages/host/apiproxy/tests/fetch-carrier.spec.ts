@@ -397,6 +397,31 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
     async respond(message: ClientResponse): Promise<RpcReceipt> {
       return message.rpcId === 'known' ? { accepted: true } : { accepted: false, reason: 'not-pending' }
     },
+    mcp: {
+      async list(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { servers: [] } } }
+      },
+      async save(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              server: {
+                name: request.payload.name,
+                source: 'user' as const,
+                enabled: true,
+                state: 'starting' as const,
+                toolCount: 0,
+              },
+            },
+          },
+        }
+      },
+      async remove(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+    },
     downloads: {
       async sessionLog() {
         return new Response('stub', { status: 404 })
