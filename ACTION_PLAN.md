@@ -30,36 +30,23 @@
 
 ### T2 ⏳ Execution state machine как сервис на существующем шве
 **Цель:** единый владелец жизненного цикла для jobs/subagents/goals/workflows/tools без нового пакета-монолита (позиция Grok после рецензии; спецификация — ChatGPT).
-- [ ] Исследовать текущие lifecycle-точки: `packages/jobs/*`, `packages/goal/*`, `packages/workflow/*`, `packages/subagent/*`, `packages/guard/*`, agent-loop в `core/` — где статусы, таймауты, отмена. (делегируется киборгу)
-- [ ] Определить шов: сервис `ctx.executions` (по аналогии с существующими сервисами/реестрами Cordis).
-- [ ] Спроектировать модель статусов (см. пример ниже) и идемпотентность `execution_id + operation_id + attempt + parent_execution_id`.
-- [ ] Реализовать state machine (чистая функция переходов + хранилище статусов) + тесты переходов (100% покрытие гейта).
-- [ ] Встроить риск-осведомлённость: переход `RUNNING→WAITING_TOOL` при `risk=exploit` → `WAITING_USER`.
-- **Пример (модель статусов, из консенсуса):**
-  ```ts
-  type ExecutionStatus =
-    | "CREATED" | "QUEUED" | "RUNNING"
-    | "WAITING_TOOL" | "WAITING_SUBAGENT" | "WAITING_USER"
-    | "COMPLETED"            // терминальный
-    | "FAILED" | "CANCELLED" | "TIMEOUT" | "ABORTED" // терминальные
-    // recovery-ветка:
-    // RUNNING → INTERRUPTED → RECOVERING → RUNNING | FAILED
-  type ExecutionRef = {
-    execution_id: string      // exec_xxx
-    operation_id: string      // tool_xxx (идемпотентность)
-    attempt: number
-    parent_execution_id?: string
-  }
-  ```
-- **Статус:** in_progress.
+- [x] **Решение T2-v1 (ПОЛНЫЙ консенсус ChatGPT+Grok):**
+  1. **Новый малый пакет `packages/execution/execution`** (`@deepseek-ai/dsh-execution`), рядом с jobs/, НЕ core, НЕ jobs. Service Definition + in-process store + event log; inject: sessions (для turn_id). Execution НЕ импортирует jobs/goal/workflow/subagent. Зависимости только вниз: `jobs|goal|workflow|subagent|guard → execution`. agent-loop читает ctx.executions.
+  2. **v1 = проекция/наблюдение:** register/observe от адаптеров, нормализация статусов в единую SM, `execution_id + parent_execution_id + attempt`, append-only ExecutionEvent, заготовка lease/resource_ref. **БЕЗ** `start/pause/cancel` на ctx.executions (иначе competing control planes с JobRegistry.kill/goal pause/workflow cancel).
+  3. **Без миграции контрактов:** JobStatus/GoalPhase/WorkflowStopReason не трогаем; маппинг внутри адаптеров (10-20 строк, живут в существующих пакетах): `jobs.running→RUNNING, killed→ABORTED, TOOL_TIMEOUT→TIMEOUT, blocked→WAITING_USER`; сохранять original status + normalized status (ExecutionStatus=WAITING_USER + reason="goal_paused" + source_status="paused").
+  4. Инвариант v1 (Grok): одно OS-действие = один execution_id; дочерний subagent = parent_execution_id; session пишет только turn_id.
+- [x] **Реализовано (коммит 8a89e561b1):** пакет `packages/execution/execution` — типы (ExecutionStatus/Kind/State/Event/Ref), чистая state machine (state-machine.ts, таблица переходов + ExecutionTransitionError INVALID_TRANSITION, 60 тестов), registry (register/transition/end/get/list/listByKind/on/off, append-only ExecutionEvent log, deep-copy наружу), ExecutionService (ctx.executions, Cordis-событие `execution/event`), invariant-компаньон, README. Адаптер `jobs/src/execution-adapter.ts` (projection: register→start→complete/fail/abort; stopping пропускается до терминала; идемпотентно; optional через ctx.get). Регистрация: tsconfig.base paths, tsconfig.host reference, pnpm-lock. 101 тест execution + jobs зелёные; coverage-гейт 100% per-file; lint clean.
+- [ ] Адаптеры goal/workflow/subagent — следующие итерации после стабилизации v1 (проекция их статусов в ту же SM).
+- [ ] Риск-осведомлённость SM (RUNNING→WAITING_TOOL при risk=exploit → WAITING_USER) — совместно с T6/T7 (policy/engagement).
+- **Статус:** v1 реализован и закоммичен; следующий шаг — T3 (resource registry на базе execution).
 
 ### T3 External Resource Registry + leases + orphan reconciler
 **Цель:** сессия знает про внешние ресурсы (Chrome CDP, PTY, IDA, sandbox, subprocess-tree) и восстанавливается fail-closed.
 - [x] **Q1 решён (консенсус ChatGPT+Grok):** registry — **внутренний модуль execution-сервиса** `ctx.executions.resources` (НЕ отдельный пакет, НЕ session). Session хранит только durable events (`resource.created/lease/released/orphaned/reconciled`); провайдеры chrome/pty/ida остаются своими пакетами; registry — учёт + orphan-sweep.
-- [ ] Спроектировать record (пример ниже) и registry-сервис: тонкий шов `acquire / heartbeat / release / reconcile / get(execution_id)`.
-- [ ] Snapshot внешних ресурсов в durable-хранилище сессии (resource events, не в session header — позиция после рецензии).
-- [ ] Orphan reconciler: при старте/после краха reconcile из SQLite: `verified | unavailable → resume/restart`.
-- [ ] Fail-closed: нет подтверждённого lease → статус `INTERRUPTED`, вопрос человеку (никогда «продолжить вслепую»).
+- [x] **Реализовано (коммит fa30951208):** `src/resources.ts` — ResourceLeaseRegistry: `acquire` (renew при leased), `heartbeat` (продлевает expiresAt), идемпотентный `release`, чистые fail-closed `status()`/`isLive()` (live/expired/released/orphaned/unknown), идемпотентный `sweep(now?)` (leased→orphaned один раз), `get`/`list` (deep copies), typed Cordis-событие `executions/resource`, ResourceError с кодами (RESOURCE_NOT_FOUND/NOT_LEASED/UNKNOWN). Экспонирован как `ctx.executions.resources`. Детерминированные тесты через now-инъекцию.
+- [ ] **v2 (durable):** resource-события в session-лог (`resource.created/lease/released/orphaned/reconciled`) + orphan reconciler из SQLite после краша (fail-closed: нет подтверждённого lease → `INTERRUPTED` + вопрос человеку).
+- [ ] Провайдеры (chrome/pty/ida) начинают вызывать acquire/heartbeat/release на своих ресурсах.
+- **Статус:** v1 реализован и закоммичен; v2-durable — следующий срез (вместе с durable ExecutionEvent).
 - **Пример (запись ресурса):**
   ```json
   {
@@ -125,9 +112,9 @@
 
 ### T8 Crash/restart тесты
 - [x] **Q3 решён (при 1:1 выбрана позиция Grok — фундаментальнее):** порядок — (1) **kill mid-write session** (сначала укрепить запись: fsync + атомарный rotate + «хвост битый = truncate до последнего валидного seq» — иначе порванный JSONL/SQLite не даст стартовать recovery), (2) kill mid-tool (lease + fail-closed: tool не COMPLETED → execution INTERRUPTED → повтор идемпотентен), (3) kill mid-subagent (граф parent/child). От ChatGPT принята методология: **crash injection по durable boundaries** (`BEFORE_START / AFTER_START / AFTER_SIDE_EFFECT / BEFORE_COMMIT / AFTER_COMMIT`), не произвольный process.kill.
-- [ ] Минимальный набор: C1 kill до tool; C2 kill во время tool; C3 kill после side-effect до commit result; C4 kill во время session persist; C5 restart → reconcile orphan; C6 replay unknown resource → FAIL CLOSED; C7 retry same operation_id → без дубля; затем C8 mid-subagent, C9 mid-workflow, C10 mid-goal.
-- [ ] Инфраструктура: spawn процесса-жертвы, kill, restart, проверка статусов.
-- **Статус:** pending (инфраструктура тестов — после T5).
+- [x] **Реализовано:** `kill-mid-write.e2e.ts` + `fixtures/mid-write-child.ts` (коммит 425162bbff): режимы `queued` (события в write-behind очереди при kill — теряются by design, лог остаётся loadable+appendable) и `flushed` (checkpoint-policy события выживают, interrupted turn закрывается синтетическим turn/end). skipIf(win32) как crash-recovery; исполняется на POSIX CI. Vitest: компиляция чистая.
+- [ ] Дальше (по мере готовности T2/T3): C2 kill mid-tool → execution INTERRUPTED + идемпотентный retry; C8 kill mid-subagent (parent/child граф).
+- **Статус:** первый сценарий (kill mid-write session) реализован и закоммичен.
 
 ---
 
@@ -180,3 +167,7 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | Точки внедрения T2/T4/T5/T6 | Исследование киборгом: agent.ts buildRequest/step (T4), coordinator.ts append (T5), user-approval request() + orchestrator executor (T6), шаблон ApprovalService (T2) |
 | 06.09.2026 | T4: вариант реализации | **Консенсус (a)**: сверка перед dispatch, детерминированный отказ; полный freeze (b) отклонён обоими. Проверка кода: (a) уже реализован (dispatchToolBody:1546 + тест code-mode.spec.ts:592). T4b (provider-swap после HMR → TOOL_SCHEMA_STALE) отложен до фундамента |
 | 06.09.2026 | T5-фундамент: durability записи | **Аудит: 8/10, single-writer и crash-recovery уже реализованы.** Deferred: syncDir per append, WAL checkpoint при close, autoFlush. Gap: процессные kill-тесты (T8) |
+| 06.09.2026 | T8: kill mid-write тест | **Реализован** kill-mid-write.e2e.ts (queued+flushed), коммит 425162bbff; skipIf(win32), исполняется на CI |
+| 06.09.2026 | T2: размещение/объём ctx.executions | **ПОЛНЫЙ консенсус**: новый тонкий пакет packages/execution/execution; v1 = проекция (registry+status+event log), без управления; адаптеры в существующих пакетах без миграции контрактов |
+| 06.09.2026 | T2-v1 реализован | Коммит 8a89e561b1: пакет execution (SM+registry+service+invariant), адаптер jobs; 101+ тест, coverage 100%, lint clean |
+| 06.09.2026 | T3-v1 реализован | Коммит fa30951208: ResourceLeaseRegistry (acquire/heartbeat/release/sweep/status/isLive), ctx.executions.resources; 137 тестов, coverage 100%; durable v2 — следующий срез |
