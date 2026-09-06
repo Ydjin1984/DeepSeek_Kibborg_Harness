@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-jobs",
-  "description": "Background job registry (ctx.jobs) for the DeepSeek Harness — shared ids, owner isolation, polling, cancellation, and completion listeners for long-running tool work",
+  "name": "@deepseek-ai/dsh-execution",
+  "description": "Unified lifecycle projection and state-machine for all work kinds (jobs, goals, workflows, subagents) — observability-first layer",
   "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"
@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
-    "directory": "packages/jobs/jobs"
+    "directory": "packages/execution/execution"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -22,9 +22,9 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
-    "./brand": {
-      "types": "./lib/types/brand.d.ts",
-      "default": "./lib/types/brand.js"
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -37,19 +37,17 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-execution": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/dsh-invariants": "workspace:^"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-execution": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/dsh-loader-smoke": "workspace:^"
   }
 }

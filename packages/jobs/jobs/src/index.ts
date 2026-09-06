@@ -26,6 +26,8 @@ export type {
   JobsChangedListener,
 } from './types.ts'
 
+export { registerExecutionAdapter } from './execution-adapter.ts'
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     jobs: JobRegistry
