@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Composition tests for `@deepseek-ai/dsh-engagement-stub`: verify the plugin
  * registers its `tools/pre-execute` listener when enabled, denies blocked tools
  * and out-of-scope hosts, emits `engagement/denied` audit events, and stays
@@ -14,8 +14,14 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 /** Type of the fiber returned by `ctx.plugin`. */
 type PluginFiber = Awaited<ReturnType<Context['plugin']>>
 
+/** Narrow a pre-execute decision to its deny reason, failing on non-deny. */
+function denyReason(decision: PreToolDecision): string {
+  if (decision.kind !== 'deny') throw new Error('expected a deny decision')
+  return decision.reason
+}
+
 /** Minimal agent stub for waterfall execution chains. */
-function agentAt(depth: number): { options: { subagentDepth: number }; session: { header: Record<string, unknown> } } {
+function agentAt(depth: number): { options: { subagentDepth: number }; session: { header: Record<string, never> } } {
   return {
     options: { subagentDepth: depth },
     session: { header: {} },
@@ -23,16 +29,12 @@ function agentAt(depth: number): { options: { subagentDepth: number }; session: 
 }
 
 /** Build a ToolExecution-like object for the waterfall. */
-function execOf(name: string, arguments_: unknown, depth = 0): ToolExecution {
+function execOf(name: string, arguments_: unknown): ToolExecution {
   return {
     name,
     arguments: arguments_,
-    agent: agentAt(depth),
-    signal: new AbortController().signal,
-    callId: { toString: () => `test-${name}-${Math.random()}` } as never,
-    rootCallId: undefined,
-    token: Symbol('tool-exec-token'),
-  }
+    agent: agentAt(0),
+  } as unknown as ToolExecution
 }
 
 const allowNext = (): Promise<PreToolDecision> => Promise.resolve({ kind: 'allow' })
@@ -75,7 +77,7 @@ describe('plugin: enabled contour', () => {
       allowNext,
     )
     expect(decision).toMatchObject({ kind: 'deny' })
-    expect(decision.reason).toBe('host evil.com is outside the engagement allowlist')
+    expect(denyReason(decision)).toBe('host evil.com is outside the engagement allowlist')
     await fiber.dispose()
   })
 
@@ -194,7 +196,7 @@ describe('plugin: enabled contour', () => {
         allowNext,
       )
       expect(decision.kind).toBe('deny')
-      expect(decision.reason).toContain(tool)
+      expect(denyReason(decision)).toContain(tool)
     }
     await fiber.dispose()
   })

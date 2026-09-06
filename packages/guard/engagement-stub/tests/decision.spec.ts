@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Unit tests for `@deepseek-ai/dsh-engagement-stub/decision`: `extractHost`
  * URL parsing and normalisation, `engagementDecision` blocked-tools, allowlist,
  * localhost bypass, fail-open, exact-match semantics, and subdomain
@@ -6,7 +6,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { engagementDecision, extractHost, type EngagementDecisionInput } from '../src/decision.ts'
+import { engagementDecision, extractHost, type EngagementDecision, type EngagementDecisionInput } from '../src/decision.ts'
+
+/** Narrow a decision to its deny reason, failing the test on an allow. */
+function denyReason(decision: EngagementDecision): string {
+  if (decision.kind !== 'deny') throw new Error('expected a deny decision')
+  return decision.reason
+}
 
 // ───────────────────────────────────────────
 // extractHost
@@ -143,7 +149,7 @@ describe('engagementDecision', () => {
       const input = { ...defaultInput(), toolName: tool, args: {}, blockedTools: allBlocked }
       const result = engagementDecision(input)
       expect(result.kind).toBe('deny')
-      expect(result.reason).toContain(tool)
+      expect(denyReason(result)).toContain(tool)
     }
   })
 
@@ -171,7 +177,7 @@ describe('engagementDecision', () => {
     const input = { ...defaultInput(), args: { url: 'https://evil.com/' }, allowedHosts: ['example.com'] }
     const result = engagementDecision(input)
     expect(result.kind).toBe('deny')
-    expect(result.reason).toBe('host evil.com is outside the engagement allowlist')
+    expect(denyReason(result)).toBe('host evil.com is outside the engagement allowlist')
   })
 
   it('fails-open when no URL-like arguments exist', () => {
@@ -193,7 +199,7 @@ describe('engagementDecision', () => {
     }
     const result = engagementDecision(input)
     expect(result.kind).toBe('deny')
-    expect(result.reason).toBe('tool nmap is blocked by the engagement contour')
+    expect(denyReason(result)).toBe('tool nmap is blocked by the engagement contour')
   })
 
   it('subdomain is not equal to allowlisted domain', () => {
@@ -224,7 +230,7 @@ describe('engagementDecision', () => {
     const input = { ...defaultInput(), args: { host: 'Evil.COM' }, allowedHosts: ['example.com'] }
     const result = engagementDecision(input)
     expect(result.kind).toBe('deny')
-    expect(result.reason).toBe('host evil.com is outside the engagement allowlist')
+    expect(denyReason(result)).toBe('host evil.com is outside the engagement allowlist')
   })
 
   it('allows bare host in allowlist', () => {
