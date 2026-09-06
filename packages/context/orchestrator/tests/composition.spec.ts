@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Orchestrator host-half composition: the executor tool mounts/unmounts with
  * the live settings namespace, the head prompt section is suppressed for
  * delegated agents, execution is head-only, and executor children are scoped
@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { PromptSection } from '@deepseek-ai/dsh-system-prompt'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { SubagentResult, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
 import { apply, inject } from '../src/index.ts'
 
@@ -28,7 +29,7 @@ interface RegisteredTool {
 interface Harness {
   ctx: Context
   /** Live settings the fake namespace serves. */
-  settings: { enabled: boolean; subagentProvider: string; executorProvider: string; executorModel: string }
+  settings: { enabled: boolean; subagentProvider: string; executorProvider: string; executorModel: string; headDenyTools: string[] }
   /** The result the fake subagent registry resolves for the next start. */
   fixture: { result: SubagentResult; disposeError?: Error }
   /** Registered tool definitions (name → definition). */
@@ -65,6 +66,7 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     subagentProvider: 'spawn',
     executorProvider: 'kibborg',
     executorModel: 'Kibborg_Flash_v5.7',
+    headDenyTools: [],
     ...initial,
   }
   const fixture: Harness['fixture'] = { result: resultOf('completed') }
@@ -179,8 +181,8 @@ describe('dsh-orchestrator composition', () => {
     const section = h.sections.get('orchestrator')!
     const text = section.text as (context: { agent?: Agent }) => string
 
-    expect(text({})).toContain('Исполнительная (локальная) модель')
-    expect(text({})).toContain('зрение (vision)')
+    expect(text({})).toContain('\'Исполнительная (локальная) модель')
+    expect(text({})).toContain('\'зрение (vision)')
     expect(text({})).toContain('127.0.0.1:9222')
     expect(text({ agent: agentAt(1) })).toBe('')
     // Disabled: no instructions regardless of depth.
@@ -198,8 +200,8 @@ describe('dsh-orchestrator composition', () => {
     const request = h.starts[0]!
     expect(request.maxDepth).toBe(1)
     expect(request.toolFilter).toEqual({ deny: ['executor'] })
-    expect(request.persona).toContain('ИСПОЛНИТЕЛЬ')
-    expect(request.persona).toContain('зрение (vision)')
+    expect(request.persona).toContain('\'ИСПОЛНИТЕЛЬ')
+    expect(request.persona).toContain('\'зрение (vision)')
     expect(request.persona).toContain('127.0.0.1:9222')
     await h.dispose()
   })
@@ -347,5 +349,48 @@ describe('dsh-orchestrator composition', () => {
     spy.mockRestore()
     warn.mockRestore()
     await h.dispose()
+  })
+
+  it('denies head-direct heavy tools at pre-execute and spares delegated workers', async () => {
+    const h = await setup(FULL_CAPS, { headDenyTools: ['pwsh'] })
+    h.settings.enabled = true
+    h.applySettings()
+    // Re-syncing while the listener is live must not double-register it.
+    h.applySettings()
+
+    const execOf = (depth: number): ToolExecution =>
+      ({ name: 'pwsh', agent: agentAt(depth), arguments: {} }) as unknown as ToolExecution
+    const allow = (): Promise<PreToolDecision> => Promise.resolve<PreToolDecision>({ kind: 'allow' })
+
+    // Depth 0 (head): the listed tool is denied before approval runs.
+    const headDecision = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    expect(headDecision).toMatchObject({ kind: 'deny' })
+    // Depth 1 (executor worker): the same tool passes through untouched.
+    const workerDecision = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(1), allow)) as PreToolDecision
+    expect(workerDecision).toEqual({ kind: 'allow' })
+
+    // Disabling the mode (or clearing the list) disposes the policy listener.
+    h.settings.enabled = false
+    h.applySettings()
+    const afterDisable = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    expect(afterDisable).toEqual({ kind: 'allow' })
+    await h.dispose()
+  })
+
+  it('tears the policy listener down with the plugin fiber', async () => {
+    const h = await setup(FULL_CAPS, { headDenyTools: ['pwsh'] })
+    h.settings.enabled = true
+    h.applySettings()
+    const execOf = (depth: number): ToolExecution =>
+      ({ name: 'pwsh', agent: agentAt(depth), arguments: {} }) as unknown as ToolExecution
+    const allow = (): Promise<PreToolDecision> => Promise.resolve<PreToolDecision>({ kind: 'allow' })
+
+    const denied = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    expect(denied).toMatchObject({ kind: 'deny' })
+
+    // Fiber teardown disposes the active policy listener.
+    await h.dispose()
+    const afterTeardown = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    expect(afterTeardown).toEqual({ kind: 'allow' })
   })
 })

@@ -33,6 +33,7 @@ import {
   type SubagentResult, type SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
 import { loadOrchestratorSkills } from './skills.ts'
+import { headToolDeny } from './policy.ts'
 
 export const name = 'orchestrator'
 export const inject = ['skills', 'tools', 'subagents', 'systemPrompt', 'settings']
@@ -50,6 +51,13 @@ export interface OrchestratorSettings {
   executorProvider: string
   /** Exact local model id the executor tool pins (e.g. the local Kiborg). */
   executorModel: string
+  /**
+   * Tools the HEAD planner may not call directly (policy denial before
+   * approval, enforced at `tools/pre-execute`). Delegated agents — the
+   * executor worker and its children — keep the full tool set. Empty by
+   * default: the split applies only to the tools listed here.
+   */
+  headDenyTools: string[]
 }
 
 /** Namespace + schema behind the Settings → Models «Оркестратор» card. */
@@ -60,6 +68,7 @@ const orchestratorSchema = z.object({
   subagentProvider: z.string().default('spawn'),
   executorProvider: z.string().default(''),
   executorModel: z.string().default(''),
+  headDenyTools: z.array(z.string()).default([]),
 })
 
 /** One non-`completed` child stop means the delegation did not finish cleanly. */
@@ -183,6 +192,7 @@ export function apply(ctx: Context): void {
         subagentProvider: 'spawn',
         executorProvider: '',
         executorModel: '',
+        headDenyTools: [],
       },
     })
     const settingsOf = (): OrchestratorSettings => handle.get()
@@ -313,9 +323,32 @@ export function apply(ctx: Context): void {
       else unmountSkills()
     }
 
+    // Head tool policy: while the mode is enabled with a non-empty deny list,
+    // deny the listed tools at `tools/pre-execute` for depth-0 planners only.
+    // The listener is registered once per live configuration; toggling the
+    // list or disabling the mode disposes it. Delegated workers are untouched.
+    let disposePolicy: (() => void) | undefined
+    const syncPolicy = (): void => {
+      const current = settingsOf()
+      const deny = new Set(current.headDenyTools.filter(tool => tool.trim() !== ''))
+      if (!current.enabled || deny.size === 0) {
+        if (disposePolicy !== undefined) {
+          disposePolicy()
+          disposePolicy = undefined
+        }
+        return
+      }
+      if (disposePolicy !== undefined) return
+      disposePolicy = ctx.on('tools/pre-execute', async (exec, next) => {
+        const reason = headToolDeny(exec.agent, exec.name, deny)
+        return reason === undefined ? next() : { kind: 'deny', reason }
+      })
+    }
+
     const sync = (): void => {
       syncTool()
       syncSkills()
+      syncPolicy()
     }
     const disposeWatch = handle.watch(sync)
     sync()
@@ -346,6 +379,10 @@ export function apply(ctx: Context): void {
       disposeWatch()
       disposeSection()
       unmountSkills()
+      if (disposePolicy !== undefined) {
+        disposePolicy()
+        disposePolicy = undefined
+      }
       if (disposeTool !== undefined) {
         disposeTool()
         disposeTool = undefined
