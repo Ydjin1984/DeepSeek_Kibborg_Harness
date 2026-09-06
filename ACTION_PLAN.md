@@ -89,9 +89,10 @@
   2. **Видимость** (Grok, defense-in-depth к T4): на preStep/schema snapshot для depth 0 heavy-тулы не попадают в схему модели (голова физически не выбирает то, чего нет в снимке); executor (depth 1) — полная схема. НЕ через tools.restrict (наследование), а фильтрацией схемы по роли.
   3. **Конфиг** (оба): deny-list `headDenyTools` в конфиге пресета оркестратора (cordis.yml, профиль/bundle) — рядом с тем, что задаёт голову/исполнителя; session может только сузить (добавить deny), не расширить. Терминология — executionPolicy (ChatGPT); не размазывать по permission-preset sandbox/approval.
   4. **НЕ трогать** ToolDefinition.risk в v1 (класс риска — T7/engagement, Grok).
-- [ ] Исследовать API регистрации waterfall-listener `tools/pre-execute` (образец: guard/timeout-policy `tools/execute`; тип PreToolDecision).
-- [ ] Реализовать: конфиг orchestrator `policy.headDenyTools` + listener deny + фильтрация схемы для depth 0 + тесты (голова deny; executor видит; approval не переопределяет deny).
-- **Статус:** решение принято (см. журнал); реализация — следующий шаг.
+- [x] Исследовать API регистрации waterfall-listener `tools/pre-execute` (образец: guard/timeout-policy `tools/execute`; тип PreToolDecision).
+- [x] **Реализовано (коммит d612296395):** `src/policy.ts` — чистая `headToolDeny(agent, toolName, denySet)` (depth 0 + в списке → model-facing reason; depth ≥ 1 и не-агенты не ограничиваются). `src/index.ts`: поле настроек `headDenyTools: string[]` (schema + base, default []); live listener на `tools/pre-execute` монтируется при enabled + непустой список, снимается при выключении/teardown; deny ДО approval. Тесты: policy.spec (unit) + composition.spec (waterfall: depth 0 → deny, depth 1 → allow, повторный sync не дублирует, teardown снимает). 23 теста, coverage 100%, lint clean, полный typecheck/build зелёные, сервер перезапущен.
+- [ ] **Отложено (видимость схемы, Grok-слой 2):** heavy-тулы не попадают в схему depth-0 на preStep (defense-in-depth к T4). Требует фильтрации tool-provider по роли агента — после стабилизации enforcement.
+- **Статус:** enforcement реализован и закоммичен; видимость схемы — отложенный пункт.
 
 ### T7 Engagement stub
 **Цель:** scope-файл + deny сети вне allowlist (минимальный ROE, до полного Engagement Mode).
@@ -177,3 +178,4 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | T3-v1 реализован | Коммит fa30951208: ResourceLeaseRegistry (acquire/heartbeat/release/sweep/status/isLive), ctx.executions.resources; 137 тестов, coverage 100%; durable v2 — следующий срез |
 | 06.09.2026 | Сборка + рестарт сервера | Полный build зелёный (после TS-фиксов тестов, коммит 2d8a1684e1); сервер на 3080 перезапущен супервизором, HTTP 200 |
 | 06.09.2026 | T6: механизм policy-split | **Консенсус**: НЕ tools.restrict (наследование); enforcement на tools/pre-execute до approval (depth 0 × headDenyTools → deny) + видимость-фильтр схемы для depth 0; deny-list в конфиге пресета оркестратора |
+| 06.09.2026 | T6 реализован | Коммит d612296395: policy.ts + headDenyTools listener (enforcement до approval); видимость схемы — deferred; build+рестарт сервера зелёные |
