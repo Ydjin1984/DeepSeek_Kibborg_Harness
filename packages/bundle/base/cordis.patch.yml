@@ -72,6 +72,9 @@
     - id: execution
       name: '@deepseek-ai/dsh-execution'
 
+    - id: execution-persistence
+      name: '@deepseek-ai/dsh-execution-persistence'
+
     - id: engagement-stub
       name: '@deepseek-ai/dsh-engagement-stub'
       config:

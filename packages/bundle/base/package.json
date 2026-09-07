@@ -56,6 +56,7 @@
     "@deepseek-ai/dsh-credentials-local": "workspace:^",
     "@deepseek-ai/dsh-engagement-stub": "workspace:^",
     "@deepseek-ai/dsh-execution": "workspace:^",
+    "@deepseek-ai/dsh-execution-persistence": "workspace:^",
     "@deepseek-ai/dsh-fs-local": "workspace:^",
     "@deepseek-ai/dsh-fs-observation-policy": "workspace:^",
     "@deepseek-ai/dsh-fs-sandbox": "workspace:^",

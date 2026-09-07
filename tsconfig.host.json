@@ -202,6 +202,7 @@
     { "path": "./packages/e2b/e2b" },
     { "path": "./packages/e2b/subprocess-e2b" },
     { "path": "./packages/execution/execution" },
+    { "path": "./packages/execution/execution-persistence" },
     { "path": "./packages/shell/shell" },
     { "path": "./packages/terminal/terminal" },
     { "path": "./packages/terminal/terminal-bash" },

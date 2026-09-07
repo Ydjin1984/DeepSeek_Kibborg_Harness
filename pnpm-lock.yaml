@@ -1057,6 +1057,9 @@ importers:
       '@deepseek-ai/dsh-execution':
         specifier: workspace:^
         version: link:../../execution/execution
+      '@deepseek-ai/dsh-execution-persistence':
+        specifier: workspace:^
+        version: link:../../execution/execution-persistence
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../fs/fs-local
@@ -4411,6 +4414,25 @@ importers:
       '@deepseek-ai/dsh-loader-smoke':
         specifier: workspace:^
         version: link:../../test-support/loader-smoke
+
+  packages/execution/execution-persistence:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-execution':
+        specifier: workspace:^
+        version: link:../execution
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/experimental/agent-team:
     dependencies:
