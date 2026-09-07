@@ -1,7 +1,7 @@
-@echo off
+﻿@echo off
 setlocal EnableExtensions
 chcp 65001 >nul
-title DeepSeek Harness - меню управления проектом
+title DeepSeek_Kibborg_Harness - меню управления проектом
 cd /d "%~dp0"
 
 REM Автозапуск Tor (onion-прокси, SOCKS5 127.0.0.1:9050) вместе с сервером. Идемпотентно: если уже запущен - пропустит.

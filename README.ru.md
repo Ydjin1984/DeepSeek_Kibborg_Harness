@@ -1,59 +1,77 @@
-# DeepSeek Harness
+# DeepSeek_Kibborg_Harness
 
-[English](README.md) | [中文](README.zh.md) | **Русский**
+[中文](README.zh.md)
 
-DeepSeek Harness (`dsh`) — это фреймворк с открытым исходным кодом для создания агентов, разработанный [DeepSeek AI](https://deepseek.com).
+**DeepSeek_Kibborg_Harness** — русскоязычный форк [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): агентная платформа с архитектурой **«всё — плагин»** на [Cordis](https://github.com/cordiverse/cordis), доработанная под персональный оркестр ИИ-агентов — лайв-кодинг, авторизованный пентест, реверс-инжиниринг и смежные задачи.
 
-Он использует архитектуру, в которой **всё является плагином**, и работает на базе [Cordis](https://github.com/cordiverse/cordis) — дизайн которой описан в работе [_Парадигма программирования для пространственно-временной композируемости_](https://github.com/cordiverse/paper).
+Платформа построена вокруг режима **оркестратора**: головная (планирующая) модель управляет работой локальных и внешних ИИ-исполнителей, а весь жизненный цикл исполнения — задачи, цели, потоки работ, субагенты, внешние ресурсы — сводится в единую наблюдаемую картину.
 
-## Предварительный выпуск для разработчиков
+---
 
-DeepSeek Harness в настоящее время находится в стадии _предварительного выпуска для разработчиков_ и быстро развивается. **Ожидайте изменения, несовместимые с предыдущими версиями.**
+## Ключевые возможности («плюшки»)
 
-## Запуск
+### Оркестратор «голова + исполнитель»
+- Головная модель планирует и делегирует; **локальный исполнитель** (Kibborg, с vision) выполняет тяжёлую инструментальную работу и возвращает сжатые отчёты.
+- **Head-tool policy, enforced в рантайме**: тяжёлые инструменты (`nmap`, `idat` и др. из списка `headDenyTools`) **скрыты из схемы инструментов головы** (фильтр на `system-prompt/assemble`) и дополнительно **отклоняются на `tools/pre-execute` до approval** — исполнитель (depth ≥ 1) видит и использует их без ограничений.
+- Браузерный контур: Chrome с DevTools Protocol (`127.0.0.1:9222`) как инструмент агента (скриншоты, «живой текст» из DOM, клики).
 
-### Запуск через `npm`
+### Единая машина состояний исполнения (`ctx.executions`)
+- Общий жизненный цикл: `CREATED → QUEUED → RUNNING → WAITING_TOOL / WAITING_SUBAGENT / WAITING_USER → COMPLETED`; терминальные `FAILED / CANCELLED / TIMEOUT / ABORTED`; ветка восстановления `INTERRUPTED → RECOVERING`.
+- **Адаптеры-проекции**: фоновые задачи (`jobs`), цели (`goal`), потоки работ (`workflow`) и субагенты (`subagent`) автоматически проецируют свои статусы в единую машину — вся активность видна в одном месте (вкладка «Исполнение» в GUI).
+- Идемпотентность и best-effort проекция: единый реестр остаётся источником правды, подсистемы не мигрируют.
 
-Установите `Node.js`, затем выполните:
+### Реестр «аренды» внешних ресурсов (`ctx.executions.resources`)
+- Учёт Chrome CDP / PTY / IDA / workspace / subprocess с **lease + heartbeat + TTL**.
+- Fail-closed проверки: `live / expired / released / orphaned / unknown`; идемпотентный **orphan-sweep** — «протухшие» ресурсы помечаются осиротевшими один раз.
+- Типизированные события `executions/resource` — фундамент для аудита и восстановления.
+
+### Durable журнал исполнения (Flight Recorder foundation)
+- Bridge-плагин `execution-persistence` пишет **append-only JSONL журнал** (`$DSH_HOME/executions/events.jsonl`) событий исполнения и ресурсов — с fsync на каждую запись.
+- История «кто и что делал» **переживает рестарты**; два логических журнала (сессия ↔ исполнение) не смешиваются.
+
+### Контур engagement / ROE (безопасность)
+- Плагин `engagement-stub`: при включении — **allowlist хостов**; инструменты из `blockedTools` и URL-вызовы на хосты вне scope получают **детерминированный deny до approval** + audit-событие `engagement/denied`.
+- localhost всегда разрешён; не-URL-вызовы не блокируются (fail-open для обычных инструментов).
+
+### Система скиллов
+- Каталог и менеджер скиллов: CRUD, версии, rollback, корзина, публикация; **бенчмарки и Auto Improve** (A/B, метрики, routing-eval).
+- Профильные скиллы: авторизованный пентест (`hakker-kibborg`), реверс-инжиниринг и управление IDA Pro, Tor/onion-поиск, XDF-тюнинг (TunerPro), дизайн/кодинг-наборы.
+
+### Надёжность и durability
+- Durable-сессии: JSONL + SQLite (WAL, `synchronous=FULL`), torn-tail recovery, single-writer сериализация — проверено crash/restart e2e-тестами (kill mid-write и др.).
+- Полный CI-контур качества: strict TypeScript, 100% per-file coverage, lint, typecheck, snapshot-тесты GUI.
+
+### Web GUI
+- React/Vite: чат, **«Исполнение»** (таймлайн событий с фильтрами), «Траектория», файловые панели, настройки (модели, скиллы, плагины), живой мониторинг.
+
+---
+
+## Запуск из исходников
+
+Клонируйте **этот** репозиторий (не upstream):
 
 ```sh
-npx @deepseek-ai/dsh web
-```
-
-Команда запускает веб-интерфейс по умолчанию по адресу `http://127.0.0.1:3080` и открывает его в браузере по умолчанию при локальном запуске. При запуске через SSH выводится только URL хоста, поскольку SSH-клиент или редактор управляют локально перенаправленным адресом. Параметр `--no-open` запускает сервер без открытия браузера. См. [Руководство по веб-интерфейсу](docs/user/guide/index.md).
-
-### Запуск из исходного кода
-
-Для запуска из репозитория:
-
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/Ydjin1984/DeepSeek_Kibborg_Harness.git
+cd DeepSeek_Kibborg_Harness
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-`pnpm run build` подготавливает артефакты репозитория. `pnpm dsh web` использует эти артефакты без повторной сборки.
+Web UI запускается на `http://127.0.0.1:3080`. На Windows удобно использовать `run.bat` (меню сборки и запуска с прогресс-баром).
 
-## Сообщество и поддержка
+Требования: Node.js `^22.19 || >=24`, pnpm `>=11`.
 
-- Не стесняйтеся отправлять отзывы и отчёты об ошибках через [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Добавьте тему [`dsh-plugin`](https://github.com/topics/dsh-plugin) к репозиторию вашего плагина для лучшей обнаруживаемости.
-- Присоединяйтесь к [Discord-сообществу DeepSeek Harness](https://discord.gg/Ycq5dCaS4).
+---
+
+## Оригинальный проект
+
+DeepSeek_Kibborg_Harness основан на [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) — открытой агентной платформе DeepSeek AI (лицензия MIT). Оригинальное описание, архитектурная документация и руководства находятся в [репозитории upstream](https://github.com/deepseek-ai/deepseek-harness) и в папке [`docs/`](docs/architecture.md) этого репозитория.
 
 ## Вклад в проект
 
-См. [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Разработка
-
-Начните с [руководства по разработке](docs/development.md) и [документации по архитектуре](docs/architecture.md).
-
-Для агентов следуйте [AGENTS.md](AGENTS.md).
+См. [CONTRIBUTING.md](CONTRIBUTING.md) и [AGENTS.md](AGENTS.md) (правила для агентов и процессов разработки).
 
 ## Лицензия
 
 [MIT](LICENSE)
-
-Зависимости третьих сторон и их лицензии указаны в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
