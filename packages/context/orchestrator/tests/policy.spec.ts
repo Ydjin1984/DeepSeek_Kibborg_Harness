@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { headToolDeny } from '../src/policy.ts'
+import { filterHeadToolSchemas, headToolDeny } from '../src/policy.ts'
 
 /** Agent stub whose delegation depth comes from options (as delegationDepthOf reads). */
 function agentAt(depth: number): Agent {
@@ -40,5 +40,27 @@ describe('headToolDeny', () => {
 
   it('allows non-agent callers', () => {
     expect(headToolDeny(undefined, 'pwsh', deny)).toBeUndefined()
+  })
+})
+
+describe('filterHeadToolSchemas', () => {
+  const deny = new Set(['pwsh', 'idat'])
+  const tools = [{ name: 'read' }, { name: 'pwsh' }, { name: 'skill' }]
+
+  it('hides listed tools from a depth-0 (head) planner', () => {
+    expect(filterHeadToolSchemas(agentAt(0), tools, deny).map(tool => tool.name))
+      .toEqual(['read', 'skill'])
+  })
+
+  it('keeps the full list for delegated workers', () => {
+    expect(filterHeadToolSchemas(agentAt(1), tools, deny)).toEqual(tools)
+  })
+
+  it('keeps the full list for non-agent assemblies', () => {
+    expect(filterHeadToolSchemas(undefined, tools, deny)).toEqual(tools)
+  })
+
+  it('is a no-op for an empty deny set', () => {
+    expect(filterHeadToolSchemas(agentAt(0), tools, new Set())).toEqual(tools)
   })
 })

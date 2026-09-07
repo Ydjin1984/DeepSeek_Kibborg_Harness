@@ -4,11 +4,12 @@
 
 编排模式（宿主半区）。启用后，部署将模型角色拆分：会话的当前聊天模型担任 HEAD（规划者），把繁重的工具驱动工作委托给 `executor` 工具，而该工具始终运行在配置的本地模型（`executorProvider` / `executorModel`）上。云端 token 花在规划与综合上，本地模型为长工具链（搜索、批量读文件、shell 命令）买单。HEAD 角色不需要单独的路由字段：它就是会话在输入框模型选择器中选中的模型。
 
-插件在同一个生命周期 effect 中注册三样东西：
+插件在同一个生命周期 effect 中注册四样东西：
 
 - **`executor` 工具** —— 通过 `ctx.subagents`（`subagentProvider`，默认 `spawn`）向配置的本地路由发起一次前台委托。子代理收到完整独立的 prompt 和完整工具集，但不会继承 HEAD 角色：spawn 会向子代理隐藏 `executor` 工具（`toolFilter`），把委托深度限制为一级（`maxDepth: 1`），并注入一段精简的执行器 persona——每一项仅在所选 provider 声明对应能力时生效。若子代理未干净结束，错误中会保留部分输出。
 - **系统提示词 section** —— 启用期间告诉顶层 HEAD 模型加载 `orchestrator-head` skill（技能）并通过 `executor` 委托。对已委托的 agent（`subagentDepth > 0`），该 section 渲染为空；工具也拒绝在委托路径上执行——每条路径上的递归都有界。
 - **打包的配套 skill** `orchestrator-head` 与 `orchestrator-executor` —— 模式启用期间以 `bundled` 来源注册到 `ctx.skills`（模型可调用）。注册发生在宿主平面，因此运行时 skill 进入全局注册表层，任何启用该模式的项目都能看到——不再局限于带有 `.agents/skills/orchestrator-*` 的检出。Skills 管理器将它们列在「Встроенные」（内置）之下。
+- **HEAD 工具策略**（`headDenyTools`）—— 模式启用且列表非空时，depth-0 组装会从面向模型的工具 schema（`system-prompt/assemble`）中去掉这些名称，并且 `tools/pre-execute` 在审批之前拒绝它们。已委托的 agent（depth ≥ 1）和宿主调用方仍看到完整集合。插件不为此列表使用 `tools.restrict()`，因此 executor 子代理不会继承 HEAD 被隐藏的工具。
 
 配置位于该插件的实时 `orchestrator` 设置命名空间（在 Settings → Models → 「Оркестратор」中编辑，或直接在宿主平面编辑）；编辑在运行时生效——工具、提示词 section 与打包的配套 skill 在每次调用/渲染时读取已解析的命名空间，设置监视器随模式开关挂载或卸载它们。`enabled: true` 但未设置模型时，工具保持未挂载、section 为空、配套 skill 不注册；UI 表单把执行器路由标为必填。
 
@@ -48,10 +49,24 @@
 
 子代理在独立会话中运行，因此 HEAD 的缓存不受影响；本地路由的缓存属于子会话。
 
+### HEAD 被拒绝的工具
+
+#### 模型看到的内容
+
+当模式启用且 `headDenyTools` 列表非空时，HEAD 的模型请求会省略这些工具 schema。executor 工作进程及其子代理仍收到完整列表。若 HEAD 伪造或残留调用列表中的名称，`tools/pre-execute` 会在审批之前拒绝。
+
+#### Token 影响
+
+省略所列 schema 会按这些定义缩小 HEAD 每回合的 tools 载荷；executor 子代理的请求不变。
+
+#### KV Cache 影响
+
+更改 `headDenyTools`（或开关模式）会改变 HEAD 的 tools 头并使其缓存前缀失效；列表不变则不会。
+
 ## 已知限制与延后工作
 
 - **基于设置的配置** —— 执行器路由和模式开关位于 `orchestrator` 设置命名空间，而不是 Cordis 插件配置；该插件按设计不暴露 `Config` 对象。
-- **角色拆分靠提示引导** —— 没有硬性机制强制 HEAD 委托；执行器路由在工具本身被钉死，这才是 token 花费的关键强制边界。
+- **未列入的工具仍可由 HEAD 调用** —— `headDenyTools` 只隐藏并拒绝列表中的名称；HEAD 仍可调用其他任何工具，提示词仍要求它通过 `executor` 委托繁重工作。
 - **执行器运行串行** —— 工具声明 `isConcurrencySafe: false`，重叠的 executor 调用会排队，而不是在共享文件和 shell 上竞态。
 - **HEAD 没有路由选择器** —— HEAD 就是会话的当前聊天模型；只有本地执行器路由在 Settings → Models → 「Оркестратор」中配置。
 - **skill 不会自动注入** —— HEAD 必须通过 `skill` 工具加载 `orchestrator-head`；这些 skill 与本包一同分发，并在模式启用期间作为内置 skill 注册，因此任何启用了编排模式的会话项目都能看到。相比之下，执行器 persona 通过 spawn 组合注入每个 executor 子代理。

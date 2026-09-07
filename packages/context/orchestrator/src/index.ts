@@ -33,7 +33,7 @@ import {
   type SubagentResult, type SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
 import { loadOrchestratorSkills } from './skills.ts'
-import { headToolDeny } from './policy.ts'
+import { filterHeadToolSchemas, headToolDeny } from './policy.ts'
 
 export const name = 'orchestrator'
 export const inject = ['skills', 'tools', 'subagents', 'systemPrompt', 'settings']
@@ -52,10 +52,12 @@ export interface OrchestratorSettings {
   /** Exact local model id the executor tool pins (e.g. the local Kiborg). */
   executorModel: string
   /**
-   * Tools the HEAD planner may not call directly (policy denial before
-   * approval, enforced at `tools/pre-execute`). Delegated agents — the
-   * executor worker and its children — keep the full tool set. Empty by
-   * default: the split applies only to the tools listed here.
+   * Tools the HEAD planner may not call directly. While the mode is enabled
+   * with a non-empty list, depth-0 assemblies omit these names from the
+   * model-facing tool schema (`system-prompt/assemble`) and `tools/pre-execute`
+   * denies them before approval. Delegated agents — the executor worker and
+   * its children — keep the full tool set. Empty by default: the split
+   * applies only to the tools listed here.
    */
   headDenyTools: string[]
 }
@@ -324,9 +326,10 @@ export function apply(ctx: Context): void {
     }
 
     // Head tool policy: while the mode is enabled with a non-empty deny list,
-    // deny the listed tools at `tools/pre-execute` for depth-0 planners only.
-    // The listener is registered once per live configuration; toggling the
-    // list or disabling the mode disposes it. Delegated workers are untouched.
+    // hide listed tools from the depth-0 schema and deny them at
+    // `tools/pre-execute` before approval. Both listeners share one lifecycle;
+    // toggling the list empty or disabling the mode disposes them. Delegated
+    // workers and host assemblies without an agent are untouched.
     let disposePolicy: (() => void) | undefined
     const syncPolicy = (): void => {
       const current = settingsOf()
@@ -339,10 +342,21 @@ export function apply(ctx: Context): void {
         return
       }
       if (disposePolicy !== undefined) return
-      disposePolicy = ctx.on('tools/pre-execute', async (exec, next) => {
+      const disposeExecute = ctx.on('tools/pre-execute', async (exec, next) => {
         const reason = headToolDeny(exec.agent, exec.name, deny)
         return reason === undefined ? next() : { kind: 'deny', reason }
       })
+      const disposeAssemble = ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+        const nextAssembly = await next()
+        return {
+          ...nextAssembly,
+          tools: filterHeadToolSchemas(context.agent, nextAssembly.tools, deny),
+        }
+      })
+      disposePolicy = () => {
+        disposeExecute()
+        disposeAssemble()
+      }
     }
 
     const sync = (): void => {

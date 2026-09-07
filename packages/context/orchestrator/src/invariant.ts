@@ -16,10 +16,12 @@ export const inject = ['invariants']
 
 /**
  * No runtime invariant: the plugin's registrations (one settings namespace
- * watcher, one conditionally mounted tool, one prompt section, and the two
- * bundled orchestrator skills mounted with the mode) live inside one
- * `ctx.effect` and unwind with its disposer; the package holds no
- * cross-plugin mutable service state and emits no cordis events of its own.
+ * watcher, one conditionally mounted tool, one prompt section, the two
+ * bundled orchestrator skills mounted with the mode, and the optional
+ * head-deny `tools/pre-execute` plus `system-prompt/assemble` listeners)
+ * live inside one `ctx.effect` and unwind with its disposer; the package
+ * holds no cross-plugin mutable service state and emits no cordis events
+ * of its own.
  */
 const install: InvariantInstaller = () => {}
 

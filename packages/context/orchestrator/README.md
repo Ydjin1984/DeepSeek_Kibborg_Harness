@@ -4,11 +4,12 @@ English | [中文](README.zh.md)
 
 Orchestrator mode (host half). When `enabled`, the deployment splits model roles: the session's live chat model acts as the HEAD (planner) and delegates heavy, tool-driven work to the `executor` tool, which always runs on the configured LOCAL model (`executorProvider` / `executorModel`). Cloud tokens are spent on planning and synthesis, while the local model pays for long tool chains — searches, mass file reads, shell commands. The head role needs no route field: it is whatever model the composer picker selected for the session.
 
-The plugin registers three things inside one lifecycle effect:
+The plugin registers four things inside one lifecycle effect:
 
 - the **`executor` tool** — one foreground delegation to the configured local route through `ctx.subagents` (`subagentProvider`, default `spawn`). The child gets a complete standalone prompt and full tool access, but never inherits the head role: the spawn hides the `executor` tool from the child (`toolFilter`), caps delegated depth at one level (`maxDepth: 1`), and injects a compact worker persona — each only when the chosen provider advertises the corresponding capability. Partial output is preserved in the error when the child does not finish cleanly.
 - a **system-prompt section** that, while enabled, tells the top-level head model to load the `orchestrator-head` skill and delegate via `executor`. The section renders empty for delegated agents (`subagentDepth > 0`), and the tool refuses execution from one — recursion is bounded on every path.
 - the **bundled companion skills** `orchestrator-head` and `orchestrator-executor` — registered on `ctx.skills` (source `bundled`, model-invocable) exactly while the mode is live. Registration happens on the host plane, so the runtime skills land in the global registry layer and are available in every project that enables the mode, not only in checkouts carrying `.agents/skills/orchestrator-*`. The Skills manager lists them under «Встроенные» (built-in).
+- the **head tool policy** for `headDenyTools` — while the mode is enabled with a non-empty list, depth-0 assemblies omit those names from the model-facing tool schema (`system-prompt/assemble`) and `tools/pre-execute` denies them before approval. Delegated agents (depth ≥ 1) and host callers keep the full set. The plugin does not use `tools.restrict()` for this list, so executor children do not inherit the head's hidden tools.
 
 Configuration lives in the plugin's live `orchestrator` SETTINGS NAMESPACE (edited in Settings → Models → «Оркестратор», or directly on the host plane); edits apply at runtime — the tool and the prompt section read the resolved namespace on every call/render, and a settings watcher mounts or unmounts the tool and the bundled skills as the mode toggles. `enabled: true` without a model leaves the tool unmounted, the section empty, and the skills unregistered; the UI form marks the executor route as required.
 
@@ -48,10 +49,24 @@ Each call is one child agent turn with its own session on the local route; the h
 
 The child runs in a separate session, so the head's cache is untouched; local-route caches belong to the child session.
 
+### Head-denied tools
+
+#### What the model sees
+
+While the mode is enabled with a non-empty `headDenyTools` list, the head's model request omits those tool schemas. The executor worker and its children still receive the full list. A forged or leftover call of a listed name from the head is denied at `tools/pre-execute` before approval.
+
+#### Token effect
+
+Omitting the listed schemas shrinks the head's tools payload by those definitions each turn; the executor child's request is unchanged.
+
+#### KV Cache effect
+
+Changing `headDenyTools` (or toggling the mode) changes the head's tools header and invalidates that cached prefix; an unchanged list does not.
+
 ## Known Limitations and Deferred Work
 
 - **Settings-based configuration** — the executor route and mode toggle live in the `orchestrator` settings namespace, not in cordis config; the plugin exposes no `Config` object by design.
-- **Role split is prompt-guided** — nothing hard-enforces that the head delegates; the executor route is pinned on the tool itself, which is the enforcement boundary that matters for token spend.
+- **Unlisted tools stay head-callable** — `headDenyTools` hides and denies only the names listed there; the head can still call anything else, and prompt text still asks it to delegate heavy work through `executor`.
 - **Executor runs are serial** — the tool declares `isConcurrencySafe: false`, so overlapping executor calls queue instead of racing over shared files and the shell.
 - **Head has no route picker** — the head is the session's live chat model; only the local executor route is configured in Settings → Models → «Оркестратор».
 - **Skill injection is not automatic** — the head must load `orchestrator-head` through the `skill` tool; the skills are bundled with this package and registered as built-in while the mode is enabled, so they are visible in every project whose session enables orchestrator mode. The worker persona, by contrast, is injected into every executor child through the spawn composition.

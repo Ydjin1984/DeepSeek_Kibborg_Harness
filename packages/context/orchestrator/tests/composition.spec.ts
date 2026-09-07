@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import type { PromptSection } from '@deepseek-ai/dsh-system-prompt'
+import type { PromptAssembly, PromptSection } from '@deepseek-ai/dsh-system-prompt'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { SubagentResult, SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
@@ -137,6 +137,27 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
   }
 }
 
+/** Minimal model-facing schemas used when dispatching `system-prompt/assemble`. */
+function schemaOf(name: string): PromptAssembly['tools'][number] {
+  return { name, description: name, parameters: {} }
+}
+
+const HEAVY_AND_LIGHT: PromptAssembly = {
+  sections: [],
+  contexts: [],
+  tools: [schemaOf('pwsh'), schemaOf('read')],
+  variables: {},
+}
+
+/** Run the live `system-prompt/assemble` waterfall with a stub assembly. */
+async function assembleTools(h: Harness, depth: number | undefined): Promise<PromptAssembly> {
+  const context = depth === undefined ? {} : { agent: agentAt(depth) }
+  const pass = (): Promise<PromptAssembly> => Promise.resolve(HEAVY_AND_LIGHT)
+  return await h.ctx.waterfall(
+    h.ctx as never, 'system-prompt/assemble', HEAVY_AND_LIGHT, context, pass,
+  )
+}
+
 /** Call the mounted executor tool's execute with a top-level agent. */
 async function runExecutorTool(h: Harness, depth = 0): Promise<unknown> {
   const tool = h.tools.get('executor')
@@ -181,8 +202,8 @@ describe('dsh-orchestrator composition', () => {
     const section = h.sections.get('orchestrator')!
     const text = section.text as (context: { agent?: Agent }) => string
 
-    expect(text({})).toContain('\'Исполнительная (локальная) модель')
-    expect(text({})).toContain('\'зрение (vision)')
+    expect(text({})).toMatch(/Исполнительная \(локальная\) модель/)
+    expect(text({})).toMatch(/зрение \(vision\)/)
     expect(text({})).toContain('127.0.0.1:9222')
     expect(text({ agent: agentAt(1) })).toBe('')
     // Disabled: no instructions regardless of depth.
@@ -200,8 +221,8 @@ describe('dsh-orchestrator composition', () => {
     const request = h.starts[0]!
     expect(request.maxDepth).toBe(1)
     expect(request.toolFilter).toEqual({ deny: ['executor'] })
-    expect(request.persona).toContain('\'ИСПОЛНИТЕЛЬ')
-    expect(request.persona).toContain('\'зрение (vision)')
+    expect(request.persona).toMatch(/ИСПОЛНИТЕЛЬ/)
+    expect(request.persona).toMatch(/зрение \(vision\)/)
     expect(request.persona).toContain('127.0.0.1:9222')
     await h.dispose()
   })
@@ -363,16 +384,16 @@ describe('dsh-orchestrator composition', () => {
     const allow = (): Promise<PreToolDecision> => Promise.resolve<PreToolDecision>({ kind: 'allow' })
 
     // Depth 0 (head): the listed tool is denied before approval runs.
-    const headDecision = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    const headDecision = await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)
     expect(headDecision).toMatchObject({ kind: 'deny' })
     // Depth 1 (executor worker): the same tool passes through untouched.
-    const workerDecision = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(1), allow)) as PreToolDecision
+    const workerDecision = await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(1), allow)
     expect(workerDecision).toEqual({ kind: 'allow' })
 
     // Disabling the mode (or clearing the list) disposes the policy listener.
     h.settings.enabled = false
     h.applySettings()
-    const afterDisable = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    const afterDisable = await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)
     expect(afterDisable).toEqual({ kind: 'allow' })
     await h.dispose()
   })
@@ -385,12 +406,40 @@ describe('dsh-orchestrator composition', () => {
       ({ name: 'pwsh', agent: agentAt(depth), arguments: {} }) as unknown as ToolExecution
     const allow = (): Promise<PreToolDecision> => Promise.resolve<PreToolDecision>({ kind: 'allow' })
 
-    const denied = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    const denied = await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)
     expect(denied).toMatchObject({ kind: 'deny' })
 
-    // Fiber teardown disposes the active policy listener.
+    // Fiber teardown disposes the active policy listeners.
     await h.dispose()
-    const afterTeardown = (await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)) as PreToolDecision
+    const afterTeardown = await h.ctx.waterfall(h.ctx as never, 'tools/pre-execute', execOf(0), allow)
     expect(afterTeardown).toEqual({ kind: 'allow' })
+    expect((await assembleTools(h, 0)).tools.map(tool => tool.name)).toEqual(['pwsh', 'read'])
+  })
+
+  it('hides head-denied tools from the depth-0 schema and keeps them for workers', async () => {
+    const h = await setup(FULL_CAPS, { headDenyTools: ['pwsh'] })
+    h.settings.enabled = true
+    h.applySettings()
+    // Re-syncing while the listener is live must not double-register it.
+    h.applySettings()
+
+    const names = (assembly: PromptAssembly): string[] => assembly.tools.map(tool => tool.name)
+
+    expect(names(await assembleTools(h, 0))).toEqual(['read'])
+    expect(names(await assembleTools(h, 1))).toEqual(['pwsh', 'read'])
+    // Host assemblies (no agent) are outside the role policy.
+    expect(names(await assembleTools(h, undefined))).toEqual(['pwsh', 'read'])
+
+    h.settings.enabled = false
+    h.applySettings()
+    expect(names(await assembleTools(h, 0))).toEqual(['pwsh', 'read'])
+    await h.dispose()
+  })
+
+  it('leaves the tool schema unchanged when the deny list is empty', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true, headDenyTools: [] })
+    h.applySettings()
+    expect((await assembleTools(h, 0)).tools.map(tool => tool.name)).toEqual(['pwsh', 'read'])
+    await h.dispose()
   })
 })
