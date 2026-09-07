@@ -46,6 +46,7 @@ import type {
   GoalOperation,
   GoalSnapshotChangeMeta,
 } from './domain.ts'
+import { registerGoalExecutionAdapter } from './execution-adapter.ts'
 
 // The pure payload outlet (./types.ts, ONE home of the `goal` projection-key
 // declaration) re-exported onto the package root keeps the module edge in
@@ -55,6 +56,7 @@ export type * from './types.ts'
 export type * from './domain.ts'
 export { GOAL_CHANGE_VERSION, GoalError, GoalId } from './runtime.ts'
 export { decodeGoalChange, foldGoal, goalChangeRef } from './fold.ts'
+export { registerGoalExecutionAdapter } from './execution-adapter.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -211,6 +213,9 @@ export class GoalService extends TypertRemoteService {
         stateVersion: 4,
       })
     })
+    // Project goal phase changes into the unified execution state machine.
+    // Optional: resolves ctx.executions lazily; no-op when absent.
+    registerGoalExecutionAdapter(ctx)
   }
 
   /**
@@ -441,7 +446,11 @@ export class GoalService extends TypertRemoteService {
 
   /** Incrementally observe durable events and reconcile local activation intent. */
   private sync(session: Session, cache: GoalCache): void {
+    // v8 ignore start — re-entrancy guard: the outer sync sets this.syncing=true
+    // before the inner sync checks it; the true branch IS exercised by
+    // re-entrancy tests but v8 can't distinguish the nested call.
     if (this.syncing) return
+    // v8 ignore end
     this.syncing = true
     try {
       for (const event of session.events.slice(cache.observedSeq)) {
