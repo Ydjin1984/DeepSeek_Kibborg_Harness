@@ -165,3 +165,11 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | T6: механизм policy-split | **Консенсус**: НЕ tools.restrict (наследование); enforcement на tools/pre-execute до approval (depth 0 × headDenyTools → deny) + видимость-фильтр схемы для depth 0; deny-list в конфиге пресета оркестратора |
 | 06.09.2026 | T6 реализован | Коммит d612296395: policy.ts + headDenyTools listener (enforcement до approval); видимость схемы — deferred; build+рестарт сервера зелёные |
 | 06.09.2026 | T7 реализован | Коммит 123ff0c26d: пакет engagement-stub (blockedTools + allowlist-хостов, deny до approval, audit engagement/denied); 53 теста, coverage 100%; полный Engagement Mode — 61-90 дни |
+| 06.09.2026 | Интеграция в base bundle | Коммит 4e46160d5c: execution + engagement-stub в base patch; jobs-адаптер активирован в LocalJobRegistry (ленивый ctx.get в колбэке — mount order) |
+| 06.09.2026 | **Boot-fix (урок!)** | Коммит 30f5bdb69b, фикс Grok: Service-класс в прод-дереве НЕ должен `inject: ['invariants']` (диагностика — только companion ./invariant; в проде нет invariants-сервиса → pending → boot abort на :3080). Тесты «прятали» это, монтируя InvariantRegistry. Плюс: **манифест бандла (base/package.json) обязан содержать все пакеты из его cordis.patch.yml** (patch без manifest-записи ломает профиль). Добавлен регресс-тест «activates without the invariants service». |
+
+## 7. Уроки (инварианты, выявленные на практике)
+
+1. **Прод-сервис ≠ диагностика:** Service-класс, монтируемый в шиппинг-композицию (base/web-app), может inject только реальные прод-сервисы. `invariants`-регистр существует лишь для companion `./invariant`; inject его в продукт = `pending (waiting for service)` → abort boot. В unit-тестах НЕ маскировать отсутствующие прод-сервисы ручным монтажом — тестировать активацию без них.
+2. **Манифест бандла:** каждый плагин в `cordis.patch.yml` бандла должен быть в `dependencies` его `package.json` (frozen-lockfile CI и composition падают иначе).
+3. **Ленивое разрешение optional-сервисов:** адаптер, зависящий от optional-сервиса, резолвит `ctx.get(name)` в момент использования (на каждый коммит/событие), а не при регистрации — порядок монтирования плагинов topology-driven и недетерминирован.
