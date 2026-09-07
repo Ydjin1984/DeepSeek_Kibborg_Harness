@@ -169,6 +169,8 @@ pnpm run build:web        # Vite frontend (если менялся client/)
 | 06.09.2026 | Интеграция в base bundle | Коммит 4e46160d5c: execution + engagement-stub в base patch; jobs-адаптер активирован в LocalJobRegistry (ленивый ctx.get в колбэке — mount order) |
 | 06.09.2026 | **Boot-fix (урок!)** | Коммит 30f5bdb69b, фикс Grok: Service-класс в прод-дереве НЕ должен `inject: ['invariants']` (диагностика — только companion ./invariant; в проде нет invariants-сервиса → pending → boot abort на :3080). Тесты «прятали» это, монтируя InvariantRegistry. Плюс: **манифест бандла (base/package.json) обязан содержать все пакеты из его cordis.patch.yml** (patch без manifest-записи ломает профиль). Добавлен регресс-тест «activates without the invariants service». Agent Note: `2026-09-07-execution-plugin-must-not-inject-invariants` (c1d55dff90) |
 | 07.09.2026 | Адаптеры → execution SM | **Все 4 готовы**: jobs (активация 4e46160d5c, тесты 58f48babd0), goal (23529f2c8e), workflow (765cf3fea4), subagent (6ed4c3e042). Единый пульт видит задачи, цели, потоки и субагентов. Coverage 100% на адаптерах; сборки зелёные; сервер перезапущен; GUI-проверка без регрессий |
+| 07.09.2026 | T6-слой 2 (видимость схемы) | Коммит a83818f9f6 (работа Grok CLI): waterfall system-prompt/assemble фильтрует headDenyTools из схемы depth-0; executor видит всё. 28 тестов, coverage 100%, core не тронут. Agent Note: 2026-09-07-orchestrator-head-tool-schema-visibility |
+| 07.09.2026 | v2.1 durable ExecutionEvent journal | **В работе у Grok CLI** (bridge-плагин execution-persistence, JSONL или таблица; execution остаётся чистым; консенсус ChatGPT: (a) sink-контракт + (c) composition-bridge; два журнала не смешивать) |
 
 ## 7. Уроки (инварианты, выявленные на практике)
 
