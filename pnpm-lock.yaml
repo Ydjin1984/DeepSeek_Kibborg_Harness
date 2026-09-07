@@ -1051,6 +1051,12 @@ importers:
       '@deepseek-ai/dsh-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
+      '@deepseek-ai/dsh-engagement-stub':
+        specifier: workspace:^
+        version: link:../../guard/engagement-stub
+      '@deepseek-ai/dsh-execution':
+        specifier: workspace:^
+        version: link:../../execution/execution
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../fs/fs-local

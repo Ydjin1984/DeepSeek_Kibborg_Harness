@@ -42,10 +42,12 @@ declare module '@deepseek-ai/cordis' {
  * Unified execution lifecycle service. Orchestrates the execution state machine
  * (registration, transitions, events) and the resource lease registry (external
  * resource lifecycle: chrome, pty, ida, workspace, subprocess).
+ *
+ * Does not inject `invariants`: that inject belongs to the `./invariant`
+ * companion. Shipping profiles never mount the invariants registry as a plugin
+ * row, so injecting it here would leave this service pending and abort boot.
  */
 export class ExecutionService extends Service {
-  static inject = ['invariants']
-
   private readonly registry: ExecutionRegistry
   private readonly _resources: ResourceLeaseRegistry
 

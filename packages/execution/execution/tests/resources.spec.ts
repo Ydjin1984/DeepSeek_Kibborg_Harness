@@ -6,7 +6,6 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import ExecutionService from '../src/index.ts'
 import type { ResourceEvent } from '../src/resources.ts'
 import { ResourceLeaseRegistry, type ResourceError } from '../src/resources.ts'
@@ -22,7 +21,6 @@ describe('ResourceLeaseRegistry — full composition', () => {
 
   beforeEach(async () => {
     ctx = new Context()
-    await ctx.plugin(InvariantRegistry)
     await ctx.plugin(ExecutionService)
     svc = ctx.executions
     events = []

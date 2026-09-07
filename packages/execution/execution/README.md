@@ -59,6 +59,7 @@ Terminal (COMPLETED/FAILED/CANCELLED/TIMEOUT/ABORTED) — no outgoing transition
 - **Projection/observation only.** The registry owns an in-process append-only event log.
 - **No lifecycle management.** Native subsystems (jobs, goals, etc.) continue to own their execution.
 - **Optional adapter.** Jobs adapter (in `dsh-jobs`) is safe: if `ctx.executions` is absent, jobs works unchanged via `ctx.get('executions')`.
+- **Independent of diagnostics.** The product plugin does not inject `invariants`; that inject lives on the `./invariant` companion. Shipping profiles do not mount the invariants registry as a plugin row.
 
 ## API
 

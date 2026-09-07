@@ -6,14 +6,13 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import ExecutionService from '../src/index.ts'
 import type { ExecutionEvent } from '../src/types.ts'
 import type { ExecutionEventListener } from '../src/registry.ts'
 
 // ---------------------------------------------------------------------------
-// Service tests — real composition through Context.plugin so the Service
-// `inject: ['invariants']` contract is exercised, not stubbed.
+// Service tests — real composition through Context.plugin. The product plugin
+// must activate without the diagnostics registry (shipping profiles omit it).
 // ---------------------------------------------------------------------------
 
 describe('ExecutionService', () => {
@@ -22,12 +21,15 @@ describe('ExecutionService', () => {
 
   beforeEach(async () => {
     ctx = new Context()
-    await ctx.plugin(InvariantRegistry)
     await ctx.plugin(ExecutionService)
     service = ctx.executions
   })
 
   describe('constructor', () => {
+    it('activates without the invariants service', () => {
+      expect(service.list()).toEqual([])
+    })
+
     it('creates a registry', () => {
       expect(service.registryRef).toBeDefined()
       expect(service.registryRef).toBeInstanceOf(Object)
