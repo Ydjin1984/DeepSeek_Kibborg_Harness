@@ -27,6 +27,7 @@ export type {
   WorkflowStopReason,
 } from './types.ts'
 export type { WorkflowRun, WorkflowStartRequest } from './runtime-types.ts'
+export { registerWorkflowExecutionAdapter } from './execution-adapter.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

@@ -12,6 +12,7 @@ import * as vm from 'node:vm'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import WorkflowEngine, { WorkflowError, WorkflowRunId } from '@deepseek-ai/dsh-workflow'
+import { registerWorkflowExecutionAdapter } from '@deepseek-ai/dsh-workflow/src/execution-adapter.ts'
 import type { WorkflowRun, WorkflowRunInfo, WorkflowStartRequest } from '@deepseek-ai/dsh-workflow'
 import { WorkerRun } from './host.ts'
 import { validateMeta } from './meta.ts'
@@ -128,6 +129,9 @@ class WorkerThreadWorkflowEngine extends WorkflowEngine {
     // schemastery (static Config) has already filled the defaulted fields;
     // the assertion records that resolution, not a hidden fallback.
     this.config = config as ResolvedConfig
+    // Project workflow lifecycle into the unified execution state machine.
+    // Optional: resolves ctx.executions lazily; no-op when absent.
+    registerWorkflowExecutionAdapter(ctx)
   }
 
   /**
