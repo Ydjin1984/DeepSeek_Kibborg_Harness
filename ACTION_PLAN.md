@@ -2,7 +2,8 @@
 
 **Статус:** активен · **Старт:** 06.09.2026 · **Основа:** `CONSENSUS_REPORT.md` (консенсус ChatGPT + Grok + голова проекта)
 **Советчики (постоянные):** Grok (grok.com) · ChatGPT (chatgpt.com) — доступ через Chrome CDP `127.0.0.1:9222`
-**Исполнитель тяжёлой работы:** киборг Kibborg_Flash_v5.7 (executor, локальный, с vision)
+**Исполнитель тяжёлой работы (до 07.09):** киборг Kibborg_Flash_v5.7 (executor, локальный, с vision)
+**Исполнитель тяжёлой работы (с 07.09):** **Grok Build CLI** (`C:\Users\lex66\.grok\bin\grok.exe`, headless-агент: `grok -p "<задание>" --permission-mode bypassPermissions --cwd D:\Deepseec_DaVinchi`) — киборг занят, в оркестре его заменяет консольный Grok-агент.
 
 ---
 
