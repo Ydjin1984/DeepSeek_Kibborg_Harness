@@ -51,6 +51,9 @@
       "path": "../../jobs/jobs"
     },
     {
+      "path": "../../execution/execution"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

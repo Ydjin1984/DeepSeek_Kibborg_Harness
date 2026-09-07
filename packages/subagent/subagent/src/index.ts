@@ -66,6 +66,7 @@ import type { ContinuableSetupContribution } from './activation-setup-registry.t
 import { listChildren as listSubagentChildren, listDescendants as listSubagentDescendants } from './list-children.ts'
 import type { SubagentDescendantListEntry, SubagentListEntry } from './list-children.ts'
 import { snapshotSubagentDescriptor } from './descriptor.ts'
+import { registerSubagentExecutionAdapter } from './execution-adapter.ts'
 import {
   subagentActivityProjectionDefinition,
   subagentIdentityProjectionDefinition,
@@ -101,6 +102,7 @@ export type {
   SubagentDescriptorInput,
 } from './descriptor.ts'
 export { seedDescriptorTurn } from './descriptor-seed.ts'
+export { registerSubagentExecutionAdapter } from './execution-adapter.ts'
 export { SubagentError } from './error.ts'
 export { settleRun } from './run-settlement.ts'
 export { assertSubagentMaxDepth, delegationDepthOf } from './depth.ts'
@@ -203,6 +205,9 @@ export class SubagentRuntime extends Service {
       projectionCtx.sessionProjections.register(subagentIdentityProjectionDefinition)
       projectionCtx.sessionProjections.register(subagentActivityProjectionDefinition)
     })
+    // Project subagent runs into the unified execution state machine.
+    // Optional: resolves ctx.executions lazily; no-op when absent.
+    registerSubagentExecutionAdapter(ctx)
   }
 
   /**
