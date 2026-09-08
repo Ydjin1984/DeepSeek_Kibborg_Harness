@@ -70,6 +70,9 @@ import {
   mcpListValueSchema, mcpRemoveValueSchema, mcpSaveValueSchema,
 } from '../api/mcp.schema.ts'
 import {
+  telegramAttachValueSchema, telegramDetachValueSchema, telegramStatusValueSchema, telegramTestValueSchema,
+} from '../api/telegram.schema.ts'
+import {
   goalCreateValueSchema,
   goalEditValueSchema,
   goalPauseValueSchema,
@@ -187,6 +190,12 @@ export interface IApiClient {
     save(payload: RequestPayload<'mcp.save'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'mcp.save'>>>
     remove(payload: RequestPayload<'mcp.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'mcp.remove'>>>
   }
+  telegram: {
+    status(payload: RequestPayload<'telegram.status'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'telegram.status'>>>
+    attach(payload: RequestPayload<'telegram.attach'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'telegram.attach'>>>
+    detach(payload: RequestPayload<'telegram.detach'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'telegram.detach'>>>
+    test(payload: RequestPayload<'telegram.test'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'telegram.test'>>>
+  }
   events: {
     mux(payload: Parameters<ApiProxy['events']['mux']>[0]['payload'], signal: AbortSignal, onOpen?: () => void): AsyncIterable<RpcRequest<MuxFrame>>
     host(payload: Parameters<ApiProxy['events']['host']>[0]['payload'], signal: AbortSignal, onOpen?: () => void): AsyncIterable<RpcRequest<HostFrame>>
@@ -289,6 +298,10 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'mcp.list': mcpListValueSchema,
   'mcp.save': mcpSaveValueSchema,
   'mcp.remove': mcpRemoveValueSchema,
+  'telegram.status': telegramStatusValueSchema,
+  'telegram.attach': telegramAttachValueSchema,
+  'telegram.detach': telegramDetachValueSchema,
+  'telegram.test': telegramTestValueSchema,
   'goal.create': goalCreateValueSchema,
   'goal.edit': goalEditValueSchema,
   'goal.pause': goalPauseValueSchema,
@@ -585,6 +598,13 @@ export abstract class AbstractApiClient implements IApiClient {
     list: (payload, signal) => this.callUnary('mcp.list', payload, signal),
     save: (payload, signal) => this.callUnary('mcp.save', payload, signal),
     remove: (payload, signal) => this.callUnary('mcp.remove', payload, signal),
+  }
+
+  readonly telegram: IApiClient['telegram'] = {
+    status: (payload, signal) => this.callUnary('telegram.status', payload, signal),
+    attach: (payload, signal) => this.callUnary('telegram.attach', payload, signal),
+    detach: (payload, signal) => this.callUnary('telegram.detach', payload, signal),
+    test: (payload, signal) => this.callUnary('telegram.test', payload, signal),
   }
 
   readonly goals: IApiClient['goals'] = {

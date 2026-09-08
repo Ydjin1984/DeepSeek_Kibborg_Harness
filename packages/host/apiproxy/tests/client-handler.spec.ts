@@ -172,6 +172,12 @@ function scriptedApi(overrides: {
       }),
       remove: async request => ok(request, {}),
     },
+    telegram: {
+      status: async request => ok(request, { configured: false, attached: false }),
+      attach: async request => ok(request, {}),
+      detach: async request => ok(request, {}),
+      test: async request => ok(request, { ok: true }),
+    },
     downloads: { sessionLog: async () => new Response('stub', { status: 404 }) },
   }
 }

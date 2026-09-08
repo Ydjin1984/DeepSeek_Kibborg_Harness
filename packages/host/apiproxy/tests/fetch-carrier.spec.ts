@@ -422,6 +422,20 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return { rpcId: request.rpcId, result: { ok: true, value: {} } }
       },
     },
+    telegram: {
+      async status(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { configured: false, attached: false } } }
+      },
+      async attach(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async detach(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: {} } }
+      },
+      async test(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { ok: true } } }
+      },
+    },
     downloads: {
       async sessionLog() {
         return new Response('stub', { status: 404 })

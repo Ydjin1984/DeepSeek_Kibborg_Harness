@@ -58,6 +58,8 @@ export interface RpcErrorDetailsMap {
   'mcp-servers-unavailable': {}
   'mcp-server-invalid': { name: string }
   'mcp-server-remove-failed': { name: string }
+  'telegram-unavailable': {}
+  'telegram-not-configured': { reason: string }
   'agent-busy': { reason: string }
   'attachment-error': { reason: string }
   'queue-item-not-found': { itemId: MessageId }

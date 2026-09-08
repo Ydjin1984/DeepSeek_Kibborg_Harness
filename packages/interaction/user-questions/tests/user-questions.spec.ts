@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import UserQuestionService, {
   UserQuestionError,
+  type AskUserQuestionAnswer,
   type AskUserQuestionRequest,
   type UserQuestionProvider,
 } from '@deepseek-ai/dsh-user-questions'
@@ -24,6 +25,18 @@ function stubAgent(id: string, delegationDepth = 0): Agent {
     id: agentId,
     session: { id: agentId, header: { delegationDepth } },
   } as unknown as Agent
+}
+
+/** A provider that records the signal it receives and never answers on its own. */
+function hangingProvider(): UserQuestionProvider & { signals: AbortSignal[] } {
+  const signals: AbortSignal[] = []
+  return {
+    signals,
+    ask(request) {
+      signals.push(request.signal as AbortSignal)
+      return new Promise<AskUserQuestionAnswer>(() => {})
+    },
+  }
 }
 
 describe('UserQuestionService', () => {
@@ -60,13 +73,84 @@ describe('UserQuestionService', () => {
       .rejects.toMatchObject({ code: 'NO_PROVIDER' })
   })
 
-  it('rejects duplicate providers instead of replacing the active UI', async () => {
+  it('accepts multiple registered providers as independent UI channels', async () => {
     const ctx = new Context()
     await ctx.plugin(UserQuestionService)
-    ctx.userQuestions.registerProvider(provider('first'))
+    const first = provider('first')
+    const second = provider('second')
+    ctx.userQuestions.registerProvider(first)
+    ctx.userQuestions.registerProvider(second)
 
-    expect(() => ctx.userQuestions.registerProvider(provider('second')))
-      .toThrow(UserQuestionError)
+    const result = await ctx.userQuestions.ask({ questions: [{ id: 'confirm', question: 'Proceed?' }] })
+
+    // Every channel receives the request; ask() settles with one of their answers.
+    expect(first.seen).toHaveLength(1)
+    expect(second.seen).toHaveLength(1)
+    expect(result.answers[0]?.id).toBe('confirm')
+    expect(['first', 'second']).toContain(result.answers[0]?.selected[0])
+  })
+
+  it('resolves with the first answer and aborts competing providers', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const fast = provider('fast')
+    const slow = hangingProvider()
+    ctx.userQuestions.registerProvider(fast)
+    ctx.userQuestions.registerProvider(slow)
+
+    const result = await ctx.userQuestions.ask({ questions: [{ id: 'q', question: 'Q?' }] })
+
+    expect(result).toEqual({ answers: [{ id: 'q', selected: ['fast'] }] })
+    expect(fast.seen).toHaveLength(1)
+    expect(slow.signals).toHaveLength(1)
+    expect(slow.signals[0]?.aborted).toBe(true)
+  })
+
+  it('aborts every provider and rejects ASK_ABORTED when the caller signal aborts', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const a = hangingProvider()
+    const b = hangingProvider()
+    ctx.userQuestions.registerProvider(a)
+    ctx.userQuestions.registerProvider(b)
+    const controller = new AbortController()
+
+    const ask = ctx.userQuestions.ask({ questions: [{ id: 'q', question: 'Q?' }], signal: controller.signal })
+    await Promise.resolve()
+    controller.abort()
+
+    await expect(ask).rejects.toMatchObject({ name: 'UserQuestionError', code: 'ASK_ABORTED' })
+    expect(a.signals[0]?.aborted).toBe(true)
+    expect(b.signals[0]?.aborted).toBe(true)
+  })
+
+  it('rejects with the first failure when every provider fails', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const failing = (code: string): UserQuestionProvider => ({
+      ask: vi.fn(async () => { throw new UserQuestionError('channel down', code) }),
+    })
+    ctx.userQuestions.registerProvider(failing('CHANNEL_A_DOWN'))
+    ctx.userQuestions.registerProvider(failing('CHANNEL_B_DOWN'))
+
+    await expect(ctx.userQuestions.ask({ questions: [{ id: 'q', question: 'Q?' }] }))
+      .rejects.toMatchObject({ name: 'UserQuestionError', code: 'CHANNEL_A_DOWN' })
+  })
+
+  it('keeps remaining providers after one is disposed', async () => {
+    const ctx = new Context()
+    await ctx.plugin(UserQuestionService)
+    const first = provider('first')
+    const second = provider('second')
+    const disposeFirst = ctx.userQuestions.registerProvider(first)
+    ctx.userQuestions.registerProvider(second)
+    disposeFirst()
+
+    const result = await ctx.userQuestions.ask({ questions: [{ id: 'q', question: 'Q?' }] })
+
+    expect(first.seen).toHaveLength(0)
+    expect(second.seen).toHaveLength(1)
+    expect(result).toEqual({ answers: [{ id: 'q', selected: ['second'] }] })
   })
 
   it('fails before reaching the provider when the signal is already aborted', async () => {

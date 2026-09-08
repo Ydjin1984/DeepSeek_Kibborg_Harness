@@ -107,6 +107,10 @@
     - id: api-gateway
       name: '@deepseek-ai/dsh-host-apiproxy'
 
+    # Telegram mirror bridge: settings namespace `telegram` + session mirror.
+    - id: telegram-bridge
+      name: '@deepseek-ai/dsh-telegram-bridge'
+
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
 
@@ -208,6 +212,9 @@
     - id: ui-settings-mcp
       name: '@deepseek-ai/dsh-client-ui-settings-mcp'
 
+    - id: ui-settings-telegram
+      name: '@deepseek-ai/dsh-client-ui-settings-telegram'
+
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
 
@@ -220,6 +227,9 @@
 
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'
+
+    - id: ui-telegram-mirror
+      name: '@deepseek-ai/dsh-client-ui-telegram-mirror'
 
     # Tool call tree, generic fallback, and keyed business Tool views.
     - id: ui-tool

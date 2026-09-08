@@ -72,6 +72,9 @@ import {
   mcpListRequestSchema, mcpRemoveRequestSchema, mcpSaveRequestSchema,
 } from '../api/mcp.schema.ts'
 import {
+  telegramAttachRequestSchema, telegramDetachRequestSchema, telegramStatusRequestSchema, telegramTestRequestSchema,
+} from '../api/telegram.schema.ts'
+import {
   goalCreateRequestSchema,
   goalEditRequestSchema,
   goalPauseRequestSchema,
@@ -196,6 +199,10 @@ const UNARY_ROUTES: UnaryRoutes = {
   'mcp.list': { schema: mcpListRequestSchema, invoke: (api, r) => api.mcp.list(r) },
   'mcp.save': { schema: mcpSaveRequestSchema, invoke: (api, r) => api.mcp.save(r) },
   'mcp.remove': { schema: mcpRemoveRequestSchema, invoke: (api, r) => api.mcp.remove(r) },
+  'telegram.status': { schema: telegramStatusRequestSchema, invoke: (api, r) => api.telegram.status(r) },
+  'telegram.attach': { schema: telegramAttachRequestSchema, invoke: (api, r) => api.telegram.attach(r) },
+  'telegram.detach': { schema: telegramDetachRequestSchema, invoke: (api, r) => api.telegram.detach(r) },
+  'telegram.test': { schema: telegramTestRequestSchema, invoke: (api, r) => api.telegram.test(r) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */

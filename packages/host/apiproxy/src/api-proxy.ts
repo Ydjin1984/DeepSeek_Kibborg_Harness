@@ -130,6 +130,25 @@ import {
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
 
+/**
+ * Structural face of the optional Telegram mirror bridge (provided by
+ * `@deepseek-ai/dsh-telegram-bridge`). Kept local so this package never
+ * depends on the bridge; the runtime object satisfies the shape structurally.
+ */
+interface TelegramBridgeLike {
+  status(sessionId: SessionId | undefined): { configured: boolean; attached: boolean }
+  attach(sessionId: SessionId): { ok: boolean; reason?: string }
+  detach(sessionId: SessionId): void
+  test(): Promise<{ ok: boolean; description?: string }>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host-side Telegram mirror bridge; absent without the bridge package. */
+    telegramBridge?: TelegramBridgeLike
+  }
+}
+
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
 
@@ -3510,6 +3529,55 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { name },
           })
         }
+      },
+    },
+
+    telegram: {
+      // A deployment without the bridge reports an unconfigured, unattached
+      // mirror: the browser renders the button as disabled rather than erroring.
+      status(request) {
+        const bridge: TelegramBridgeLike | undefined = ctx.get('telegramBridge')
+        if (bridge === undefined) {
+          return Promise.resolve(ok(request, { configured: false, attached: false }))
+        }
+        return Promise.resolve(ok(request, bridge.status(request.payload.sessionId)))
+      },
+
+      attach(request) {
+        const bridge: TelegramBridgeLike | undefined = ctx.get('telegramBridge')
+        if (bridge === undefined) {
+          return Promise.resolve(err(request, {
+            code: 'telegram-unavailable',
+            message: 'этот профиль не содержит Telegram-моста',
+            details: {},
+          }))
+        }
+        const result = bridge.attach(request.payload.sessionId)
+        if (!result.ok) {
+          return Promise.resolve(err(request, {
+            code: 'telegram-not-configured',
+            message: 'Настройте токен бота и chat ID во вкладке Telegram',
+            details: { reason: result.reason ?? 'not-configured' },
+          }))
+        }
+        return Promise.resolve(ok(request, {}))
+      },
+
+      detach(request) {
+        ctx.get('telegramBridge')?.detach(request.payload.sessionId)
+        return Promise.resolve(ok(request, {}))
+      },
+
+      async test(request) {
+        const bridge: TelegramBridgeLike | undefined = ctx.get('telegramBridge')
+        if (bridge === undefined) {
+          return err(request, {
+            code: 'telegram-unavailable',
+            message: 'этот профиль не содержит Telegram-моста',
+            details: {},
+          })
+        }
+        return ok(request, await bridge.test())
       },
     },
 

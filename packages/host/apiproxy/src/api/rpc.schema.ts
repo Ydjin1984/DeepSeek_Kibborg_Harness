@@ -81,6 +81,8 @@ export const rpcErrorSchema: z.ZodType<RpcError> = z.discriminatedUnion('code', 
   z.object({ code: z.literal('subagent-unauthorized'), message: z.string(), details: z.object({ childSessionId: z.string() }) }),
   z.object({ code: z.literal('subagent-delivery-unavailable'), message: z.string(), details: z.object({ childSessionId: z.string() }) }),
   z.object({ code: z.literal('oauth-login-failed'), message: z.string(), details: z.object({ settingsNs: z.string(), provider: z.string().optional(), loginId: z.string().optional() }) }),
+  z.object({ code: z.literal('telegram-unavailable'), message: z.string(), details: z.object({}) }),
+  z.object({ code: z.literal('telegram-not-configured'), message: z.string(), details: z.object({ reason: z.string() }) }),
   z.object({ code: z.literal('internal'), message: z.string(), details: z.object({}) }),
 ]) as unknown as z.ZodType<RpcError>
 

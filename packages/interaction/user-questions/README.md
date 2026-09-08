@@ -8,8 +8,8 @@ User-interaction Service Definition. It owns `ctx.userQuestions`, the service a 
 
 ### Public API
 
-- `ctx.userQuestions.registerProvider(provider): () => void` Register the UI-side provider. Only one provider may be active in a context; disposal unregisters it.
-- `ctx.userQuestions.ask(request): Promise<AskUserQuestionAnswer>` Ask the active provider and wait for the answer.
+- `ctx.userQuestions.registerProvider(provider): () => void` Register one UI-side provider (an answer channel such as the web GUI or a Telegram bridge). Any number of providers may be active; every provider receives each question and the first answer wins. Disposal unregisters the provider.
+- `ctx.userQuestions.ask(request): Promise<AskUserQuestionAnswer>` Ask the registered providers and wait for the first answer.
 
 ### Key Types
 
@@ -18,7 +18,7 @@ User-interaction Service Definition. It owns `ctx.userQuestions`, the service a 
 - `AskUserQuestionIntent` — `{ kind: 'plan-review', approve }`; the tagged presentation intent below.
 - `AskUserQuestionAnswer` — `{ answers: [{ id, selected, custom? }] }`.
 - `UserQuestionProvider` — UI implementation with `ask(request)`.
-- `UserQuestionError` — `HarnessError` subclass with codes such as `EMPTY_QUESTIONS`, `BAD_INTENT`, `NO_PROVIDER`, `DUPLICATE_PROVIDER`, `ASK_ABORTED`, `CALLER_NOT_LIVE`, and `DELEGATED_CALLER`.
+- `UserQuestionError` — `HarnessError` subclass with codes such as `EMPTY_QUESTIONS`, `BAD_INTENT`, `NO_PROVIDER`, `ASK_ABORTED`, `CALLER_NOT_LIVE`, and `DELEGATED_CALLER`.
 
 For a single-select question, `custom` overrides the selected choice and `selected` is empty. For a multi-select question, `custom` may supplement the labels in `selected`. A UI may preserve a skipped item as `{ id, selected: [] }`, keeping the existing answer shape while retaining other answers in the batch.
 
@@ -42,5 +42,5 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **One provider per context** — there is no routing or fan-out to multiple UIs; a second registration throws `DUPLICATE_PROVIDER`, and with none registered `ask()` throws `NO_PROVIDER` rather than degrading.
+- **Fan-out to every provider, first answer wins** — each registered channel receives the question and the service aborts the competing channels (through the shared signal) once any channel answers; with none registered `ask()` throws `NO_PROVIDER` rather than degrading.
 - **The vocabulary is the question-form shape only** — selectable options plus optional custom text; richer interaction shapes (file pickers, diff-preview confirmations) have no seam vocabulary yet.

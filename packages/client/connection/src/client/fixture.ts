@@ -2292,6 +2292,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       }),
       remove: request => ok(request, {}),
     },
+    telegram: {
+      status: request => ok(request, { configured: false, attached: false }),
+      attach: request => ok(request, {}),
+      detach: request => ok(request, {}),
+      test: request => ok(request, { ok: true }),
+    },
     sessions: {
       list: request => ok(request, { items: [...sessions].sort((a, b) => b.updatedAt - a.updatedAt) }),
       search: (request, signal) => {
@@ -3402,6 +3408,10 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'mcp.list': return this.api.mcp.list(request)
       case 'mcp.save': return this.api.mcp.save(request)
       case 'mcp.remove': return this.api.mcp.remove(request)
+      case 'telegram.status': return this.api.telegram.status(request)
+      case 'telegram.attach': return this.api.telegram.attach(request)
+      case 'telegram.detach': return this.api.telegram.detach(request)
+      case 'telegram.test': return this.api.telegram.test(request)
       case 'subagent.list': return this.api.subagents.list(request)
       case 'subagent.history': return this.api.subagents.history(request)
       case 'subagent.prompt': return this.api.subagents.prompt(request, signal)

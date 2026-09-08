@@ -17,6 +17,7 @@ import type { CredentialsApi } from './credentials.ts'
 import type { LlmApi } from './llm.ts'
 import type { McpApi } from './mcp.ts'
 import type { DownloadsApi } from './downloads.ts'
+import type { TelegramApi } from './telegram.ts'
 import type { ClientResponse, RpcReceipt } from './rpc.ts'
 
 /** Root interface of the unified API. New client-request domain = one new file pair + one field here + one map row. */
@@ -34,6 +35,8 @@ export interface ApiProxy {
   llm: LlmApi
   /** MCP server registry the Host deploys from (list/save/remove user-scope servers). */
   mcp: McpApi
+  /** Telegram mirror bridge state (attach/detach/status/test). */
+  telegram: TelegramApi
   /** Host-only download surfaces (GET, no wire envelope); absent from IApiClient. */
   downloads: DownloadsApi
   /**
@@ -85,6 +88,7 @@ export type { SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSe
 export type { CredentialsApi, CredentialView } from './credentials.ts'
 export type { ConfigurableProviderView, DiscoveredModelView, LlmApi } from './llm.ts'
 export type { DownloadsApi } from './downloads.ts'
+export type { TelegramApi, TelegramStatusView, TelegramTestView } from './telegram.ts'
 export type { ApprovalResponsePayload } from './approvals.ts'
 
 export type { QuestionResponsePayload } from './questions.ts'

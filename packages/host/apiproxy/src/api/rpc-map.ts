@@ -15,6 +15,7 @@ import type { CredentialsApi } from './credentials.ts'
 import type { LlmApi } from './llm.ts'
 import type { McpApi } from './mcp.ts'
 import type { SubagentsApi } from './subagents.ts'
+import type { TelegramApi } from './telegram.ts'
 import type { RpcResponse } from './rpc.ts'
 
 /**
@@ -83,6 +84,10 @@ export interface RpcMethodMap {
   'mcp.list': McpApi['list']
   'mcp.save': McpApi['save']
   'mcp.remove': McpApi['remove']
+  'telegram.status': TelegramApi['status']
+  'telegram.attach': TelegramApi['attach']
+  'telegram.detach': TelegramApi['detach']
+  'telegram.test': TelegramApi['test']
   'goal.create': GoalsApi['create']
   'goal.edit': GoalsApi['edit']
   'goal.pause': GoalsApi['pause']

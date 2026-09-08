@@ -1,8 +1,10 @@
 /**
  * Service Definition for the user-questions capability seam (`ctx.userQuestions`): a UI-backed service for
  * pausing an agent tool call until the human answers a question. The model-
- * facing tool lives in `@deepseek-ai/dsh-tool-ask-user`; UI packages provide
- * the single active provider.
+ * facing tool lives in `@deepseek-ai/dsh-tool-ask-user`; UI packages register
+ * providers, one per answer channel (web GUI, Telegram bridge, …). Every
+ * registered provider receives each question; the first answer wins and the
+ * remaining providers are aborted through the shared signal.
  *
  * @module @deepseek-ai/dsh-user-questions
  */
@@ -34,7 +36,12 @@ export interface AskUserQuestionRequest {
   signal?: AbortSignal
 }
 
-/** UI-side provider for user questions. */
+/**
+ * A provider that shows questions on one answer channel and resolves when the
+ * human answers there. Providers must listen to `request.signal`: the service
+ * aborts competing providers once another channel answered, and the owning
+ * tool/step aborts the whole ask through the same signal.
+ */
 export interface UserQuestionProvider {
   ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
 }
@@ -47,35 +54,33 @@ export class UserQuestionError extends HarnessError {
   }
 }
 
-/** `ctx.userQuestions`: one active UI provider plus an `ask()` API. */
+/** `ctx.userQuestions`: registered UI providers plus an `ask()` API. */
 export class UserQuestionService extends Service {
-  private provider: UserQuestionProvider | undefined
+  private readonly providers = new Set<UserQuestionProvider>()
 
   constructor(ctx: Context) {
     super(ctx, 'userQuestions')
   }
 
   /**
-   * Register the UI provider. Only one provider may be active in a context.
+   * Register a UI provider. Any number of providers may be active in a context:
+   * each one is an independent answer channel for the same questions.
    *
-   * @param provider UI-side implementation that collects answers.
+   * @param provider Channel implementation that collects answers.
    * @returns Disposer that unregisters this provider.
    */
   registerProvider(provider: UserQuestionProvider): () => void {
     const dispose = this.ctx.effect(function* (this: UserQuestionService) {
-      if (this.provider !== undefined) {
-        throw new UserQuestionError('a user-questions provider is already registered', 'DUPLICATE_PROVIDER')
-      }
-      this.provider = provider
+      this.providers.add(provider)
       yield () => {
-        this.provider = undefined
+        this.providers.delete(provider)
       }
     }.bind(this), 'userInteraction.registerProvider()')
     return () => void dispose()
   }
 
   /**
-   * Ask the active UI provider and wait for the user's answer.
+   * Ask the registered UI providers and wait for the first user answer.
    *
    * When a caller supplies an agent, human interaction is valid only for the
    * exact live runtime root. Runtime ownership, not durable session lineage,
@@ -133,11 +138,74 @@ export class UserQuestionService extends Service {
           'BAD_INTENT')
       }
     }
-    if (this.provider === undefined) {
+    if (this.providers.size === 0) {
       throw new UserQuestionError('no user-questions provider is registered', 'NO_PROVIDER')
     }
-    return this.provider.ask(request)
+    const providers = [...this.providers]
+    // A single channel keeps the historical contract: it receives the request
+    // unchanged (original signal included) and owns the whole wait.
+    const [single] = providers
+    if (single !== undefined && providers.length === 1) {
+      return single.ask(request)
+    }
+    return askManyProviders(request, providers)
   }
+}
+
+/**
+ * Ask several providers for one answer: every channel receives the question and
+ * the first answer wins; once an answer arrives (or the caller signal aborts,
+ * or every provider fails) the shared controller aborts the competing waits.
+ * @param request - the validated question request.
+ * @param providers - the channels to ask, in registration order.
+ * @returns the first provider answer.
+ */
+function askManyProviders(
+  request: AskUserQuestionRequest,
+  providers: UserQuestionProvider[],
+): Promise<AskUserQuestionAnswer> {
+  return new Promise<AskUserQuestionAnswer>((resolve, reject) => {
+    const controller = new AbortController()
+    const failures: unknown[] = []
+    let settled = false
+    const source = request.signal
+    const onSourceAbort = (): void => {
+      if (settled) return
+      settled = true
+      controller.abort()
+      reject(new UserQuestionError(
+        'ask_user_question was aborted before the user answered', 'ASK_ABORTED'))
+    }
+    source?.addEventListener('abort', onSourceAbort, { once: true })
+    const cleanup = (): void => {
+      source?.removeEventListener('abort', onSourceAbort)
+    }
+    for (const provider of providers) {
+      const signal = source === undefined
+        ? controller.signal
+        : AbortSignal.any([source, controller.signal])
+      provider.ask({ ...request, signal }).then(
+        (value) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          controller.abort()
+          resolve(value)
+        },
+        (error: unknown) => {
+          if (settled) return
+          failures.push(error)
+          if (failures.length === providers.length) {
+            settled = true
+            cleanup()
+            controller.abort()
+            reject(failures[0] ?? new UserQuestionError(
+              'all user-questions providers failed', 'ALL_PROVIDERS_FAILED'))
+          }
+        },
+      )
+    }
+  })
 }
 
 export default UserQuestionService

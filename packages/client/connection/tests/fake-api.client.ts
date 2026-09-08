@@ -211,6 +211,13 @@ export class FakeApiClient implements IApiClient {
     remove: (payload: unknown) => this.record('mcp.remove', payload, Promise.resolve(ok({}))),
   }
 
+  readonly telegram: IApiClient['telegram'] = {
+    status: (payload: unknown) => this.record('telegram.status', payload, Promise.resolve(ok({ configured: false, attached: false }))),
+    attach: (payload: unknown) => this.record('telegram.attach', payload, Promise.resolve(ok({}))),
+    detach: (payload: unknown) => this.record('telegram.detach', payload, Promise.resolve(ok({}))),
+    test: (payload: unknown) => this.record('telegram.test', payload, Promise.resolve(ok({ ok: true }))),
+  }
+
   readonly skills: IApiClient['skills'] = {
     list: (payload: unknown) => this.record('skill.list', payload, this.onSkillList(payload)),
     listManaged: payload => this.record('skill.listManaged', payload, Promise.resolve(ok({ skills: [] }))),
