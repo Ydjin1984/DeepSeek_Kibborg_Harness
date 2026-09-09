@@ -152,4 +152,15 @@ Docs accompany every code change: update affected README and JSDoc contracts tog
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ (code scan root: packages/) with god nodes, community structure, and cross-file relationships. For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists; use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than raw grep output. Dirty graphify-out/ files are expected after updates; dirty graph files are not a reason to skip graphify. Read graphify-out/GRAPH_REPORT.md only for broad architecture review. After modifying code in packages/, run `graphify update packages` to keep the graph current (AST-only, no API cost).
+This project keeps a knowledge graph at `packages/graphify-out/` (scan root: `packages/`) with god nodes, community structure, and cross-file relationships. graphify is installed **locally in this project**: venv `D:\Deepseec_DaVinchi\.venv-graphify` (package `graphifyy`). Run it as:
+
+```sh
+"D:\Deepseec_DaVinchi\.venv-graphify\Scripts\graphify.exe" <command>
+```
+
+The global `graphify` on PATH (uv tool, v0.9.50) is outdated — do not use it for this repo; the local venv holds the current version and rebuilds `packages/graphify-out/`.
+
+- For codebase questions, first run `graphify query "<question>" --graph packages/graphify-out/graph.json` when that file exists; use `graphify path "<A>" "<B>" --graph packages/graphify-out/graph.json` for relationships and `graphify explain "<concept>" --graph packages/graphify-out/graph.json` for focused concepts. These return a scoped subgraph, usually much smaller than raw grep output — prefer them over grepping or reading files when the graph can answer the question.
+- **Graph before shipping:** before committing, pushing, or making any code change that touches packages/, consult the graph first (query/path/explain on the affected area). The graph encodes structure that grep cannot show cheaply; using it first saves tokens and avoids redundant archaeology. Do not skip it because graph files are dirty — dirty graphify-out/ files are expected after updates and are not a reason to avoid the graph.
+- Read `packages/graphify-out/GRAPH_REPORT.md` only for broad architecture review.
+- After modifying code in packages/, run `"D:\Deepseec_DaVinchi\.venv-graphify\Scripts\graphify.exe" update packages` to keep the graph current (AST-only, no API cost; writes `packages/graphify-out/`).
