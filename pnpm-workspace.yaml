@@ -7,6 +7,9 @@ packages:
   - native/landlock-run/packages/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # Kibborg CLI: the terminal surface (own app bin, own bundle, own workspace root).
+  - Kibborg_CLI/apps/*
+  - Kibborg_CLI/packages/*
   - website
   # The runnable demo leaves join as ONE workspace member: examples/package.json
   # declares the union of every leaf's cordis.yml plugins as workspace:*, so a

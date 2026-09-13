@@ -311,6 +311,11 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
-    { "path": "./apps/cli" }
+    { "path": "./apps/cli" },
+    { "path": "./Kibborg_CLI/packages/cli-bundle" },
+    { "path": "./Kibborg_CLI/packages/client-node" },
+    { "path": "./Kibborg_CLI/packages/server" },
+    { "path": "./Kibborg_CLI/packages/tui" },
+    { "path": "./Kibborg_CLI/apps/cli" }
   ]
 }

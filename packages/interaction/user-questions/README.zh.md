@@ -8,8 +8,8 @@
 
 ### 公开 API
 
-- `ctx.userQuestions.registerProvider(provider): () => void` 注册 UI 侧提供方。同一上下文中只能有一个活跃提供方；dispose（资源释放）会将其注销。
-- `ctx.userQuestions.ask(request): Promise<AskUserQuestionAnswer>` 向活跃提供方提问并等待回答。
+- `ctx.userQuestions.registerProvider(provider): () => void` 注册一个 UI 侧提供方（回答通道，例如 Web GUI 或 Telegram bridge）。可以有任意多个提供方同时活跃；每个提供方都会收到该问题，最先给出的回答生效。dispose（资源释放）会注销该提供方。
+- `ctx.userQuestions.ask(request): Promise<AskUserQuestionAnswer>` 向已注册的提供方提问，并等待第一个回答。
 
 ### 关键类型
 
@@ -18,7 +18,7 @@
 - `AskUserQuestionIntent`：`{ kind: 'plan-review', approve }`；即下文的带标签呈现意图。
 - `AskUserQuestionAnswer`：`{ answers: [{ id, selected, custom? }] }`。
 - `UserQuestionProvider`：包含 `ask(request)` 的 UI 实现。
-- `UserQuestionError`：`HarnessError` 的子类，包含 `EMPTY_QUESTIONS`、`BAD_INTENT`、`NO_PROVIDER`、`DUPLICATE_PROVIDER`、`ASK_ABORTED`、`CALLER_NOT_LIVE` 和 `DELEGATED_CALLER` 等代码。
+- `UserQuestionError`：`HarnessError` 的子类，包含 `EMPTY_QUESTIONS`、`BAD_INTENT`、`NO_PROVIDER`、`ASK_ABORTED`、`CALLER_NOT_LIVE` 和 `DELEGATED_CALLER` 等代码。
 
 对于单选题，`custom` 会覆盖选中的选项，且 `selected` 为空。对于多选题，`custom` 可以补充 `selected` 中的标签。UI 可以把跳过的条目保留为 `{ id, selected: [] }`，既维持现有回答形态，也保留该批次中的其他回答。
 
@@ -42,5 +42,5 @@
 
 ## 已知限制与暂缓事项
 
-- **每个上下文只能有一个提供方**：不支持路由或扇出到多个 UI；第二次注册会抛出 `DUPLICATE_PROVIDER`，未注册任何提供方时，`ask()` 会抛出 `NO_PROVIDER`，而不会降级。
+- **向每个提供方扇出，最先回答者生效** —— 每个已注册通道都会收到该问题；一旦某个通道作答，服务会（通过共享 signal）中止其余竞争通道；若未注册任何提供方，`ask()` 会抛出 `NO_PROVIDER`，而不会降级。
 - **词汇仅包含问题表单形态**：可供选择的选项加可选的自定义文本；更丰富的交互形态（文件选择器、diff 预览确认）尚无 seam 词汇。

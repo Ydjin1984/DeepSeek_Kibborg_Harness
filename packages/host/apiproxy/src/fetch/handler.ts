@@ -261,11 +261,27 @@ function fullFrame(narrow: RpcRequest<MuxFrame | HostFrame>): ServerRequest {
 }
 
 /**
+ * Whether a write failed because the consumer already let the stream go.
+ *
+ * A client that cancels its subscription — a surface closing its event stream, a
+ * request that aborted — leaves the pull side closed, and the next frame write
+ * raises `ERR_INVALID_STATE` from the web streams implementation. That is a normal
+ * disconnect, not a fault in the frame source, so it must not be reported as one.
+ */
+function isConsumerGone(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as { readonly code?: unknown }).code
+  return code === 'ERR_INVALID_STATE' || error.message.includes('Controller is already closed')
+}
+
+/**
  * Wrap a frame stream as an SSE Response; stops when req.signal aborts. An
  * impl throw mid-stream emits one stream/error frame and then closes.
  */
 function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): Response {
   const encoder = new TextEncoder()
+  /** Set by the stream's cancel path: the consumer left and nothing can be written. */
+  let consumerGone = false
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -274,9 +290,13 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): R
         // a comment line is not a frame, so client frame parsing skips it naturally).
         controller.enqueue(encoder.encode(': connected\n\n'))
         for await (const narrow of frames) {
+          if (consumerGone) break
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame(narrow))}\n\n`))
         }
       } catch (error: unknown) {
+        // A consumer that closed the channel is a disconnect, not a failure: it gets
+        // no error frame and no log line.
+        if (consumerGone || isConsumerGone(error)) return
         // Mid-stream impl failure → one stream/error frame, then close: the client must see
         // the failure instead of a silent end (which reads as a normal disconnect). A fresh
         // rpcId is minted — this is a server-initiated push like any other frame.
@@ -293,6 +313,9 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): R
           controller.close()
         } catch { /* already cancelled by the consumer: a double close is the only reachable error */ }
       }
+    },
+    cancel() {
+      consumerGone = true
     },
   })
   return new Response(stream, {

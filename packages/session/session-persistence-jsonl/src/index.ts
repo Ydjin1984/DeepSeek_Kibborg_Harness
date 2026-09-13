@@ -43,6 +43,41 @@ const DEFAULT_COMPRESSION: JsonlCompression = 'zstd'
  */
 const ZSTD_DECODE_YIELD_INTERVAL_MS = 500
 
+/**
+ * How many session headers are read at once while listing.
+ *
+ * Listing is file-system bound and independent per log, so a bounded fan-out
+ * keeps a home with thousands of sessions from paying one round trip each, while
+ * the bound keeps a cold directory from opening every file simultaneously.
+ */
+const LIST_READ_CONCURRENCY = 32
+
+/**
+ * Map over items with a bounded number of concurrent calls, keeping input order.
+ * @param items - the items to process.
+ * @param limit - how many calls may be in flight at once.
+ * @param run - the per-item work.
+ * @returns the results in the order of the input.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const index = next
+      next += 1
+      if (index >= items.length) return
+      results[index] = await run(items[index] as T, index)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
 /** Assert that the independently decodable first frame contains only the header record. */
 function assertZstdHeaderFrame(plaintext: Buffer): void {
   if (plaintext.length === 0 || plaintext.indexOf(0x0A) !== plaintext.length - 1) {
@@ -473,8 +508,12 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     signal?.throwIfAborted()
     await this.ensureRootEncoding()
     signal?.throwIfAborted()
-    const artifacts: Array<{ header: SessionHeader; path: string }> = []
-    const ids = new Set<SessionId>()
+    // The per-session work is file-system bound (two existence probes plus one
+    // header read per log), so a home with thousands of sessions spends seconds
+    // listing them one after another. The reads are independent, so they run a
+    // bounded number at a time and the listing keeps the order of the directories.
+    const candidates: Array<{ readonly path: string; readonly index: number }> = []
+    let index = 0
     for (const project of await this.listProjectDirs(signal)) {
       signal?.throwIfAborted()
       for (const dir of await this.listSessionDirs(project, signal)) {
@@ -483,26 +522,36 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
         const oppositeExists = await this.exists(opposite)
         signal?.throwIfAborted()
         if (oppositeExists) throw this.encodingMismatch(opposite)
-        const path = join(dir, `session${logSuffix(this.compression)}`)
-        const pathExists = await this.exists(path)
-        signal?.throwIfAborted()
-        if (!pathExists) continue
-        // Read only headers so listing scales with session count, not log size.
-        const first = this.compression === 'zstd'
-          ? await this.readFirstZstdLine(path, signal)
-          : await this.readFirstLine(path, signal)
-        signal?.throwIfAborted()
-        if (first === undefined) continue // empty/half-written file
-        const meta = parseHeaderMeta(first)
-        if (meta === undefined) continue // not a session header
-        await this.assertStoredIdentity(path, meta, undefined, signal)
-        signal?.throwIfAborted()
-        if (ids.has(meta.id)) {
-          throw new Error(`duplicate JSONL session id "${meta.id}" appears in multiple project directories`)
-        }
-        ids.add(meta.id)
-        artifacts.push({ header: meta, path })
+        candidates.push({ path: join(dir, `session${logSuffix(this.compression)}`), index })
+        index += 1
       }
+    }
+    const read = await mapWithConcurrency(candidates, LIST_READ_CONCURRENCY, async (candidate) => {
+      signal?.throwIfAborted()
+      if (!(await this.exists(candidate.path))) return undefined
+      signal?.throwIfAborted()
+      // Read only headers so listing scales with session count, not log size.
+      const first = this.compression === 'zstd'
+        ? await this.readFirstZstdLine(candidate.path, signal)
+        : await this.readFirstLine(candidate.path, signal)
+      signal?.throwIfAborted()
+      if (first === undefined) return undefined // empty/half-written file
+      const meta = parseHeaderMeta(first)
+      if (meta === undefined) return undefined // not a session header
+      await this.assertStoredIdentity(candidate.path, meta, undefined, signal)
+      signal?.throwIfAborted()
+      return { header: meta, path: candidate.path, index: candidate.index }
+    })
+    const artifacts: Array<{ header: SessionHeader; path: string }> = []
+    const ids = new Set<SessionId>()
+    for (const found of read) {
+      if (found === undefined) continue
+      signal?.throwIfAborted()
+      if (ids.has(found.header.id)) {
+        throw new Error(`duplicate JSONL session id "${found.header.id}" appears in multiple project directories`)
+      }
+      ids.add(found.header.id)
+      artifacts.push({ header: found.header, path: found.path })
     }
     signal?.throwIfAborted()
     return artifacts
