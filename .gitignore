@@ -53,3 +53,22 @@ REVIEW-FINDINGS.md
 .mcp.json
 browser-demo/
 review-out/
+
+# Kibborg CLI: отдельный репозиторий, кладётся внутрь harness при установке
+/Kibborg_CLI/
+
+# локальные артефакты сессий и тестов (Ydjin1984 fork)
+/kibborg-transcript-session-*.md
+/kibborg-session-*.zip
+/output.txt
+/test_code.txt
+/test_content_*.txt
+/test_prompts.txt
+/test-results.md
+/test_content_analysis.md
+/ANALYSIS_FULLSCREEN.md
+/compact.md
+/contracts_report.md
+/plan-telegram-mirror.md
+/tui_analysis.md
+/tui_analysis_final.md
