@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-11-kibborg-terminal-surface.md
+2026-09-11-kibborg-terminal-surface.md: 99bf93cc315b6552ffaa0581bc4d4bb132cc1421
+2026-09-11-kibborg-terminal-surface.zh.md: 7007a3d308c81cf9ce77f24934a6ac950e471034

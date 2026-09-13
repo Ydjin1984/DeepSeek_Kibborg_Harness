@@ -6,6 +6,14 @@
 # in-repo form stays LF; CRLF becomes checkout-time presentation only.
 * text=auto eol=lf
 
+# cmd.exe parses a batch file line by line and mis-reads LF-only endings: an
+# `if ... ( ... ) else ( ... )` block loses characters and the shell reports
+# nonsense such as "'m' is not recognized", so the launcher never runs. This is
+# the override the note above allows — in-repo form stays LF, CRLF is only the
+# checkout-time presentation cmd.exe needs.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 *.pdf binary
 
 # Pairing records are generated from the three confirmed owner-blob pairs.
