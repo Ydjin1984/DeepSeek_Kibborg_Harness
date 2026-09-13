@@ -54,9 +54,6 @@ REVIEW-FINDINGS.md
 browser-demo/
 review-out/
 
-# Kibborg CLI: отдельный репозиторий, кладётся внутрь harness при установке
-/Kibborg_CLI/
-
 # локальные артефакты сессий и тестов (Ydjin1984 fork)
 /kibborg-transcript-session-*.md
 /kibborg-session-*.zip

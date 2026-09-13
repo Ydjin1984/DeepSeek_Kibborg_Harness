@@ -1,0 +1,3 @@
+[submodule "Kibborg_CLI"]
+	path = Kibborg_CLI
+	url = https://github.com/Ydjin1984/Kibborg_CLI.git
