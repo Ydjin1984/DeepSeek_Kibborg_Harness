@@ -7,11 +7,11 @@
  * `sidebar.settings` registrant's (ui-settings), followed by optional footer
  * actions in `sidebar.footer.action`.
  */
-import type { PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls ui-layout's SlotMap merge (the 'sidebar' entry) into every
 // program that sees this contract, so PropsRuntime<'sidebar'> resolves.
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
-import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ObservableSnapshot, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -99,6 +99,14 @@ export type SidebarRootInjected = {
   startSession: (workspaceId?: WorkspaceId) => void
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
+  /**
+   * Registrant-private reactive facts bound by the renderer: `serverAlive`
+   * becomes `useServerAlive`, true while the Host answers the periodic health
+   * check and false once it stops responding (the brand-mark status light).
+   */
+  hooks: {
+    serverAlive: ObservableSnapshot<boolean>
+  }
 }
 
 /**
@@ -115,4 +123,4 @@ export type SidebarRootComponentProps =
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >
-  & SidebarRootInjected & PropsLocale<'sidebar'>
+  & InjectFace<SidebarRootInjected> & PropsLocale<'sidebar'>

@@ -58,7 +58,7 @@ function summarize(argsRaw: string, t: TodoRowProps['t']): RowSummary | null {
  *  sections, ToolRow's unified expand). Non-ok execution states keep the
  *  shared row's dot semantics — a cancelled call wrote no todo/write, so it
  *  must not read as a completed update. */
-export function TodoRow({ toolName, block, inspect, t }: TodoRowProps) {
+export function TodoRow({ toolName, block, inspect, initiallyExpanded, t }: TodoRowProps) {
   const model = toolRowModel(toolName, block)
   const argsRaw = ('kind' in block ? block.call?.argsRaw : block.argsRaw) ?? ''
   const summary = summarize(argsRaw, t) ?? { text: model.summary, extra: 0 }
@@ -76,6 +76,7 @@ export function TodoRow({ toolName, block, inspect, t }: TodoRowProps) {
       errorSummary={model.errorSummary}
       state={model.state}
       inspect={inspect}
+      initialExpanded={initiallyExpanded}
     />
   )
 }

@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal EnableExtensions
 chcp 65001 >nul
 title DeepSeek_Kibborg_Harness - меню управления проектом
@@ -15,6 +15,10 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+
+REM Windows PowerShell 5.1 читает .ps1 без BOM как ANSI: кириллица рассыпается
+REM и скрипт не парсится. Проверяем BOM у вспомогательных скриптов при каждом старте.
+call :ensure_utf8_sources
 
 set "tries=0"
 
@@ -34,6 +38,7 @@ echo    [5] Открыть браузер     (http://127.0.0.1:3080)
 echo    [6] Перезапустить       (стоп + запуск)
 echo    [7] Самопроверка         (тесты progress.ps1)
 echo    [8] Обновить граф знаний  (graphify update packages)
+echo    [9] Живые логи сервера   (real-time, Esc или Q - выход)
 echo.
 echo    [0] Выход
 echo.
@@ -48,6 +53,7 @@ if "%choice%"=="5" goto :browser
 if "%choice%"=="6" goto :restart
 if "%choice%"=="7" goto :selftest
 if "%choice%"=="8" goto :graphify
+if "%choice%"=="9" goto :logs
 if "%choice%"=="0" exit /b 0
 
 set /a "tries+=1"
@@ -155,6 +161,13 @@ echo  Открываю браузер: http://127.0.0.1:3080
 start "" "http://127.0.0.1:3080"
 goto :menu
 
+:logs
+echo.
+echo  Живые логи сервера (Esc или Q — вернуться в меню)...
+call powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0watch-logs.ps1" -Root "%~dp0."
+echo.
+goto :menu
+
 :detect
 set "dsh_pids="
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and ($_.CommandLine -like '*dsh web*' -or ($_.CommandLine -match 'apps[\\/]cli[\\/]src[\\/]bin\.ts' -and $_.CommandLine -match 'web')) }; if ($t) { ($t | ForEach-Object { $_.ProcessId }) -join ',' }"`) do set "dsh_pids=%%i"
@@ -165,10 +178,17 @@ call :detect
 if "%dsh_pids%"=="" (
     echo  Проект не запущен - останавливать нечего.
 ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $ids = '%dsh_pids%' -split ','; $ids | ForEach-Object { Stop-Process -Id ([int]$_) -Force -ErrorAction SilentlyContinue }; Write-Host ('Остановлено процессов: ' + @($ids).Count) }"
+    echo  Останавливаю PID: %dsh_pids% ...
+    for %%P in (%dsh_pids%) do (
+        taskkill /PID %%P /T /F >nul 2>&1
+    )
+    echo  Готово: процесс и его дочерние MCP-серверы остановлены.
 )
 ping -n 2 127.0.0.1 >nul
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { Start-Sleep -Milliseconds 800; Get-Process cmd,powershell -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq 'dsh web' } | Stop-Process -Force -ErrorAction SilentlyContinue }"
+exit /b 0
+
+:ensure_utf8_sources
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$changed = @(); foreach ($f in @('%~dp0progress.ps1','%~dp0watch-logs.ps1')) { if (-not (Test-Path -LiteralPath $f)) { continue }; $b = [IO.File]::ReadAllBytes($f); if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { continue }; [IO.File]::WriteAllBytes($f, [byte[]](@(0xEF,0xBB,0xBF) + $b)); $changed += (Split-Path -Leaf $f) }; if ($changed.Count -gt 0) { Write-Host ('Восстановлена кодировка UTF-8 BOM: ' + ($changed -join ', ')) -ForegroundColor Yellow }"
 exit /b 0
 
 :msg_green

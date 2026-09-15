@@ -185,7 +185,7 @@ export function parseErrorMessage(half: 'code.host' | 'code.client', context: st
     return `dynamic package \`${half}\` failed to parse:\n${context}\n`
       + 'The sandbox runs plain JavaScript, not TypeScript. Remove type annotations:\n'
       + '  ✗ { type: \'text\' as const, text: x }\n'
-      + '  ✓ { type: \'text\', text: x }'
+      + '  ✔️ { type: \'text\', text: x }'
   }
   return `dynamic package \`${half}\` failed to parse:\n${context}\n`
     + 'Note: it runs as the BODY of an async function (line numbers are offset by the 1-line wrapper). '

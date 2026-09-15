@@ -100,6 +100,12 @@ export interface ToolRowProps {
    * over the expanded body. Absent = no affordance.
    */
   inspect?: (() => void) | undefined
+  /**
+   * Mount the row with its card body already expanded. The Execution view's
+   * "Развернуть всё" forwards this so the whole command/output/diff shows
+   * without a second click; the Chat view leaves it unset.
+   */
+  initialExpanded?: boolean | undefined
 }
 
 /** Leading-slot state substitution: the tool icon yields to the terminal state
@@ -146,8 +152,9 @@ export function ToolRow({
   filePath,
   onOpenFile,
   inspect,
+  initialExpanded,
 }: ToolRowProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initialExpanded === true)
   const terminalBody = terminal ?? null
   const diffBody = diff ?? null
   const readBody = read ?? null

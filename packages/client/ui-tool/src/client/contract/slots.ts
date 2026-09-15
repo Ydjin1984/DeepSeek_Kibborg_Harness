@@ -41,6 +41,13 @@ export interface ToolCallOwnerProps {
   openFile: (path: string) => void
   /** Inspect this call in the trajectory view when available. */
   inspect?: (() => void) | undefined
+  /**
+   * Start the row's card body already expanded (full command/output/diff).
+   * The Execution view forwards its per-row expansion so "Развернуть всё"
+   * reveals the whole payload; the Chat view leaves it unset for the
+   * collapsed-by-default card interaction.
+   */
+  initiallyExpanded?: boolean | undefined
 }
 
 /** Full props of a registered atomic Tool view. */

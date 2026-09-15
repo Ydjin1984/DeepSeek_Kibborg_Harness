@@ -19,6 +19,9 @@ const t: SidebarRootComponentProps['t'] = key => (en as Record<string, string>)[
 /** The shell never reads the global hooks; the props share carries them regardless. */
 const neverHook = (() => { throw new Error('shell must not read global hooks') }) as never
 
+/** Server-status stub: always reports the Host as alive. */
+function aliveHook<S>(sel: (alive: boolean) => S): S { return sel(true) }
+
 afterEach(() => {
   cleanup()
   vi.useRealTimers()
@@ -33,6 +36,7 @@ function mountColumn(): { column: HTMLElement; quiet: () => boolean } {
     <SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useWorkspaces={neverHook}
+      useServerAlive={aliveHook}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, owner: SidebarSectionOwnerProps) =>
         <div data-testid="region" data-wide={owner.wide} />) as SidebarRootComponentProps['renderSlot']}

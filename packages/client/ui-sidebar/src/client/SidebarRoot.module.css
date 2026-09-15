@@ -204,6 +204,33 @@
   justify-content: center;
 }
 
+/* Server status light: the brand mark doubles as a health indicator. Alive
+   pulses green; dead glows a steady red (crash / disconnect / stopped). */
+.brandMark,
+.railMark {
+  border-radius: 6px;
+}
+
+.brandMark[data-server='alive'],
+.railMark[data-server='alive'] {
+  animation: server-pulse-green 1.4s ease-in-out infinite;
+}
+
+.brandMark[data-server='dead'],
+.railMark[data-server='dead'] {
+  filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.95));
+}
+
+@keyframes server-pulse-green {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 7px rgba(34, 197, 94, 0.95));
+  }
+  50% {
+    filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.15));
+  }
+}
+
 /* Rail icons ride the primary ink (figma rail spec); expanded keeps the
    secondary icon-button ink. */
 .collapsed .iconButton {

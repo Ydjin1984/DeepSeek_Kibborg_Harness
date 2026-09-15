@@ -300,7 +300,7 @@ describe('parseAnsiLines: line-end state and column widths', () => {
     // Verified in a real terminal: `\x1b[32mdone\rok\x1b[0m` then `plain` shows
     // `okne` GREEN and `plain` in the DEFAULT color. The reset changes no cell,
     // so returning the last cell's state leaked green onto every later line —
-    // and this exact shape (`\r\x1b[K\x1b[32m✓ built\x1b[0m`) is what every
+    // and this exact shape (`\r\x1b[K\x1b[32m✔️ built\x1b[0m`) is what every
     // build tool writes.
     expect(parseAnsiLines(`${ESC}[32mdone\rok${ESC}[0m\nplain`)).toEqual([
       [{ text: 'okne', style: { color: 'var(--dsw-alias-state-success-primary)' } }],
@@ -429,7 +429,7 @@ describe('parseAnsiLines: bounded state and true widths', () => {
   })
 
   it('treats a text-presentation symbol as one column', () => {
-    // Verified in a real terminal: `A✓B` redrawn with `XY` shows `XYB`, so the
+    // Verified in a real terminal: `A✔️B` redrawn with `XY` shows `XYB`, so the
     // check mark is ONE column. Taking the whole U+2600-U+27BF block as wide
     // misaligned exactly the progress output this card exists to show.
     expect(onlySpan('A\u2713B\rXY')).toEqual({ text: 'XYB', style: undefined })

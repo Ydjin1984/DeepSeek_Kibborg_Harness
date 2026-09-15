@@ -23,6 +23,9 @@ afterEach(() => {
 // props share; stub them as never-called functions.
 const neverHook = (() => { throw new Error('shell must not read global hooks') }) as never
 
+/** Server-status stub: always reports the Host as alive. */
+function aliveHook<S>(sel: (alive: boolean) => S): S { return sel(true) }
+
 function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; width?: number } = {}) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
@@ -36,6 +39,7 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
     <SidebarRoot
       collapsed={current.collapsed} width={current.width}
       useSessions={neverHook} useWorkspaces={neverHook}
+      useServerAlive={aliveHook}
       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
       renderSlot={((
         key: string,
@@ -98,6 +102,7 @@ describe('SidebarRoot shell', () => {
     const { container } = render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useWorkspaces={neverHook}
+      useServerAlive={aliveHook}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, _owner: unknown, options?: { fallback?: ReactNode }) =>
         options?.fallback ?? null) as SidebarRootComponentProps['renderSlot']}

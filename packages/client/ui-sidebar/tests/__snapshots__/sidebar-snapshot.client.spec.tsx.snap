@@ -20,6 +20,7 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
         <span
           aria-hidden="true"
           class="railMark"
+          data-server="dead"
         >
           <div
             data-slot="sidebar.brand.mark"
@@ -115,6 +116,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         >
           <span
             class="brandMark"
+            data-server="dead"
           >
             <div
               data-slot="sidebar.brand.mark"
@@ -241,6 +243,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
         >
           <span
             class="brandMark"
+            data-server="dead"
           >
             <div
               data-slot="sidebar.brand.mark"

@@ -124,18 +124,19 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
   const event = useMemo(() => node === undefined ? null : executionEventFromNode(node as ChatNode), [node])
   const routedNode = node as ChatNode | undefined
   const routedOwner = useMemo<RoutedChatNodeOwner | null>(() => (
-    routedNode === undefined ? null : { ...owner, node: routedNode } as RoutedChatNodeOwner
-  ), [owner, routedNode])
+    routedNode === undefined ? null : { ...owner, node: routedNode, expandTools: expanded } as RoutedChatNodeOwner
+  ), [owner, routedNode, expanded])
   if (event === null || routedNode === undefined || routedOwner === null) return null
 
   const counts = event.additions !== undefined && event.deletions !== undefined
     ? event.additions + event.deletions > 0
     : false
-  // The running delegation event carries the live strip under its header; the
+  // A delegation event (executor/subagent) carries the subagent readout under
+  // its header while collapsed — running and settled children alike, so the
+  // trace keeps naming which subagent did what after the call finishes. The
   // expanded body dispatches the owning Chat node, whose own Tool renderer
-  // repeats the strip, so the collapsed header shows it exactly once.
-  const delegationRunning = event.status === 'running'
-    && event.toolName !== undefined
+  // repeats the running strip, so the collapsed header shows it exactly once.
+  const isDelegation = event.toolName !== undefined
     && SUBAGENT_DELEGATION_TOOLS.has(event.toolName)
   return (
     <div className={css.row} data-status={event.status} data-category={event.category} data-testid="execution-event">
@@ -170,7 +171,7 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
           {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </span>
       </button>
-      {delegationRunning && !expanded && (
+      {isDelegation && !expanded && (
         <SubagentActivityLine sessionId={sessionId} useSessions={useSessions} t={t} />
       )}
       {expanded && (

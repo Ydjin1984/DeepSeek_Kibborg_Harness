@@ -12,6 +12,9 @@ export interface SelectionTarget { turnSeq: number; stepSeq?: number; callId?: C
  */
 export interface ViewTab { id: string; label: string }
 
+/** Global expansion mode of the Execution view toolbar; persisted across reloads. */
+export type ExecutionExpandMode = 'default' | 'expand' | 'collapse'
+
 /**
  * Per-session state shared by conversation, chat-view, and details slots.
  * Unknown persisted view ids fall back to the stable Chat view.
@@ -29,4 +32,11 @@ export interface ChatStoreState {
    * persisted snapshots from before this field rehydrate without it.
    */
   inspect: { callId: CallId } | null
+  /**
+   * Last chosen Execution-toolbar expansion mode ("Развернуть всё"/"Свернуть
+   * всё"). Persisted so the trace keeps its reader's expanded/collapsed state
+   * across view switches and reloads; persisted snapshots from before this
+   * field rehydrate without it, and the view reads that as `'default'`.
+   */
+  executionExpand: ExecutionExpandMode
 }

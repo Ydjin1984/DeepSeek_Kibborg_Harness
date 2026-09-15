@@ -371,6 +371,11 @@ describe('BashRow terminal card', () => {
     expect(view.getByText('List files')).toBeTruthy()
   })
 
+  it('starts expanded when initiallyExpanded is set', () => {
+    const view = render(<BashRow {...rowProps(settled())} initiallyExpanded />)
+    expect(view.getByText('a.ts  b.ts', RAW)).toBeTruthy()
+  })
+
   // The row's leading StateDot and the card's run-state dot describe the same
   // command, so a running row whose card claimed 'done' would be a contradiction
   // the reader sees on one line.

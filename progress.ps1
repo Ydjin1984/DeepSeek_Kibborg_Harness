@@ -211,15 +211,15 @@ function Start-WebServer {
     Remove-Item -LiteralPath $PrevWebLog -Force -ErrorAction SilentlyContinue
     Rename-Item -LiteralPath $WebLog -NewName (Split-Path -Leaf $PrevWebLog) -Force -ErrorAction SilentlyContinue
   }
-  # Прямой node без pnpm-обёрток и без пайплайнов PowerShell:
-  # вывод сервиса идёт в журнал на уровне ОС, ошибки не превращаются в исключения.
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = 'cmd.exe'
-  $psi.Arguments = '/c node --import tsx/esm apps/cli/src/bin.ts web > "' + $WebLog + '" 2>&1'
-  $psi.WorkingDirectory = $Root
-  $psi.UseShellExecute = $false
-  $psi.CreateNoWindow = $true
-  return [System.Diagnostics.Process]::Start($psi)
+  # Detached-запуск через Start-Process (UseShellExecute): сервис получает
+  # собственную консольную сессию и НЕ умирает при закрытии окна run.bat —
+  # раньше весь процесс-дерево получало сигнал при закрытии консоли, из-за
+  # чего сервер "падал". Вывод по-прежнему идёт в журнал на уровне ОС.
+  # Маркер выхода с кодом дописывается в тот же журнал: без него падение
+  # сервера выглядит как обрыв журнала на строке приветствия.
+  $cmdline = '/v:on /c node --import tsx/esm apps/cli/src/bin.ts web > "' + $WebLog + '" 2>&1'
+  $cmdline += ' & echo [server] exited with code !errorlevel! at %DATE% %TIME% >> "' + $WebLog + '"'
+  return Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdline -WorkingDirectory $Root -WindowStyle Hidden -PassThru
 }
 
 function Show-WebLogTail {

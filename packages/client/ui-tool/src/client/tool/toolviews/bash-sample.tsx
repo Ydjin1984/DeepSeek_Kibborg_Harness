@@ -53,7 +53,7 @@ function stateStatus(state: ToolRowState, t: BashRowProps['t']): string | null {
  * whole row toggling the command's terminal or generic error card (ToolRow's unified
  * expand interaction, replicated locally per the registrant posture).
  */
-export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }: BashRowProps) {
+export function BashRow({ toolName, block, sessionId, useSessions, inspect, initiallyExpanded, t }: BashRowProps) {
   const model = toolRowModel(toolName, block)
   // Session workspace root: the terminal view's cwd resolves against it (an
   // omitted workdir IS the workspace), which the pure presenter cannot do.
@@ -65,7 +65,7 @@ export function BashRow({ toolName, block, sessionId, useSessions, inspect, t }:
     ? 'error'
     : model.state
   const status = stateStatus(state, t)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(initiallyExpanded === true)
   // Execution failures (for example cancellation before the process reports a
   // terminal result) use the generic presenter. Keep their recorded args and
   // full error reachable instead of collapsing the row to the first line.

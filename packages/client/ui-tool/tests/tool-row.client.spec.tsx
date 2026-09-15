@@ -239,6 +239,12 @@ describe('ToolRow', () => {
     expect(view.container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe('false')
   })
 
+  it('starts expanded when initialExpanded is set', () => {
+    const view = render(<ToolRow {...rowProps} initialExpanded />)
+    expect(view.container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByText(/"a": 1/)).toBeTruthy()
+  })
+
   it('row click expands: chevron leading, summary kept inline, body in the scrolling card', () => {
     const view = render(<ToolRow {...rowProps} />)
     fireEvent.click(view.getByRole('button'))

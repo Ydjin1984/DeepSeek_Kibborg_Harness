@@ -44,9 +44,11 @@ export function SidebarRoot({
   width,
   startSession,
   toggleSidebar,
+  useServerAlive,
   t,
   renderSlot,
 }: SidebarRootComponentProps) {
+  const serverAlive = useServerAlive(alive => alive)
   // Wide content stays mounted while the collapse animates (fading via
   // .collapsed .wide), unmounts at settle, and remounts right away on expand.
   const [settled, setSettled] = useState(collapsed)
@@ -136,7 +138,7 @@ export function SidebarRoot({
             onClick={() => { startSession() }}
           >
             <span className={css.brandIdentity} aria-hidden="true">
-              <span className={css.brandMark}>
+              <span className={css.brandMark} data-server={serverAlive ? 'alive' : 'dead'}>
                 {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
               </span>
               <span className={css.brandName}>
@@ -164,7 +166,7 @@ export function SidebarRoot({
             onClick={() => { toggleSidebar() }}
           >
             {!wide && (
-              <span className={css.railMark} aria-hidden="true">
+              <span className={css.railMark} data-server={serverAlive ? 'alive' : 'dead'} aria-hidden="true">
                 {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
               </span>
             )}

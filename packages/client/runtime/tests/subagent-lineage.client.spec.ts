@@ -3,7 +3,7 @@ import type {
   SessionId, SessionSummary, SubagentCatalogSnapshot,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  indexSubagentDescendants, runningSubagentActivityRows,
+  indexSubagentDescendants, runningSubagentActivityRows, subagentActivityRows,
 } from '@deepseek-ai/dsh-client-runtime/client'
 
 const sid = (id: string) => id as SessionId
@@ -80,6 +80,38 @@ describe('runningSubagentActivityRows', () => {
     )
     expect(rows.map(row => row.label)).toEqual(['descriptor', 'two'])
     expect(rows.map(row => row.detail)).toEqual(['', ''])
+  })
+})
+
+describe('subagentActivityRows', () => {
+  it('projects running and settled direct children with label, running, and detail', () => {
+    const owner = summary('owner')
+    const busy = runningChild('child', owner.id, {
+      subagent: { mode: 'one-shot', seq: 1 },
+      subagentActivity: { status: 'running', detail: 'grep' },
+    })
+    const done = summary('done', owner.id, 'subagent')
+    const otherOwnerChild = summary('other-child', sid('other'), 'subagent', true)
+
+    const rows = subagentActivityRows(owner.id, byId(owner, busy, done, otherOwnerChild), {
+      [owner.id]: catalog('child', 'done'),
+    })
+    expect(rows).toEqual([
+      { sessionId: busy.id, label: 'label-child', running: true, detail: 'grep' },
+      { sessionId: done.id, label: 'label-done', running: false, detail: '' },
+    ])
+  })
+
+  it('falls back to the descriptor label, then the session id', () => {
+    const owner = summary('owner')
+    const descriptorLabelled = runningChild('one', owner.id, {
+      subagent: { mode: 'one-shot', label: 'descriptor', seq: 1 },
+    })
+    const unlabelled = summary('two', owner.id, 'subagent')
+
+    const rows = subagentActivityRows(owner.id, byId(owner, descriptorLabelled, unlabelled), undefined)
+    expect(rows.map(row => row.label)).toEqual(['descriptor', 'two'])
+    expect(rows.map(row => row.running)).toEqual([true, false])
   })
 })
 

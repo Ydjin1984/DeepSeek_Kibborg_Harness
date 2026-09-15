@@ -535,7 +535,7 @@ function assertRenderedContent(value: JsonValue): ContentBlock[] {
   }
   throw new Error(
     `output.render returned ${describeReturn(value)} — it must return an ARRAY of content blocks:\n`
-    + '  ✓ return [{ type: \'text\', text: String(value) }]',
+    + '  ✔️ return [{ type: \'text\', text: String(value) }]',
   )
 }
 

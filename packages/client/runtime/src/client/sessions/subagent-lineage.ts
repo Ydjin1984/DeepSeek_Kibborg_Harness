@@ -60,6 +60,18 @@ export interface RunningSubagentActivityRow {
   readonly detail: string
 }
 
+/** One direct-child row for the execution trace, running or already settled. */
+export interface SubagentActivityRow {
+  /** The child session. */
+  readonly sessionId: SessionId
+  /** Durable child label: catalog label, own descriptor label, then the id. */
+  readonly label: string
+  /** Whether the child is still running. */
+  readonly running: boolean
+  /** Last folded activity: a tool call name or a bounded reply snippet. */
+  readonly detail: string
+}
+
 /**
  * Structural read of the subagent projection values retained on the client
  * for a running child. Their keys are declared by the owning subagent package
@@ -97,6 +109,40 @@ export function runningSubagentActivityRows(
     rows.push({
       sessionId: summary.id,
       label: catalogLabel ?? identityLabel ?? summary.id,
+      detail: values?.subagentActivity?.detail ?? '',
+    })
+  }
+  return rows
+}
+
+/**
+ * Project every direct subagent child of one parent into execution-trace rows,
+ * running and settled alike, so the Execution view shows what each delegated
+ * child did — its durable label plus the last folded activity. Settled children
+ * keep their label with an empty detail (their `subagentActivity` folds back to
+ * idle), which the view renders as a completed row.
+ * @param parentSessionId - the owning session whose delegation calls surface rows.
+ * @param summaries - retained session summaries keyed by id.
+ * @param catalogs - loaded child catalogs keyed by parent id, when present.
+ * @returns all direct children in retained order.
+ */
+export function subagentActivityRows(
+  parentSessionId: SessionId,
+  summaries: Readonly<Record<SessionId, SessionSummary>>,
+  catalogs?: Readonly<Record<SessionId, SubagentCatalogSnapshot>>,
+): readonly SubagentActivityRow[] {
+  const rows: SubagentActivityRow[] = []
+  const entries = catalogs?.[parentSessionId]?.entries
+  for (const summary of Object.values(summaries)) {
+    if (summary.origin !== 'subagent' || summary.parentId !== parentSessionId) continue
+    const entry = entries?.find(candidate => candidate.kind === 'child' && candidate.id === summary.id)
+    const catalogLabel = entry?.kind === 'child' ? entry.label : undefined
+    const values = summary.projectionValues as unknown as ChildProjectionValues | undefined
+    const identityLabel = values?.subagent?.label
+    rows.push({
+      sessionId: summary.id,
+      label: catalogLabel ?? identityLabel ?? summary.id,
+      running: summary.running,
       detail: values?.subagentActivity?.detail ?? '',
     })
   }

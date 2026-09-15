@@ -144,6 +144,18 @@ function runningChild(id: string, label: string, detail: string): SessionSummary
   }
 }
 
+/** One settled direct child summary (activity folded back to idle). */
+function settledChild(id: string, label: string): SessionSummary {
+  return {
+    id: sid(id), displayTitle: id, running: false, blank: false, updatedAt: 1,
+    parentId: SID, origin: 'subagent',
+    projectionValues: {
+      subagent: { mode: 'one-shot', label, seq: 1 },
+      subagentActivity: { status: 'idle', detail: '' },
+    } as unknown as NonNullable<SessionSummary['projectionValues']>,
+  }
+}
+
 function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<ConversationSnapshot> = {}, list?: SessionListState) {
   const source = makeSource({ nodes, ...overrides })
   const chat = createChatStore().create()
@@ -240,6 +252,14 @@ describe('ExecutionView', () => {
     expect(h.view.queryByTestId('node-tool-c1')).toBeNull()
     // The assistant body folds too under collapse-all.
     expect(h.view.queryByTestId('node-assistant-step')).toBeNull()
+  })
+
+  it('persists the expand-all / collapse-all mode in the shared store', () => {
+    const h = harness([bashResult(3, 'c1', 'npm test')])
+    fireEvent.click(h.view.getByRole('button', { name: '全部展开' }))
+    expect(h.chat.getSnapshot().executionExpand).toBe('expand')
+    fireEvent.click(h.view.getByRole('button', { name: '全部折叠' }))
+    expect(h.chat.getSnapshot().executionExpand).toBe('collapse')
   })
 
   it('projects the header: title, counters, current action, and the files list', () => {
@@ -361,16 +381,21 @@ describe('ExecutionView', () => {
     expect(h.view.container.querySelector('[data-subagent-activity]')).toBeNull()
   })
 
-  it('shows no child strip without running children or for non-delegation calls', () => {
+  it('shows a completed subagent row after a delegation call settles', () => {
+    const h = harness([executorResult(3, 'd2')], {}, listState([settledChild('kid-2', 'Recon')], ['Recon']))
+    expect(h.view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon 已完成')
+  })
+
+  it('shows no child strip without children or for non-delegation calls', () => {
     const children = listState([runningChild('kid-1', 'Recon', 'grep')], ['Recon'])
     const empty = harness([], { runningCalls: [runningExecutor('d1')], running: true }, listState())
     expect(empty.view.container.querySelector('[data-subagent-activity]')).toBeNull()
     const bash = harness([], { runningCalls: [runningBash('b1')], running: true }, children)
     expect(bash.view.container.querySelector('[data-subagent-activity]')).toBeNull()
-    // A settled delegation call stops carrying the strip even while a child
-    // session is still running in the background.
+    // A settled delegation call keeps naming its children (running in the
+    // background or already completed) so the trace shows which subagent did what.
     const settled = harness([executorResult(3, 'd2')], {}, children)
-    expect(settled.view.container.querySelector('[data-subagent-activity]')).toBeNull()
+    expect(settled.view.container.querySelector('[data-subagent-activity]')?.textContent).toBe('子智能体 Recon：grep')
   })
 })
 

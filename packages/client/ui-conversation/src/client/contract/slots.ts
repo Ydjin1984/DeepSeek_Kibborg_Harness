@@ -439,6 +439,13 @@ export interface ChatNodeOwnerProps {
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
+  /**
+   * Ask the tool renderer to start with its card body already expanded. The
+   * Execution view sets it from its own per-row expansion state so "Развернуть
+   * всё" reveals the full command/output/diff instead of only the summary row;
+   * the Chat view omits it, keeping the collapsed-by-default card interaction.
+   */
+  expandTools?: boolean | undefined
 }
 
 /** Full props of one registered keyed Chat business renderer. */

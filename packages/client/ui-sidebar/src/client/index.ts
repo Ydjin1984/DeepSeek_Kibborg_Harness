@@ -1,5 +1,5 @@
 /** Registers the sidebar shell into the layout-owned slot. */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { SidebarRootInjected } from './contract/slots.ts'
@@ -31,11 +31,29 @@ export const inject = ['slots', 'layout', 'sessions', 'workspaces', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), 'ui-sidebar: dictionaries')
 
+  // Server-alive status for the brand-mark indicator: a periodic health check
+  // against the Host root. true while it answers, false once it stops (crash,
+  // disconnect, or stop). Polling keeps the light honest without relying on a
+  // single transport's reconnect state.
+  const serverAlive = createSnapshotStore(true)
+  const checkServer = (): void => {
+    // Non-browser runs (jsdom unit tests) have no fetch; the light simply
+    // stays alive there, matching a Host that has not yet failed a check.
+    if (typeof fetch !== 'function') return
+    fetch('/', { method: 'GET', cache: 'no-store' })
+      .then((res) => { serverAlive.set(res.ok) })
+      .catch(() => { serverAlive.set(false) })
+  }
+  checkServer()
+  const healthTimer = setInterval(checkServer, 3000)
+  ctx.effect(() => () => clearInterval(healthTimer), 'ui-sidebar: server health check')
+
   const injectProps = (): SidebarRootInjected => ({
     // The shell's New Session button rides the runtime's shared action
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
+    hooks: { serverAlive },
   })
   ctx.effect(
     () => ctx.slots.register({

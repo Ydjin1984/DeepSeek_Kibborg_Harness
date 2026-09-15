@@ -50,7 +50,7 @@ function findCallKey(chat: ChatSnapshot, callId: string): string | null {
 }
 
 export function ExecutionView({
-  useSession, useSessions, useProjection, useStore, sessionId, t,
+  useSession, useSessions, useProjection, useStore, actions, sessionId, t,
   openFile, inspectCall, forkAt, fileMentions, inspect, onInspectDone,
   renderChatNode, renderMessageImages,
 }: ExecutionViewSlotProps) {
@@ -88,9 +88,11 @@ export function ExecutionView({
   // Toolbar state.
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ExecutionFilter>('all')
-  // Expansion: a global mode plus per-row flips relative to the effective
-  // base; any individual toggle cancels the global mode.
-  const [mode, setMode] = useState<'default' | 'expand' | 'collapse'>('default')
+  // Expansion: a persisted global mode (survives view switches and reloads)
+  // plus per-row flips relative to the effective base; any individual toggle
+  // cancels the global mode. Persisted snapshots from before this field
+  // rehydrate without it, so the selector reads that as `'default'`.
+  const executionExpand = useStore(s => s.executionExpand)
   const [flipped, setFlipped] = useState<ReadonlySet<string>>(() => new Set())
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -102,29 +104,29 @@ export function ExecutionView({
   const effectiveExpanded = useCallback((key: string): boolean => {
     if (revealed.has(key)) return true
     const node = chat.nodes.get(key)
-    const base = mode === 'expand' ? true : mode === 'collapse' ? false : isDefaultExpanded(node?.kind ?? '')
+    const base = executionExpand === 'expand' ? true : executionExpand === 'collapse' ? false : isDefaultExpanded(node?.kind ?? '')
     return flipped.has(key) ? !base : base
-  }, [mode, flipped, revealed, chat])
+  }, [executionExpand, flipped, revealed, chat])
 
   const toggleRow = useCallback((key: string) => {
-    setMode('default')
+    actions.setExecutionExpand('default')
     setFlipped((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next
     })
-  }, [])
+  }, [actions])
 
   const expandAll = useCallback(() => {
-    setMode('expand')
+    actions.setExecutionExpand('expand')
     setFlipped(new Set())
-  }, [])
+  }, [actions])
 
   const collapseAll = useCallback(() => {
-    setMode('collapse')
+    actions.setExecutionExpand('collapse')
     setFlipped(new Set())
-  }, [])
+  }, [actions])
 
   // Virtual list geometry.
   const listRef = useRef<HTMLDivElement | null>(null)

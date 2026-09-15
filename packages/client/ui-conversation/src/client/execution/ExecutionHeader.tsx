@@ -69,10 +69,10 @@ function statusText(status: ExecutionEventStatus, running: boolean, t: ChatViewS
   }
 }
 
-/** One plan row glyph: ✓ completed, ● active, ○ pending. */
+/** One plan row glyph: ✔️ completed, ● active, ○ pending. */
 function planGlyph(status: TodoItem['status']): ReactNode {
   switch (status) {
-    case 'completed': return <span className={css.planDone}>✓</span>
+    case 'completed': return <span className={css.planDone}>✔️</span>
     case 'in_progress': return <span className={css.planActive}>●</span>
     default: return <span className={css.planPending}>○</span>
   }

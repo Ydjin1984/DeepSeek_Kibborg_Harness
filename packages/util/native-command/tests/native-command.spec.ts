@@ -7,10 +7,10 @@ describe('runNativeCommand', () => {
   it('captures utf8 stdout and stderr on exit 0', async () => {
     const result = await runNativeCommand(
       node,
-      ['-e', 'process.stdout.write("out✓"); process.stderr.write("err")'],
+      ['-e', 'process.stdout.write("out✔️"); process.stderr.write("err")'],
       new AbortController().signal,
     )
-    expect(result).toEqual({ stdout: 'out✓', stderr: 'err' })
+    expect(result).toEqual({ stdout: 'out✔️', stderr: 'err' })
   })
 
   it('rejects a non-zero exit with code, stdout, and stderr attached', async () => {

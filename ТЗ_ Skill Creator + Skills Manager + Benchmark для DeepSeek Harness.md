@@ -495,10 +495,10 @@ Instructions:
 ...
 
 Validation:
-✓ Passed
+✔️ Passed
 
 Security:
-✓ Passed
+✔️ Passed
 ```
 
 Кнопки:
@@ -1711,10 +1711,10 @@ Creator:
 
 Generating Skill...
 
-✓ Frontmatter
-✓ Instructions
-✓ Invocation policy
-✓ Security validation
+✔️ Frontmatter
+✔️ Instructions
+✔️ Invocation policy
+✔️ Security validation
 
 Skill:
 security-code-review

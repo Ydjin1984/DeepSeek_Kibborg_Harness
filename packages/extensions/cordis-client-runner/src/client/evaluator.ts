@@ -212,8 +212,8 @@ export async function evaluateClientHalf(
     if (returned === undefined) {
       throw new Error(
         'client half returned `undefined` — did you forget `return`?\n'
-        + '  ✓ return (ctx) => { … }\n'
-        + '  ✓ return { name: \'…\', inject: [\'slots\'], apply(ctx) { … } }',
+        + '  ✔️ return (ctx) => { … }\n'
+        + '  ✔️ return { name: \'…\', inject: [\'slots\'], apply(ctx) { … } }',
       )
     }
     throw new Error('client half must `return` a plugin: a function, or an object with an `apply(ctx)` method')
