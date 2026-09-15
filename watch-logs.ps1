@@ -91,9 +91,13 @@ foreach ($t in $Targets) {
 
 while ($true) {
   if ($CanReadKey) {
-    while ([Console]::KeyAvailable) {
-      $key = [Console]::ReadKey($true)
-      if ($key.Key -eq 'Escape' -or $key.Key -eq 'Q') { exit 0 }
+    try {
+      while ([Console]::KeyAvailable) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq 'Escape' -or $key.Key -eq 'Q') { exit 0 }
+      }
+    } catch {
+      $CanReadKey = $false
     }
   }
   foreach ($t in $Targets) {
