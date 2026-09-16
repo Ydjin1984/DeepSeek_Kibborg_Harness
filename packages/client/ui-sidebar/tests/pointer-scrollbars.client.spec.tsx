@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import type { SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
+import type { ServerStatus, SidebarRootComponentProps, SidebarSectionOwnerProps } from '../src/client/contract/slots.ts'
 import { SidebarRoot } from '../src/client/SidebarRoot.tsx'
 import { en } from '../src/client/locales.ts'
 
@@ -20,7 +20,7 @@ const t: SidebarRootComponentProps['t'] = key => (en as Record<string, string>)[
 const neverHook = (() => { throw new Error('shell must not read global hooks') }) as never
 
 /** Server-status stub: always reports the Host as alive. */
-function aliveHook<S>(sel: (alive: boolean) => S): S { return sel(true) }
+function statusHook<S>(sel: (status: ServerStatus) => S): S { return sel('alive') }
 
 afterEach(() => {
   cleanup()
@@ -36,7 +36,7 @@ function mountColumn(): { column: HTMLElement; quiet: () => boolean } {
     <SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useWorkspaces={neverHook}
-      useServerAlive={aliveHook}
+      useServerStatus={statusHook}
       startSession={vi.fn()} toggleSidebar={vi.fn()} t={t}
       renderSlot={((_key: string, owner: SidebarSectionOwnerProps) =>
         <div data-testid="region" data-wide={owner.wide} />) as SidebarRootComponentProps['renderSlot']}

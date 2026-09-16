@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ViewTab } from './contract/views.ts'
 import type {
-  ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
+  ApprovalWait, ChatNodeTurnDataInjected, ChatViewInjected, ComposerBarInjected,
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
   DetailsInjected,
 } from './contract/slots.ts'
@@ -146,11 +146,6 @@ export function apply(ctx: Context): void {
     }),
   }, EnterBehaviorRow))
 
-  // Chat semantic reader positions by session, surviving view switches and
-  // width reflow when the tab ring remounts the view. Deliberately not
-  // persisted: a fresh page load keeps the open-jump-to-bottom default.
-  const chatScrollPositions = new Map<SessionId, ChatScrollPosition>()
-
   const viewTabs = (): ViewTab[] => {
     const tabs: ViewTab[] = []
     for (const entry of slots.entries('conversation.view')) {
@@ -167,8 +162,8 @@ export function apply(ctx: Context): void {
   }
 
   // Shared view inject: Chat and Execution are registered with the same
-  // callbacks (openers, inspect handoff, scroll memory, fork), so one factory
-  // serves both ring entries.
+  // callbacks (openers, inspect handoff, fork), so one factory serves both
+  // ring entries.
   const viewInject = (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
     const scoped = scopedConversation(sessions, sessionId)
     return {
@@ -187,13 +182,6 @@ export function apply(ctx: Context): void {
       inspectCall: (callId) => {
         actions.setInspect({ callId })
         actions.setView('trajectory')
-      },
-      chatScroll: {
-        save: (position) => {
-          if (position === null) chatScrollPositions.delete(sessionId)
-          else chatScrollPositions.set(sessionId, position)
-        },
-        read: () => chatScrollPositions.get(sessionId) ?? null,
       },
       forkAt: (seq) => {
         sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })

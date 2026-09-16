@@ -759,16 +759,6 @@ export class PendingApproval {
 export type ApprovalComposerProps =
   PropsRuntime<'conversation.composer'> & { matched: ApprovalWait } & PropsLocale<'conversation'>
 
-/** In-memory reader position resilient to transcript width reflow. */
-export interface ChatScrollPosition {
-  /** Stable rendered node/call identity nearest the visible reading edge. */
-  readonly anchorKey: string
-  /** Anchor top relative to the transcript scrollport when saved. */
-  readonly anchorTop: number
-  /** Approximate offset used before the semantic anchor is measured. */
-  readonly scrollTop: number
-}
-
 /**
  * Injected share of the chat view entry: the two callbacks whose targets live
  * outside the view (layout orchestration; the session object layer).
@@ -786,17 +776,6 @@ export interface ChatViewInjected {
   loadOlder: () => void
   /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */
   inspectCall: (callId: CallId) => void
-  /**
-   * Per-session scroll memory surviving view switches (in-memory, never
-   * persisted): the view saves on every scroll and restores on remount; a
-   * fresh page load starts empty and keeps the open-jump-to-bottom default.
-   */
-  chatScroll: {
-    /** Record a semantic reader position; null clears it when pinned. */
-    save: (position: ChatScrollPosition | null) => void
-    /** Last reader position, or null when pinned or never recorded. */
-    read: () => ChatScrollPosition | null
-  }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
   /**
@@ -813,13 +792,7 @@ export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
-/**
- * Full execution-view component props: the same surface as the chat view —
- * same shared node-seat owner callbacks, same shared store, and the same
- * injected callbacks — because both views are registered from this package
- * with identical declarations. The alias documents the execution view's
- * contract without re-deriving the shares.
- */
+/** Full execution-view component props: the same surface as the chat view. */
 export type ExecutionViewSlotProps = ChatViewSlotProps
 
 /** Full props of the attachment plugin's composer entry. */

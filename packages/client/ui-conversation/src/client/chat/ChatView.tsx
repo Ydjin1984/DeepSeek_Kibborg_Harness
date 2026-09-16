@@ -82,17 +82,22 @@ function pagingAnchor(list: HTMLElement, scrollport: HTMLElement): HTMLElement |
   return visibleRows[0] ?? rows[0] ?? null
 }
 
-type ChatScrollPosition = NonNullable<ReturnType<ChatViewSlotProps['chatScroll']['read']>>
+/** Semantic reader position over a settled visible row. */
+interface ReaderPosition {
+  /** Stable node/call identity nearest the visible reading edge. */
+  readonly anchorKey: string
+  /** Row top relative to the scrollport when captured. */
+  readonly anchorTop: number
+}
 
 /** Capture a reflow-resistant reader position from the current rendered window. */
-function scrollPosition(list: HTMLElement, scrollport: HTMLElement): ChatScrollPosition | null {
+function scrollPosition(list: HTMLElement, scrollport: HTMLElement): ReaderPosition | null {
   const row = pagingAnchor(list, scrollport)
   const anchorKey = row?.dataset.chatAnchorKey
   if (row === null || anchorKey === undefined) return null
   return {
     anchorKey,
     anchorTop: flowTop(row, scrollport),
-    scrollTop: scrollport.scrollTop,
   }
 }
 
@@ -156,7 +161,7 @@ function TurnStatus({ startTime, t }: {
  * ordered business Node crosses the keyed renderer seat.
  */
 export function ChatView({
-  useSession, useSessions, useStore, sessionId, openFile, loadOlder, inspectCall, chatScroll, forkAt,
+  useSession, useSessions, useStore, sessionId, openFile, loadOlder, inspectCall, forkAt,
   fileMentions, renderChatNode, renderMessageImages, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
@@ -243,7 +248,6 @@ export function ChatView({
     observedTopRef.current = el.scrollTop
     atBottomRef.current = true
     setAtBottom(true)
-    chatScroll.save(null)
   }
 
   useLayoutEffect(() => {
@@ -251,26 +255,12 @@ export function ChatView({
     /* v8 ignore next -- ref-null guard: React attaches the ref before layout effects run. */
     if (local === null) return
     const el = scrollerOf(local)
-    // Open completed: jump to the bottom once — unless a scroll position
-    // survives from a previous mount (view-tab switch away and back), which
-    // is restored instead of snapping the reader back to the floor.
+    // Open completed: always land on the latest action. Opening a session or
+    // switching the view tab remounts this component, and each mount jumps to
+    // the floor once so the reader never resumes mid-transcript.
     if (openState === 'open' && !openedRef.current) {
       openedRef.current = true
-      const saved = chatScroll.read()
-      if (saved === null) {
-        toBottom(el)
-      } else {
-        el.scrollTop = saved.scrollTop
-        const row = anchorElement(local, saved.anchorKey)
-        if (row !== null) el.scrollTop += flowTop(row, el) - saved.anchorTop
-        observedTopRef.current = el.scrollTop
-        const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_THRESHOLD + 1
-        atBottomRef.current = isAtBottom
-        setAtBottom(isAtBottom)
-        const normalized = isAtBottom ? null : scrollPosition(local, el)
-        if (isAtBottom) chatScroll.save(null)
-        else if (normalized !== null) chatScroll.save(normalized)
-      }
+      toBottom(el)
       firstSeqRef.current = firstSeq
       lastKeyRef.current = lastKey
       lastSteeringIdRef.current = lastSteeringId
@@ -337,10 +327,6 @@ export function ChatView({
     } else if (anchorRef.current !== null && position !== null) {
       anchorRef.current = { key: position.anchorKey, top: position.anchorTop }
     }
-    // Continuous save (unmount happens after ref detach, so saving there is
-    // too late); pinned-to-bottom clears so a remount keeps following.
-    if (isAtBottom) chatScroll.save(null)
-    else if (position !== null) chatScroll.save(position)
     observedTopRef.current = el.scrollTop
   }
 
@@ -368,7 +354,6 @@ export function ChatView({
       const el = scrollerOf(local)
       el.scrollTop = el.scrollHeight
       observedTopRef.current = el.scrollTop
-      chatScroll.save(null)
     }
   }
   // Streaming, tool disclosures, and other flow changes resize the column;

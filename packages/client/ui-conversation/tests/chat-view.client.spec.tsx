@@ -157,12 +157,6 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
   const openFile = vi.fn<(path: string) => Promise<void>>().mockResolvedValue(undefined)
   const loadOlder = vi.fn()
   const inspectCall = vi.fn<(callId: string) => void>()
-  // In-memory scroll memory matching the apply.ts per-session map contract.
-  let savedScroll: ReturnType<ChatViewSlotProps['chatScroll']['read']> = null
-  const chatScroll: ChatViewSlotProps['chatScroll'] = {
-    save: (position) => { savedScroll = position },
-    read: () => savedScroll,
-  }
   const forkAt = vi.fn()
   // Selection rides the REAL chat store (same construction path as
   // production; the view reads it through the PropsStore useStore share).
@@ -289,7 +283,6 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     openFile,
     loadOlder,
     inspectCall,
-    chatScroll,
     forkAt,
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
@@ -299,7 +292,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
   const setSelection = (next: SelectionTarget | null): void => { chat.actions.select(next) }
   return {
     set, ChatView, props, openDetails, openFile, loadOlder, inspectCall,
-    chatScroll, forkAt, setSelection, toolOwners,
+    forkAt, setSelection, toolOwners,
   }
 }
 
@@ -1112,7 +1105,6 @@ describe('ChatView', () => {
     Object.defineProperty(scroller, 'scrollHeight', { value: 1_300, writable: true })
     act(() => { h.set({ nodes: [assistant(2, 'older'), user(9, 'late')] }) })
     expect(scroller.scrollTop).toBe(1_300)
-    expect(h.chatScroll.read()).toBeNull()
   })
 
   it('scrolling away disables follow and shows the back-to-bottom button; clicking returns', () => {
@@ -1148,7 +1140,6 @@ describe('ChatView', () => {
     fireEvent.scroll(scroller)
     expect(scroller.scrollTop).toBe(500)
     expect(view.queryByLabelText('回到底部')).toBeNull()
-    expect(h.chatScroll.read()).toBeNull()
 
     metrics.setHeight(1_200)
     act(() => { h.set({ running: true }) })
@@ -1234,45 +1225,33 @@ describe('ChatView', () => {
     }
   })
 
-  it('a remount restores the saved semantic row after width reflow', () => {
+  it('a remount always jumps to the latest action, ignoring a mid-transcript position', () => {
     const host = document.createElement('div')
     host.setAttribute('data-conversation-scroll', '')
     Object.defineProperty(host, 'scrollHeight', { value: 2000, writable: true, configurable: true })
     Object.defineProperty(host, 'clientHeight', { value: 500, writable: true, configurable: true })
     Object.defineProperty(host, 'scrollTop', { value: 0, writable: true, configurable: true })
     document.body.appendChild(host)
-    let anchorTop = 80
-    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(
-      () => ({ top: 0, bottom: 500 } as DOMRect),
-    )
-    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      if (this.dataset.chatAnchorKey === 'fixture:user:1') {
-        return { top: anchorTop, bottom: anchorTop + 40 } as DOMRect
-      }
-      return { top: 0, bottom: 40 } as DOMRect
-    })
     try {
       const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
-      // Fresh open (nothing saved): the bottom jump stands.
+      // Fresh open: the bottom jump stands.
       const view = render(<h.ChatView {...h.props} />, { container: host })
       expect(host.scrollTop).toBe(2000)
-      // Reader scrolls up; the position is recorded continuously.
+      // Reader scrolls away from the floor within the mount.
       readerScroll(host, 100)
       // View-tab switch away and back: the view unmounts, then remounts.
       view.rerender(<div />)
-      anchorTop = 560
       host.scrollTop = 0
       view.rerender(<h.ChatView {...h.props} />)
-      expect(host.scrollTop).toBe(580) // approximate 100 + the row's 480px reflow shift
-      // The restored position is above the floor: follow stays disarmed.
-      expect(view.getByLabelText('回到底部')).toBeTruthy()
+      // The remount lands on the latest action, never the prior mid-position.
+      expect(host.scrollTop).toBe(2000)
+      expect(view.queryByLabelText('回到底部')).toBeNull()
     } finally {
-      rect.mockRestore()
       host.remove()
     }
   })
 
-  it('normalizes a semantic restore clamped to the bottom before an immediate remount', () => {
+  it('a remount lands on the bottom even when the browser clamps the jump', () => {
     const host = document.createElement('div')
     host.setAttribute('data-conversation-scroll', '')
     Object.defineProperty(host, 'scrollHeight', { value: 2_000, writable: true, configurable: true })
@@ -1284,22 +1263,15 @@ describe('ChatView', () => {
       set: (value: number) => { scrollTop = Math.min(value, 1_500) },
     })
     document.body.appendChild(host)
-    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      if (this.dataset.chatAnchorKey === 'fixture:user:1') return { top: 300, bottom: 340 } as DOMRect
-      return { top: 0, bottom: 500 } as DOMRect
-    })
     try {
       const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
-      h.chatScroll.save({ anchorKey: 'fixture:user:1', anchorTop: 80, scrollTop: 1_400 })
       const view = render(<h.ChatView {...h.props} />, { container: host })
       expect(host.scrollTop).toBe(1_500)
-      expect(h.chatScroll.read()).toBeNull()
       view.rerender(<div />)
       host.scrollTop = 0
       view.rerender(<h.ChatView {...h.props} />)
       expect(host.scrollTop).toBe(1_500)
     } finally {
-      rect.mockRestore()
       host.remove()
     }
   })
@@ -1314,9 +1286,6 @@ describe('ChatView', () => {
     try {
       const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
       const view = render(<h.ChatView {...h.props} />, { container: host })
-      // At the bottom: the scroll event records the pinned state (null).
-      fireEvent.scroll(host)
-      expect(h.chatScroll.read()).toBeNull()
       view.rerender(<div />)
       host.scrollTop = 0
       view.rerender(<h.ChatView {...h.props} />)

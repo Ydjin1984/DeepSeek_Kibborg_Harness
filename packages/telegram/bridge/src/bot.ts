@@ -47,12 +47,29 @@ export class BotClient {
   }
 
   private async call<T>(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<TelegramCallResult<T>> {
+    return this.send<T>(method, JSON.stringify(params), { 'content-type': 'application/json' }, signal)
+  }
+
+  /**
+   * POST one Bot API call and unwrap its result envelope.
+   * @param method - Bot API method name.
+   * @param body - request body: JSON text or a multipart form.
+   * @param headers - headers matching `body` (empty for a form; fetch adds the boundary).
+   * @param signal - cancellation for the request.
+   * @returns the call outcome: the decoded result, or the API description of the refusal.
+   */
+  private async send<T>(
+    method: string,
+    body: string | FormData,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<TelegramCallResult<T>> {
     let response: Response
     try {
       response = await fetch(this.url(method), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(params),
+        headers,
+        body,
         ...(signal === undefined ? {} : { signal }),
       })
     } catch (error: unknown) {
@@ -94,6 +111,21 @@ export class BotClient {
         ? {}
         : { reply_markup: options.replyMarkup }),
     }, signal)
+  }
+
+  /** Upload one file as a document, with `caption` shown under it. */
+  async sendDocument(
+    chatId: string,
+    filename: string,
+    content: string,
+    caption: string,
+    signal?: AbortSignal,
+  ): Promise<TelegramCallResult<TelegramMessage>> {
+    const form = new FormData()
+    form.append('chat_id', chatId)
+    form.append('caption', caption)
+    form.append('document', new Blob([content], { type: 'text/markdown' }), filename)
+    return this.send<TelegramMessage>('sendDocument', form, {}, signal)
   }
 
   /** Replace the text of an earlier bridge message. */

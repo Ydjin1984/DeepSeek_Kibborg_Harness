@@ -19,6 +19,8 @@ export class ChatSendError extends Error {
 export interface ChatTransport {
   /** Send one message; resolves with the message id. */
   sendText(text: string, markup?: InlineKeyboardMarkup): Promise<number>
+  /** Upload `content` as a named document with `caption` under it; resolves with the message id. */
+  sendDocument(filename: string, content: string, caption: string): Promise<number>
   /** Replace an earlier message's text. */
   editText(messageId: number, text: string): Promise<void>
   /** Drop the inline keyboard of an earlier message. */
@@ -46,6 +48,12 @@ export class TelegramChatTransport implements ChatTransport {
 
   async sendText(text: string, markup?: InlineKeyboardMarkup): Promise<number> {
     const result = await this.bot.sendMessage(this.chatId, text, markup === undefined ? {} : { replyMarkup: markup })
+    if (!result.ok) throw new ChatSendError(result.description)
+    return result.result.message_id
+  }
+
+  async sendDocument(filename: string, content: string, caption: string): Promise<number> {
+    const result = await this.bot.sendDocument(this.chatId, filename, content, caption)
     if (!result.ok) throw new ChatSendError(result.description)
     return result.result.message_id
   }

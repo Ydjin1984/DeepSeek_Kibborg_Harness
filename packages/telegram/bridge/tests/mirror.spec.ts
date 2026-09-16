@@ -122,6 +122,46 @@ describe('MirrorEngine', () => {
     expect(transport.text(1)).toBe('👤 Продолжаем?: «давай»')
   })
 
+  it('uploads the model final answer as Final_Report.md when the turn completes', async () => {
+    const { engine, transport } = makeEngine()
+    engine.attach(SESSION.id)
+    engine.onSessionEvent(SESSION as never, sessionEvent('assistant/message', {
+      turn: 1, step: 0, message: { content: [{ type: 'text', text: 'Фича готова.' }] },
+    }))
+    engine.onSessionEvent(SESSION as never, sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 2))
+    await flushMicrotasks()
+    expect(transport.documents).toHaveLength(1)
+    expect(transport.documents[0]?.filename).toBe('Final_Report.md')
+    expect(transport.documents[0]?.content).toContain('Фича готова.')
+    expect(transport.documents[0]?.content).toContain('`s1`')
+  })
+
+  it('uploads no report when the turn did not complete', async () => {
+    const { engine, transport } = makeEngine()
+    engine.attach(SESSION.id)
+    engine.onSessionEvent(SESSION as never, sessionEvent('assistant/message', {
+      turn: 1, step: 0, message: { content: [{ type: 'text', text: 'Прервано.' }] },
+    }))
+    engine.onSessionEvent(SESSION as never, sessionEvent('turn/end', {
+      turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } },
+    }, 2))
+    await flushMicrotasks()
+    expect(transport.documents).toHaveLength(0)
+  })
+
+  it('falls back to a chat message when the report upload is refused', async () => {
+    const { engine, transport } = makeEngine()
+    transport.failDocuments = true
+    engine.attach(SESSION.id)
+    engine.onSessionEvent(SESSION as never, sessionEvent('assistant/message', {
+      turn: 1, step: 0, message: { content: [{ type: 'text', text: 'Фича готова.' }] },
+    }))
+    engine.onSessionEvent(SESSION as never, sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 2))
+    await flushMicrotasks()
+    expect(transport.documents).toHaveLength(0)
+    expect(transport.messages.some(message => message.text.includes('# Итоговый отчёт'))).toBe(true)
+  })
+
   it('forgets mirror state on detach', async () => {
     const { engine, transport } = makeEngine()
     engine.attach(SESSION.id)

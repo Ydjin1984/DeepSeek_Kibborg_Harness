@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { clampLine, extractVisibleText, parseQuestionAnswers, questionAnswerLine, toolActionLine, toolOutcomeSuffix, userLine } from '../src/format.ts'
+import {
+  clampLine,
+  extractVisibleText,
+  FINAL_REPORT_FILENAME,
+  finalReportDocument,
+  parseQuestionAnswers,
+  questionAnswerLine,
+  toolActionLine,
+  toolOutcomeSuffix,
+  userLine,
+} from '../src/format.ts'
 
 describe('format helpers', () => {
   it('prefixes user lines and clamps long content', () => {
@@ -43,5 +53,15 @@ describe('format helpers', () => {
     ])
     expect(text).toContain('👤 Продолжаем?: Да')
     expect(text).toContain('👤 Что делаем?: «Проверь логи»')
+  })
+
+  it('names the report document and keeps the final answer verbatim', () => {
+    expect(FINAL_REPORT_FILENAME).toBe('Final_Report.md')
+    const report = finalReportDocument('s1', 3, 'Фича готова.', Date.UTC(2024, 0, 2, 3, 4, 5))
+    expect(report).toContain('# Итоговый отчёт')
+    expect(report).toContain('`s1`')
+    expect(report).toContain('turn 3')
+    expect(report).toContain('2024-01-02T03:04:05.000Z')
+    expect(report.endsWith('Фича готова.\n')).toBe(true)
   })
 })

@@ -2,14 +2,14 @@
 // conversation snapshot as ChatView and projects it into a normalized event
 // timeline: a sticky task header (title, run state, counters, current action,
 // plan, files), a toolbar (search, category filters, expand/collapse all,
-// follow), and a virtualized event list. Each event row owns its header
+// follow), and a directly-rendered event list. Each event row owns its header
 // chrome and dispatches its Chat node through the shared
 // 'conversation.chat.node' seat, so the specialized renderers stay in one
 // place. The view owns its scrollport (`data-conversation-composer-overlay`),
 // which keeps the sticky composer seat intact below it.
 
 import {
-  useCallback, useEffect, useMemo, useRef, useState, type ReactNode,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react'
 import clsx from 'clsx'
 import type { ChatSnapshot, ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
@@ -26,9 +26,7 @@ import { ExecutionHeader } from './ExecutionHeader.tsx'
 import { executionEventFromNode, isDefaultExpanded, type ExecutionEvent } from './execution-event.ts'
 import { EXECUTION_FILTERS, matchesFilter, matchesQuery, type ExecutionFilter } from './execution-filter.ts'
 import { executionTraceSummary } from './execution-summary.ts'
-import {
-  executionOffsets, executionWindow, isAtScrollFloor,
-} from './execution-virtual.ts'
+import { isAtScrollFloor } from './execution-virtual.ts'
 import css from './ExecutionView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -128,49 +126,34 @@ export function ExecutionView({
     setFlipped(new Set())
   }, [actions])
 
-  // Virtual list geometry.
+  // Scroll geometry. The trace renders every visible row directly (like the
+  // Chat view), so the scrollport's own scrollHeight is authoritative: the
+  // tail jump and bottom-follow need no per-row measurement and cannot overlap
+  // rows. `viewport` only tracks the scrollport height for resize re-follow.
   const listRef = useRef<HTMLDivElement | null>(null)
-  const heightsRef = useRef(new Map<string, number>())
-  const [heightsVersion, setHeightsVersion] = useState(0)
-  const [scrollTop, setScrollTop] = useState(0)
   const [viewport, setViewport] = useState(0)
   const [atBottom, setAtBottom] = useState(true)
   // Follow the trace tail while the reader is pinned to the floor.
   const followRef = useRef(true)
-
-  const measure = useCallback((key: string, height: number) => {
-    if (heightsRef.current.get(key) === height) return
-    heightsRef.current.set(key, height)
-    setHeightsVersion(version => version + 1)
-  }, [])
-
-  const layout = useMemo(
-    () => executionOffsets(visibleKeys, key => heightsRef.current.get(key)),
-    [visibleKeys, heightsVersion],
-  )
-  const windowRows = useMemo(
-    () => executionWindow(scrollTop, viewport, layout, visibleKeys.length),
-    [scrollTop, viewport, layout, visibleKeys.length],
-  )
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current
     /* v8 ignore next -- ref-null guard: the button only renders beside the mounted list. */
     if (el === null) return
     el.scrollTop = el.scrollHeight
-    setScrollTop(el.scrollTop)
     setAtBottom(true)
   }, [])
 
   const scrollToKey = useCallback((key: string) => {
     const el = listRef.current
     if (el === null) return
-    const index = visibleKeys.indexOf(key)
-    if (index === -1) return
-    const target = layout.offsets[index] ?? 0
-    el.scrollTop = Math.max(0, target - Math.floor(el.clientHeight / 3))
-    setScrollTop(el.scrollTop)
-  }, [visibleKeys, layout])
+    for (const row of el.querySelectorAll<HTMLElement>('[data-execution-row-key]')) {
+      if (row.dataset.executionRowKey !== key) continue
+      /* v8 ignore next -- jsdom lacks scrollIntoView; browsers always have it. */
+      if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' })
+      return
+    }
+  }, [])
 
   // Own scrollport height; re-measure on resize.
   useEffect(() => {
@@ -187,24 +170,21 @@ export function ExecutionView({
     const el = listRef.current
     /* v8 ignore next -- ref-null guard: the handler only fires while mounted. */
     if (el === null) return
-    setScrollTop(el.scrollTop)
     const floor = isAtScrollFloor(el.scrollTop, el.scrollHeight, el.clientHeight, FOLLOW_THRESHOLD)
     followRef.current = floor
     setAtBottom(floor)
   }, [])
 
   // Follow the trace tail while the reader is pinned: re-scroll whenever the
-  // flow grows — a new row (visibleKeys.length), a measured height landing or
-  // in-place growth that moves the floor (layout.total), or a scrollport
-  // resize (viewport). An unpinned reader keeps the position; scrolling back
-  // to the floor re-pins.
+  // flow grows — a new row (visibleKeys.length) or a scrollport resize that
+  // moves the floor (viewport). An unpinned reader keeps the position;
+  // scrolling back to the floor re-pins.
   useEffect(() => {
     if (!followRef.current) return
     const el = listRef.current
     if (el === null) return
     el.scrollTop = el.scrollHeight
-    setScrollTop(el.scrollTop)
-  }, [visibleKeys.length, layout.total, viewport])
+  }, [visibleKeys.length, viewport])
 
   const jumpToLatest = useCallback(() => {
     followRef.current = true
@@ -313,33 +293,27 @@ export function ExecutionView({
         data-testid="execution-list"
         onScroll={onScroll}
       >
-        <div className={css.flow} style={{ height: layout.total }}>
-          {visibleKeys.slice(windowRows.start, windowRows.end).map((key, at) => {
-            const index = windowRows.start + at
-            return (
-              <div
-                key={key}
-                className={css.rowSlot}
-                style={{ top: layout.offsets[index] ?? 0 }}
-                data-execution-row-key={key}
-              >
-                <Measure onMeasure={(height) => { measure(key, height) }}>
-                  <ExecutionEventRow
-                    nodeKey={key}
-                    expanded={effectiveExpanded(key)}
-                    onToggle={() => { toggleRow(key) }}
-                    owner={owner}
-                    useSession={useSession}
-                    useSessions={useSessions}
-                    sessionId={sessionId}
-                    renderChatNode={renderChatNode}
-                    t={t}
-                    query={query}
-                  />
-                </Measure>
-              </div>
-            )
-          })}
+        <div className={css.flow}>
+          {visibleKeys.map(key => (
+            <div
+              key={key}
+              className={css.rowSlot}
+              data-execution-row-key={key}
+            >
+              <ExecutionEventRow
+                nodeKey={key}
+                expanded={effectiveExpanded(key)}
+                onToggle={() => { toggleRow(key) }}
+                owner={owner}
+                useSession={useSession}
+                useSessions={useSessions}
+                sessionId={sessionId}
+                renderChatNode={renderChatNode}
+                t={t}
+                query={query}
+              />
+            </div>
+          ))}
         </div>
         {!atBottom && (
           <button
@@ -357,29 +331,6 @@ export function ExecutionView({
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-/** Measure one mounted row's height through a ResizeObserver (expand changes included). */
-function Measure({ onMeasure, children }: {
-  onMeasure: (height: number) => void
-  children: ReactNode
-}) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = ref.current
-    if (el === null) return
-    const report = (): void => { onMeasure(el.offsetHeight) }
-    report()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(report)
-    observer.observe(el)
-    return () => { observer.disconnect() }
-  }, [onMeasure])
-  return (
-    <div ref={ref}>
-      {children}
     </div>
   )
 }

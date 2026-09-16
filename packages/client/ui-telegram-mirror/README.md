@@ -3,7 +3,7 @@
 Telegram mirror toggle in the composer tool row (`conversation.input.left`
 entry `telegram-mirror`, next to the attach button). One click attaches the
 current session's mirror (its events then flow into the configured Telegram
-chat); the active state highlights the button.
+chat); the active state turns the icon green with a glow.
 
 ## Model experience
 

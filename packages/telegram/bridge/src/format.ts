@@ -15,6 +15,36 @@ export const USER_PREFIX = '👤'
 /** Cap applied to one assistant or user line (Telegram's 4096 limit minus slack). */
 export const MAX_MESSAGE_CHARS = 3900
 
+/** Filename of the report the bridge uploads when a task finishes. */
+export const FINAL_REPORT_FILENAME = 'Final_Report.md'
+
+/** Caption shown under the uploaded report. */
+export const FINAL_REPORT_CAPTION = '✅ Задание выполнено — итоговый отчёт во вложении'
+
+/**
+ * Render the report document for a finished task: the turn it closed on,
+ * when it closed, and the model's final answer.
+ * @param sessionId - the mirrored session the report belongs to.
+ * @param turn - the finished turn number.
+ * @param answer - the model's final answer text.
+ * @param time - the `turn/end` event time, in epoch milliseconds.
+ * @returns the Markdown document uploaded as {@link FINAL_REPORT_FILENAME}.
+ */
+export function finalReportDocument(sessionId: string, turn: number, answer: string, time: number): string {
+  return [
+    '# Итоговый отчёт',
+    '',
+    `- **Сессия:** \`${sessionId}\``,
+    `- **Задание:** turn ${String(turn)}`,
+    `- **Завершено:** ${new Date(time).toISOString()}`,
+    '',
+    '## Финальный ответ',
+    '',
+    answer,
+    '',
+  ].join('\n')
+}
+
 /** Trim one line to {@link MAX_MESSAGE_CHARS} with an ellipsis marker. */
 export function clampLine(text: string, max = MAX_MESSAGE_CHARS): string {
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`

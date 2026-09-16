@@ -635,9 +635,9 @@ describe('web e2e: long Chat scroll contract', () => {
     })
   }, 180_000)
 
-  it.skipIf(MODE === 'record')('restores tab/session position and keeps composer resizing on the correct scroll owner', async () => {
+  it.skipIf(MODE === 'record')('lands on the latest action across tab and session switches and keeps composer resizing on the correct scroll owner', async () => {
     await withScrollWorld({
-      failureShot: 'web-e2e-chat-scroll-restore-composer',
+      failureShot: 'web-e2e-chat-scroll-bottom-switch',
       seeds: [
         { fixture: RESTORE_FIXTURE_A, id: RESTORE_SESSION_A_ID },
         { fixture: RESTORE_FIXTURE_B, id: RESTORE_SESSION_B_ID },
@@ -652,8 +652,9 @@ describe('web e2e: long Chat scroll contract', () => {
       await loadEarlierWithAnchor(world.page)
       await wheelToHistoryStart(world.page)
       await wheelTranscript(world.page, 1_300)
-      const sessionAnchor = await visibleFlowAnchor(world.page)
 
+      // Reader scrolled away from the floor: a view-tab switch remounts the
+      // Chat view, which must land on the latest action.
       await world.page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
       await world.page.getByLabel('Trajectory timeline').waitFor({ timeout: 30_000 })
       await world.page.setViewportSize({ width: 700, height: 900 })
@@ -662,8 +663,10 @@ describe('web e2e: long Chat scroll contract', () => {
       await world.page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
       await world.page.getByRole('tab', { name: 'Chat', exact: true }).click()
       await nextPaint(world.page)
-      await expectSameFlowTop(world.page, sessionAnchor)
+      await expectBottom(world.page)
 
+      // Scroll away again: a session switch must also land on the floor.
+      await wheelTranscript(world.page, -900)
       await openSeed(
         world.page,
         RESTORE_FIXTURE_B,
@@ -673,19 +676,10 @@ describe('web e2e: long Chat scroll contract', () => {
         world.page,
         RESTORE_FIXTURE_A,
       )
-      await expectSameFlowTop(world.page, sessionAnchor)
+      await expectBottom(world.page)
 
-      const backToBottom = world.page.getByRole('button', { name: 'Back to bottom', exact: true })
-      await backToBottom.evaluate((button) => {
-        if (!(button instanceof HTMLElement)) throw new Error('Back-to-bottom control is not an HTML element')
-        button.click()
-        const trajectory = [...document.querySelectorAll<HTMLElement>('[role="tab"]')]
-          .find(tab => tab.textContent?.trim() === 'Trajectory')
-        if (!(trajectory instanceof HTMLElement)) {
-          throw new Error('Trajectory tab is unavailable during pinned remount')
-        }
-        trajectory.click()
-      })
+      // Re-pinned remounts stay on the floor through further tab/session hops.
+      await world.page.getByRole('tab', { name: 'Trajectory', exact: true }).click()
       await world.page.getByLabel('Trajectory timeline').waitFor({ timeout: 30_000 })
       await world.page.getByRole('tab', { name: 'Chat', exact: true }).click()
       await expectBottom(world.page)
@@ -700,6 +694,7 @@ describe('web e2e: long Chat scroll contract', () => {
         RESTORE_FIXTURE_A.markers.assistant(RESTORE_FIXTURE_A.turns),
       )
       await expectBottom(world.page)
+
       const composer = world.page.locator('textarea:enabled').last()
       const longDraft = Array.from(
         { length: 18 },

@@ -9,14 +9,32 @@ export interface RecordedMessage {
   markup: InlineKeyboardMarkup | undefined
 }
 
+/** One recorded document upload. */
+export interface RecordedDocument {
+  messageId: number
+  filename: string
+  content: string
+  caption: string
+}
+
 /** In-memory {@link ChatTransport} that records every operation. */
 export class RecorderTransport implements ChatTransport {
   readonly messages: RecordedMessage[] = []
+  readonly documents: RecordedDocument[] = []
+  /** Make {@link sendDocument} reject, imitating a Bot API refusal. */
+  failDocuments = false
   private nextId = 1
 
   sendText(text: string, markup?: InlineKeyboardMarkup): Promise<number> {
     const messageId = this.nextId++
     this.messages.push({ messageId, text, markup })
+    return Promise.resolve(messageId)
+  }
+
+  sendDocument(filename: string, content: string, caption: string): Promise<number> {
+    if (this.failDocuments) return Promise.reject(new Error('document upload failed'))
+    const messageId = this.nextId++
+    this.documents.push({ messageId, filename, content, caption })
     return Promise.resolve(messageId)
   }
 

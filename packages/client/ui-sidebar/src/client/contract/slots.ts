@@ -85,6 +85,9 @@ export interface SidebarFooterActionOwnerProps {
   wide: boolean
 }
 
+/** Host connectivity state driving the brand-mark status light. */
+export type ServerStatus = 'unknown' | 'alive' | 'dead'
+
 /**
  * Registrant-private injected share (arrives via the register inject
  * factory). The shell keeps only its own controls: starting a Session from
@@ -100,12 +103,12 @@ export type SidebarRootInjected = {
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
   /**
-   * Registrant-private reactive facts bound by the renderer: `serverAlive`
-   * becomes `useServerAlive`, true while the Host answers the periodic health
-   * check and false once it stops responding (the brand-mark status light).
+   * Registrant-private reactive facts bound by the renderer: `serverStatus`
+   * becomes `useServerStatus`. `unknown` is the white resting state, `alive`
+   * the blinking green, `dead` the steady red (Host unreachable).
    */
   hooks: {
-    serverAlive: ObservableSnapshot<boolean>
+    serverStatus: ObservableSnapshot<ServerStatus>
   }
 }
 

@@ -5,10 +5,12 @@
  * compact action lines that gain a success/error suffix when the result
  * arrives, and `ask_user_question` calls render as an answer recap instead of
  * an action line (the question itself is delivered by the question provider).
+ * A turn that completes uploads the model's final answer as the
+ * `Final_Report.md` document.
  * @module @deepseek-ai/dsh-telegram-bridge/mirror
  */
 
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { CallId, ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { ToolCallKind } from '@deepseek-ai/dsh-tools'
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
@@ -16,6 +18,9 @@ import type { ChatTransport } from './chat.ts'
 import {
   clampLine,
   extractVisibleText,
+  FINAL_REPORT_CAPTION,
+  FINAL_REPORT_FILENAME,
+  finalReportDocument,
   MAX_MESSAGE_CHARS,
   parseQuestionAnswers,
   questionAnswerLine,
@@ -56,6 +61,7 @@ export class MirrorEngine {
   private stream: LiveStream | null = null
   private readonly toolMessages = new Map<string, { messageId: number | null; line: string }>()
   private readonly askCalls = new Map<string, { questions: AskUserQuestionItem[] }>()
+  private finalAnswer = ''
 
   constructor(
     private readonly transport: ChatTransport,
@@ -95,6 +101,10 @@ export class MirrorEngine {
         this.onAssistantFinal(extractVisibleText(event.data.message.content))
         return
       }
+      case 'turn/end': {
+        this.onTurnEnd(session.id, event.data.turn, event.data.reason, event.time)
+        return
+      }
       case 'tool/call': {
         this.onToolCall(event.data.callId, event.data.name, event.data.arguments)
         return
@@ -120,6 +130,7 @@ export class MirrorEngine {
   }
 
   private onAssistantFinal(finalText: string): void {
+    if (finalText !== '') this.finalAnswer = finalText
     const stream = this.stream
     if (stream === null) {
       if (finalText !== '') void this.deliver(finalText, null)
@@ -176,6 +187,25 @@ export class MirrorEngine {
     } catch (error: unknown) {
       this.logger.warn(`telegram edit failed: ${String(error)}`)
       return undefined
+    }
+  }
+
+  /** A completed turn hands the model's final answer to the chat as a report document. */
+  private onTurnEnd(sessionId: string, turn: number, reason: TurnEndReason, time: number): void {
+    const answer = this.finalAnswer
+    this.finalAnswer = ''
+    if (reason.kind !== 'completed' || answer.trim() === '') return
+    void this.deliverReport(sessionId, turn, answer, time)
+  }
+
+  /** Upload the report, falling back to a chat message when the upload is refused. */
+  private async deliverReport(sessionId: string, turn: number, answer: string, time: number): Promise<void> {
+    const document = finalReportDocument(sessionId, turn, answer, time)
+    try {
+      await this.transport.sendDocument(FINAL_REPORT_FILENAME, document, FINAL_REPORT_CAPTION)
+    } catch (error: unknown) {
+      this.logger.warn(`telegram report upload failed: ${String(error)}`)
+      await this.send(clampLine(document))
     }
   }
 
@@ -241,6 +271,7 @@ export class MirrorEngine {
     this.stream = null
     this.toolMessages.clear()
     this.askCalls.clear()
+    this.finalAnswer = ''
   }
 }
 

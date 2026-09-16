@@ -24,8 +24,8 @@ import type { TelegramSettings } from '../src/types.ts'
 
 interface MockBot {
   url: string
-  /** Every non-polling request the bridge made. */
-  requests: { method: string; body: Record<string, unknown> }[]
+  /** Every non-polling request the bridge made, with its decoded body and raw payload. */
+  requests: { method: string; body: Record<string, unknown>; raw: string }[]
   /** Queue an inbound update the next getUpdates call returns. */
   enqueue(update: unknown): void
   close(): Promise<void>
@@ -46,12 +46,12 @@ async function startMockBot(): Promise<MockBot> {
     } catch {
       // empty body
     }
-    if (method !== 'getUpdates') requests.push({ method, body })
+    if (method !== 'getUpdates') requests.push({ method, body, raw })
     let payload: unknown
     if (method === 'getUpdates') {
-      requests.push({ method, body })
+      requests.push({ method, body, raw })
       payload = { ok: true, result: queue.splice(0) }
-    } else if (method === 'sendMessage' || method === 'editMessageText') {
+    } else if (method === 'sendMessage' || method === 'editMessageText' || method === 'sendDocument') {
       payload = { ok: true, result: { message_id: messageId++ } }
     } else {
       payload = { ok: true, result: true }
@@ -189,5 +189,15 @@ describe('Telegram bridge (real Loader composition)', () => {
     })
     await waitFor(() => sentMessages().some(message => typeof message.text === 'string'
       && message.text.includes('зеркало DeepSeek Harness')), 8000, '/start reply')
+
+    // 3. A finished turn uploads the model's final answer as Final_Report.md.
+    emitSessionEvent('assistant/message', {
+      turn: 1, step: 0, message: { content: [{ type: 'text', text: 'Задание выполнено.' }] },
+    })
+    emitSessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await waitFor(() => mock.requests.some(request => request.method === 'sendDocument'), 8000, 'report upload')
+    const upload = mock.requests.find(request => request.method === 'sendDocument')
+    expect(upload?.raw).toContain('Final_Report.md')
+    expect(upload?.raw).toContain('Задание выполнено.')
   })
 })

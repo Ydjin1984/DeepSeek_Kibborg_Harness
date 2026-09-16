@@ -2,7 +2,7 @@
 import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { SidebarRootInjected } from './contract/slots.ts'
+import type { ServerStatus, SidebarRootInjected } from './contract/slots.ts'
 import { SidebarRoot } from './SidebarRoot.tsx'
 import { en, ru, zh, type SidebarKey } from './locales.ts'
 
@@ -31,18 +31,19 @@ export const inject = ['slots', 'layout', 'sessions', 'workspaces', 'locale']
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ru }), 'ui-sidebar: dictionaries')
 
-  // Server-alive status for the brand-mark indicator: a periodic health check
-  // against the Host root. true while it answers, false once it stops (crash,
-  // disconnect, or stop). Polling keeps the light honest without relying on a
+  // Server connectivity status for the brand-mark indicator: a periodic health
+  // check against the Host root. `unknown` (white) until the first check,
+  // `alive` (blinking green) while it answers, `dead` (steady red) once it
+  // stops responding. Polling keeps the light honest without relying on a
   // single transport's reconnect state.
-  const serverAlive = createSnapshotStore(true)
+  const serverStatus = createSnapshotStore<ServerStatus>('unknown')
   const checkServer = (): void => {
-    // Non-browser runs (jsdom unit tests) have no fetch; the light simply
-    // stays alive there, matching a Host that has not yet failed a check.
-    if (typeof fetch !== 'function') return
+    // Non-browser runs (jsdom unit tests) have no fetch; report alive there,
+    // matching a Host that has not yet failed a check.
+    if (typeof fetch !== 'function') { serverStatus.set('alive'); return }
     fetch('/', { method: 'GET', cache: 'no-store' })
-      .then((res) => { serverAlive.set(res.ok) })
-      .catch(() => { serverAlive.set(false) })
+      .then((res) => { serverStatus.set(res.ok ? 'alive' : 'dead') })
+      .catch(() => { serverStatus.set('dead') })
   }
   checkServer()
   const healthTimer = setInterval(checkServer, 3000)
@@ -53,7 +54,7 @@ export function apply(ctx: ClientContext): void {
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
-    hooks: { serverAlive },
+    hooks: { serverStatus },
   })
   ctx.effect(
     () => ctx.slots.register({

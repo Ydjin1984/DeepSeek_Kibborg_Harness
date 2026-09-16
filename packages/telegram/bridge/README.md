@@ -20,6 +20,11 @@ answers back into the session, and answers `ctx.userQuestions` from the chat
 - While a mirror is attached, any chat message the user sends (outside an
   active question) is delivered to the session as an ordinary user message and
   wakes the agent — the same path the browser uses.
+- A turn that ends `completed` uploads the model's final answer as the
+  `Final_Report.md` document (session, turn, completion time, then the answer
+  verbatim) with a `✅ Задание выполнено` caption; a refused upload falls back
+  to the report text as a chat message. Turns ending any other way upload
+  nothing.
 - Settings live in the `telegram` settings namespace (`botToken` is a
   `role('secret')` field; `apiBaseUrl` is a test/proxy seam). Polling restarts
   whenever settings change.
@@ -29,9 +34,9 @@ answers back into the session, and answers `ctx.userQuestions` from the chat
 - `TelegramBridgeService` (default export, a cordis `Service`) is the host
   face consumed by the api gateway (`ctx.get('telegramBridge')`, structurally
   typed there): `status`, `attach`, `detach`, `test`.
-- `BotClient` is a thin fetch wrapper over the Bot API; `ChatTransport` is the
-  seam the mirror and the question provider render through (unit tests use an
-  in-memory recorder).
+- `BotClient` is a thin fetch wrapper over the Bot API (JSON calls plus the
+  multipart `sendDocument` upload); `ChatTransport` is the seam the mirror and
+  the question provider render through (unit tests use an in-memory recorder).
 - Mirroring subscribes to `ctx.on('session/event', ...)` and ignores sessions
   other than the attached one; only events after `attach` are forwarded.
 - The question channel is a `ctx.userQuestions` provider registered only while

@@ -24,6 +24,10 @@
   cursor: default;
 }
 
-.active {
-  color: var(--dsw-color-accent);
+/* Attached mirror: the icon turns green and glows so the live state reads at a glance. */
+.active,
+.button.active:hover:not(:disabled) {
+  color: var(--dsw-alias-state-success-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 16%, transparent);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, transparent));
 }
