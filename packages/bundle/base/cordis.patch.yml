@@ -106,6 +106,14 @@
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
 
+    # OpenRouter free-model pool, mounted dormant: it scans the public model
+    # directory for zero-price models, publishes the survivors as one more
+    # `llm-pi-ai` route, and leases them to callers that rotate across the pool
+    # under a per-model request and token budget. No route registers until its
+    # own settings section (Settings → Models → «OpenRouter Free») enables it.
+    - id: llm-openrouter-free
+      name: '@deepseek-ai/dsh-llm-openrouter-free'
+
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
       config:

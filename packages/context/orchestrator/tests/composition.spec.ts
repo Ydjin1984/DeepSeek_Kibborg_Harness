@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Orchestrator host-half composition: the executor tool mounts/unmounts with
  * the live settings namespace, the head prompt section is suppressed for
  * delegated agents, execution is head-only, and executor children are scoped
@@ -29,9 +29,21 @@ interface RegisteredTool {
 interface Harness {
   ctx: Context
   /** Live settings the fake namespace serves. */
-  settings: { enabled: boolean; subagentProvider: string; executorProvider: string; executorModel: string; headDenyTools: string[] }
+  settings: {
+    enabled: boolean
+    subagentProvider: string
+    executorProvider: string
+    executorModel: string
+    headDenyTools: string[]
+    roiEnabled: boolean
+    roiWorkers: number
+    roiRetries: number
+    roiNames: string[]
+  }
   /** The result the fake subagent registry resolves for the next start. */
   fixture: { result: SubagentResult; disposeError?: Error }
+  /** Results consumed in order before {@link Harness.fixture} answers; a scripted run sequence. */
+  queue: SubagentResult[]
   /** Registered tool definitions (name → definition). */
   tools: Map<string, RegisteredTool>
   /** Registered prompt sections by name. */
@@ -59,7 +71,54 @@ function resultOf(stopReason: SubagentResult['stopReason']): SubagentResult {
   return { stopReason, output: [{ type: 'text', text: 'partial' }] }
 }
 
-async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Promise<Harness> {
+/** One lease the fake pool handed out, and what the swarm reported back about it. */
+interface FakeLease {
+  provider: string
+  model: string
+  release: (outcome: unknown) => Promise<void>
+}
+
+/** The free-model pool surface the fake registry answers, with a finite model list. */
+interface FakePool {
+  available: () => boolean
+  acquire: () => FakeLease | undefined
+  snapshot: () => { enabled: boolean }
+  leases: FakeLease[]
+  releases: unknown[]
+}
+
+/**
+ * A pool with `models` free models, each handed out once. The last acquire()
+ * answers nothing, which is what a caller sees when the pool is spent.
+ */
+function fakePool(models: readonly string[]): FakePool {
+  const remaining = [...models]
+  const leases: FakeLease[] = []
+  const releases: unknown[] = []
+  return {
+    leases,
+    releases,
+    available: () => remaining.length > 0,
+    snapshot: () => ({ enabled: true }),
+    acquire: () => {
+      const model = remaining.shift()
+      if (model === undefined) return undefined
+      const lease: FakeLease = {
+        provider: 'openrouter',
+        model,
+        release: async (outcome: unknown) => { releases.push(outcome) },
+      }
+      leases.push(lease)
+      return lease
+    },
+  }
+}
+
+async function setup(
+  caps: Caps,
+  initial: Partial<Harness['settings']> = {},
+  pool?: FakePool,
+): Promise<Harness> {
   const ctx = new Context()
   const settings = {
     enabled: false,
@@ -67,9 +126,14 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     executorProvider: 'kibborg',
     executorModel: 'Kibborg_Flash_v5.7',
     headDenyTools: [],
+    roiEnabled: false,
+    roiWorkers: 5,
+    roiRetries: 2,
+    roiNames: ['Бася', 'Петя', 'Федя'],
     ...initial,
   }
   const fixture: Harness['fixture'] = { result: resultOf('completed') }
+  const queue: SubagentResult[] = []
   const tools = new Map<string, RegisteredTool>()
   const sections = new Map<string, PromptSection>()
   const skills = new Map<string, { dispose: () => void }>()
@@ -113,14 +177,17 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     }> => {
       starts.push(request)
       return {
-        id: 'run-1',
-        result: Promise.resolve(fixture.result),
+        id: `run-${String(starts.length)}`,
+        result: Promise.resolve(queue.shift() ?? fixture.result),
         dispose: () => fixture.disposeError !== undefined
           ? Promise.reject(fixture.disposeError)
           : Promise.resolve(),
       }
     },
   })
+  // The pool is optional by design, so the fake provides the same service name
+  // the real plugin registers, and compositions without one leave it absent.
+  if (pool !== undefined) ctx.provide('openrouterFree' as never, pool as never)
 
   const plugin = ctx.plugin({ inject: [...inject], apply })
   await plugin.await()
@@ -128,6 +195,7 @@ async function setup(caps: Caps, initial: Partial<Harness['settings']> = {}): Pr
     ctx,
     settings,
     fixture,
+    queue,
     tools,
     sections,
     skills,
@@ -220,7 +288,7 @@ describe('dsh-orchestrator composition', () => {
     expect(h.starts).toHaveLength(1)
     const request = h.starts[0]!
     expect(request.maxDepth).toBe(1)
-    expect(request.toolFilter).toEqual({ deny: ['executor'] })
+    expect(request.toolFilter).toEqual({ deny: ['executor', 'swarm'] })
     expect(request.persona).toMatch(/ИСПОЛНИТЕЛЬ/)
     expect(request.persona).toMatch(/зрение \(vision\)/)
     expect(request.persona).toContain('127.0.0.1:9222')
@@ -276,12 +344,19 @@ describe('dsh-orchestrator composition', () => {
     const h = await setup(FULL_CAPS)
     expect(h.skills.has('orchestrator-head')).toBe(false)
     expect(h.skills.has('orchestrator-executor')).toBe(false)
+    expect(h.skills.has('orchestrator-roi')).toBe(false)
 
     h.settings.enabled = true
     h.applySettings()
     await vi.waitFor(() => {
       expect(h.skills.has('orchestrator-head')).toBe(true)
       expect(h.skills.has('orchestrator-executor')).toBe(true)
+      expect(h.skills.has('orchestrator-roi')).toBe(false)
+    })
+    h.settings.roiEnabled = true
+    h.applySettings()
+    await vi.waitFor(() => {
+      expect(h.skills.has('orchestrator-roi')).toBe(true)
     })
 
     h.settings.enabled = false
@@ -289,6 +364,7 @@ describe('dsh-orchestrator composition', () => {
     await vi.waitFor(() => {
       expect(h.skills.has('orchestrator-head')).toBe(false)
       expect(h.skills.has('orchestrator-executor')).toBe(false)
+      expect(h.skills.has('orchestrator-roi')).toBe(false)
     })
     await h.dispose()
   })
@@ -300,6 +376,7 @@ describe('dsh-orchestrator composition', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(h.skills.has('orchestrator-head')).toBe(false)
     expect(h.skills.has('orchestrator-executor')).toBe(false)
+    expect(h.skills.has('orchestrator-roi')).toBe(false)
     await h.dispose()
   })
 
@@ -313,6 +390,7 @@ describe('dsh-orchestrator composition', () => {
     await h.dispose()
     expect(h.skills.has('orchestrator-head')).toBe(false)
     expect(h.skills.has('orchestrator-executor')).toBe(false)
+    expect(h.skills.has('orchestrator-roi')).toBe(false)
   })
 
   it('exposes executor presentation hooks', async () => {
@@ -358,17 +436,17 @@ describe('dsh-orchestrator composition', () => {
     const skillsModule = await import('../src/skills.ts')
     const spy = vi.spyOn(skillsModule, 'loadOrchestratorSkills')
       .mockRejectedValueOnce(new Error('asset missing'))
-    const warn = vi.spyOn(h.ctx.logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(h.ctx.logger, 'error').mockImplementation(() => {})
 
     h.settings.enabled = true
     h.applySettings()
     await vi.waitFor(() => {
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('failed to register bundled skills'))
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('failed to register bundled skills'))
     })
     expect(h.skills.has('orchestrator-head')).toBe(false)
 
     spy.mockRestore()
-    warn.mockRestore()
+    error.mockRestore()
     await h.dispose()
   })
 
@@ -440,6 +518,158 @@ describe('dsh-orchestrator composition', () => {
     const h = await setup(FULL_CAPS, { enabled: true, headDenyTools: [] })
     h.applySettings()
     expect((await assembleTools(h, 0)).tools.map(tool => tool.name)).toEqual(['pwsh', 'read'])
+    await h.dispose()
+  })
+
+  it('mounts the swarm with ROI on and unmounts it when ROI is switched off', async () => {
+    // No pool composed: the tool still mounts, because a pool that this
+    // deployment mounts after the orchestrator must not gate it forever.
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true })
+    h.applySettings()
+    expect(h.tools.has('swarm')).toBe(true)
+
+    h.settings.roiEnabled = false
+    h.applySettings()
+    expect(h.tools.has('swarm')).toBe(false)
+    expect(h.tools.has('executor')).toBe(true)
+    await h.dispose()
+  })
+
+  it('refuses the swarm with a configuration error when no pool is composed', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true })
+    h.applySettings()
+    await expect(h.tools.get('swarm')!.execute(
+      { tasks: [{ description: 'x', prompt: 'y' }] },
+      { agent: agentAt(0), signal: new AbortController().signal, overrides: {} },
+    )).rejects.toThrow(/OpenRouter Free/)
+    await h.dispose()
+  })
+
+  it('spreads swarm tasks over the pooled models and reports a spent pool at once', async () => {
+    const pool = fakePool(['m-1', 'm-2'])
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true, roiWorkers: 5 }, pool)
+    h.applySettings()
+    const tool = h.tools.get('swarm')!
+    const value = await tool.execute({
+      tasks: [
+        { description: 'first', prompt: 'do the first' },
+        { description: 'second', prompt: 'do the second' },
+        { description: 'third', prompt: 'do the third' },
+      ],
+    }, {
+      agent: agentAt(0),
+      signal: new AbortController().signal,
+      overrides: {},
+    }) as { workers: Array<{ name: string; model: string; ok: boolean; error?: string }> }
+
+    expect(value.workers.map(worker => worker.model)).toEqual([
+      'openrouter/m-1', 'openrouter/m-2', '—',
+    ])
+    expect(value.workers.map(worker => worker.name)).toEqual(['Бася', 'Петя', 'Федя'])
+    // The two leased workers reported success back to the pool; the third never
+    // started, so nothing waited on a model that had nothing left.
+    expect(pool.releases).toEqual([
+      { kind: 'success', tokens: 0 },
+      { kind: 'success', tokens: 0 },
+    ])
+    expect(h.starts.map(request => request.agentOptions)).toEqual([
+      { provider: 'openrouter', model: 'm-1' },
+      { provider: 'openrouter', model: 'm-2' },
+    ])
+    expect(value.workers[2]?.ok).toBe(false)
+    await h.dispose()
+  })
+
+  it('benches a rate-limited pooled model instead of reporting a bare failure', async () => {
+    const pool = fakePool(['m-1'])
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true }, pool)
+    h.fixture.result = { stopReason: 'error', output: [], diagnostic: 'provider answered 429 rate limited' }
+    h.applySettings()
+    const value = await h.tools.get('swarm')!.execute({
+      tasks: [{ description: 'only', prompt: 'do it' }],
+    }, {
+      agent: agentAt(0),
+      signal: new AbortController().signal,
+      overrides: {},
+    }) as { workers: Array<{ ok: boolean; error?: string }> }
+    expect(pool.releases).toEqual([{ kind: 'rate-limited' }])
+    expect(value.workers[0]?.ok).toBe(false)
+    await h.dispose()
+  })
+
+  it('moves a rate-limited task to the next pooled model and stops at the retry limit', async () => {
+    const pool = fakePool(['m-1', 'm-2', 'm-3'])
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true }, pool)
+    h.queue.push(
+      { stopReason: 'error', output: [], diagnostic: '429 rate limited upstream' },
+      { stopReason: 'completed', output: [{ type: 'text', text: 'second model answered' }] },
+    )
+    h.applySettings()
+    const value = await h.tools.get('swarm')!.execute({
+      tasks: [{ description: 'only', prompt: 'do it' }],
+    }, {
+      agent: agentAt(0),
+      signal: new AbortController().signal,
+      overrides: {},
+    }) as { workers: Array<{ ok: boolean; model: string; report?: string }> }
+
+    // One task, two leases: the rate-limited model was benched and the task ran
+    // on the next one rather than failing outright.
+    expect(h.starts.map(request => request.agentOptions?.model)).toEqual(['m-1', 'm-2'])
+    expect(pool.releases).toEqual([{ kind: 'rate-limited' }, { kind: 'success', tokens: 0 }])
+    expect(value.workers[0]?.ok).toBe(true)
+    expect(value.workers[0]?.report).toBe('second model answered')
+    await h.dispose()
+  })
+
+  it('gives up after the configured retries and keeps the last failure', async () => {
+    const pool = fakePool(['m-1', 'm-2', 'm-3', 'm-4'])
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true, roiRetries: 1 }, pool)
+    h.fixture.result = { stopReason: 'error', output: [], diagnostic: '429 rate limited' }
+    h.applySettings()
+    const value = await h.tools.get('swarm')!.execute({
+      tasks: [{ description: 'only', prompt: 'do it' }],
+    }, {
+      agent: agentAt(0),
+      signal: new AbortController().signal,
+      overrides: {},
+    }) as { workers: Array<{ ok: boolean }> }
+
+    // roiRetries 1 means two attempts, so exactly two models were leased.
+    expect(h.starts).toHaveLength(2)
+    expect(value.workers[0]?.ok).toBe(false)
+    await h.dispose()
+  })
+
+  it('refuses the swarm for a delegated agent and without ROI', async () => {
+    const pool = fakePool(['m-1'])
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true }, pool)
+    h.applySettings()
+    const exec = async (depth: number): Promise<unknown> => h.tools.get('swarm')!.execute(
+      { tasks: [{ description: 'x', prompt: 'y' }] },
+      { agent: agentAt(depth), signal: new AbortController().signal, overrides: {} },
+    )
+    await expect(exec(1)).rejects.toThrow(/head-only/)
+
+    h.settings.roiEnabled = false
+    h.applySettings()
+    const missing = h.tools.get('swarm')
+    expect(missing).toBeUndefined()
+    await h.dispose()
+  })
+
+  it('renders the ROI instructions exactly while ROI mode is on', async () => {
+    const h = await setup(FULL_CAPS, { enabled: true, roiEnabled: true }, fakePool(['m-1']))
+    h.applySettings()
+    const section = h.sections.get('orchestrator')!
+    const text = section.text as (context: { agent?: Agent }) => string
+    expect(text({})).toContain('ROI-режим включён')
+    expect(text({})).toContain('`swarm`')
+    expect(text({ agent: agentAt(1) })).toBe('')
+
+    h.settings.roiEnabled = false
+    h.applySettings()
+    expect(text({})).not.toContain('ROI-режим включён')
     await h.dispose()
   })
 })

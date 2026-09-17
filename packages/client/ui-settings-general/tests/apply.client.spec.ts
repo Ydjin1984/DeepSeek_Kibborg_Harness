@@ -1,6 +1,7 @@
 /** Ownerless-copy registrations: the five seats, dictionaries, thunked labels, and HMR recovery. */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { installUiDebugSink, isUiDebugEnabled, resetUiDebugForTests } from '@deepseek-ai/dsh-debug-log'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
@@ -8,9 +9,15 @@ import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-general/client'
 import { CloseLabel, HeaderContent, TriggerContent } from '../src/client/chrome.tsx'
+import { DebugRow } from '../src/client/DebugRow.tsx'
+import type { DebugRowInjected } from '../src/client/DebugRow.tsx'
 import { GeneralSection } from '../src/client/GeneralSection.tsx'
 import { SettingsDocumentAction } from '../src/client/SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from '../src/client/SettingsDocumentAction.tsx'
+
+afterEach(() => {
+  resetUiDebugForTests()
+})
 
 // These specs assert the shipped Chinese copy. The lane has no jsdom `window`,
 // so browser-language detection never runs and a fresh LocaleRuntime opens on
@@ -82,6 +89,34 @@ describe('ui-settings-general apply', () => {
     expect(inject).toEqual(['slots', 'locale', 'connection', 'settingsScope'])
   })
 
+  it('turns the tracer on when the Host section is enabled', async () => {
+    const stopSink = installUiDebugSink(() => {})
+    const b = await bench()
+    b.settingsDescribe.mockResolvedValue({
+      rpcId: 'settings-debug' as never,
+      result: {
+        ok: true as const,
+        value: {
+          writable: true,
+          hasDocument: true,
+          namespaces: [{
+            ns: 'ui-debug',
+            schema: {},
+            value: { enabled: true },
+            applies: 'live' as const,
+            secrets: [],
+            revision: 1,
+          } as never],
+        },
+      },
+    })
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    b.ctx.emit('connection/reset')
+    await vi.waitFor(() => { expect(isUiDebugEnabled()).toBe(true) })
+    stopSink()
+  })
+
   it('fills all five seats for declarations before or after apply', async () => {
     const before = await bench()
     declare(before.slots)
@@ -94,7 +129,16 @@ describe('ui-settings-general apply', () => {
     // The nav label is a locale-following thunk; owners resolve at read time.
     expect(resolveSlotLabel(entry.options.label)).toBe('通用设置')
     expect(before.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
-    expect(before.slots.entries('settings.general.item')).toEqual([])
+    expect(before.slots.entries('settings.general.item')[0]!.component).toBe(DebugRow)
+    expect(before.slots.entries('settings.general.item')[0]!.options).toMatchObject({
+      id: 'ui-debug', order: 90,
+    })
+    const debugInjected = (
+      before.slots.entries('settings.general.item')[0]!.inject as unknown as () => DebugRowInjected
+    )()
+    expect(debugInjected.hooks.enabled.getSnapshot()).toBe(false)
+    expect(typeof debugInjected.setEnabled).toBe('function')
+    debugInjected.setEnabled(true)
     // The onboarding hole stays declared for feature-owned steps; this plugin
     // no longer seats one.
     expect(before.slots.entries('settings.onboarding')).toEqual([])
@@ -194,7 +238,7 @@ describe('ui-settings-general apply', () => {
     for (const [name, component] of SEATS) {
       expect(b.slots.entries(name)[0]!.component).toBe(component)
     }
-    expect(b.slots.entries('settings.general.item')).toEqual([])
+    expect(b.slots.entries('settings.general.item')[0]!.component).toBe(DebugRow)
     expect(b.slots.spec('settings.general.item')).toEqual({ kind: 'list', scope: 'root' })
     // The recovered registrations still ride the locale path.
     b.locale.setLocale('en')

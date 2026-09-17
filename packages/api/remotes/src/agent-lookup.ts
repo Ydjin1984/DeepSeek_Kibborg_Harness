@@ -94,20 +94,16 @@ export function apiRemoteSubagentOwnershipError(sessionId: SessionId): ApiRemote
 export async function inspectApiRemoteSession(
   ctx: Context,
   sessionId: SessionId,
-): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> {
   const persistence = ctx.get('sessionPersistence')
   if (persistence === undefined) {
     throw new Error('session persistence is not configured (load a dsh-session-persistence backend)')
-  }
-  const meta = (await persistence.list()).find(candidate => candidate.id === sessionId)
-  if (meta === undefined || meta.cwd === undefined) {
-    throw new ApiRemoteSessionNotFound(`session "${sessionId}" not found`)
   }
   const inspected = await persistence.inspect(sessionId)
   if (inspected.meta.cwd === undefined) {
     throw new ApiRemoteSessionNotFound(`session "${sessionId}" not found`)
   }
-  return { meta: inspected.meta, events: [...inspected.events] }
+  return { meta: inspected.meta, events: inspected.events }
 }
 
 /**

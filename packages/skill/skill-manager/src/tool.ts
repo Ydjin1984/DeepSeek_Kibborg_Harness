@@ -110,7 +110,15 @@ export function registerSkillManageTool(ctx: Context, getManager: () => SkillMan
       return runAction(manager, args as Record<string, unknown>, cwd) as never
     },
     presentCall(args) {
-      return { card: 'generic', title: `skill_manage: ${args.action}`, kind: 'read' }
+      const action = args.action
+      const kind = action === 'save' || action === 'set-enabled' || action === 'rollback' || action === 'restore'
+        ? 'edit'
+        : action === 'remove' || action === 'delete'
+          ? 'delete'
+          : action === 'benchmark-start' || action === 'benchmark-cancel' || action === 'auto-improve'
+            ? 'execute'
+            : 'read'
+      return { card: 'generic', title: `skill_manage: ${action}`, kind }
     },
   })
   ctx.tools.register(tool)
@@ -190,7 +198,7 @@ async function runActionInner(manager: SkillManager, args: Record<string, unknow
         reason: 'Created by Skill Creator',
         source: 'creator',
         replace: booleanArg(args.replace) ?? false,
-        force: booleanArg(args.force) ?? false,
+        force: false,
       })
       return result(
         true,
@@ -321,6 +329,8 @@ async function runActionInner(manager: SkillManager, args: Record<string, unknow
       const run = manager.startAutoImprove(options)
       return result(true, `Auto Improve started as ${run.id}. Poll with benchmark-poll.`, { runId: run.id, status: run.status, iterations: run.iterations.length, bestVersion: run.bestVersion })
     }
+    default:
+      return result(false, `unknown skill_manage action "${action}"`)
   }
 }
 

@@ -12,3 +12,4 @@
 | [`retention/`](output-retention/README.md) | 限制保留文本和项集合的大小 |
 | [`atomic-write/`](atomic-write/README.md) | 以原子方式替换文件 |
 | [`native-command/`](native-command/README.md) | 不经 shell 运行宿主原生命令 |
+| [`debug-log/`](debug-log/README.md) | 向进程控制台写入可选的 `[dsh-debug]` 耗时记录 |

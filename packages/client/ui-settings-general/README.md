@@ -8,7 +8,7 @@ The shell ships no onboarding copy of its own — all text arrives from registra
 
 A loopback browser loads the provider's `hasDocument` capability through `settings.describe` and renders **Open configuration file** only when the Host confirms that a provider-owned local document can be prepared. The action sends the pathless, loopback-only `settings.openDocument` request; the Host resolves the provider path again, materializes an absent document, and hands it to a native text editor (`open -t` on macOS, bypassing a browser file association; the desktop file association on Linux and Windows; Windows association after `wslpath -w` translation on WSL). Open failures keep the action available and render a localized error. Reopening the dialog or reconnecting refreshes availability after a transient read failure or Host topology change. Remote browsers never register the action and never issue the privileged settings read.
 
-The Host half registers `ui-onboarding` in the user-settings seam. The welcome step contributed by `ui-settings-models` reads and writes its `welcomeNoticeVersion` through the existing public settings boundary; the shell itself remains policy-free.
+The Host half registers `ui-onboarding` and `ui-debug` in the user-settings seam. The welcome step contributed by `ui-settings-models` reads and writes its `welcomeNoticeVersion` through the existing public settings boundary. The General section's diagnostics row is the one ownerless item: it persists `ui-debug.enabled` and calls `setUiDebugEnabled` in both the Host process and the browser so `[dsh-debug]` timings appear in the Host terminal and DevTools. Feature-owned rows stay with their packages. The [Agent Note](../../../.agents/notes/implemented/feature/2026-09-17-ui-debug-timings.md) owns the tracer split.
 
 ## Model Experience
 
@@ -20,4 +20,4 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- The General section has no built-in rows; each row appears only when its owning feature plugin is mounted.
+- Feature-owned General rows still appear only when their plugin is mounted. The diagnostics on/off row is the exception: it is product-wide, not a feature.

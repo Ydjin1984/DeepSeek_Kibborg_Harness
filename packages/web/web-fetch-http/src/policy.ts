@@ -131,10 +131,12 @@ export function isPrivateNetwork(url: URL): boolean {
   const ipv6Mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(host)
   if (ipv6Mapped) return isPrivateNetwork(new URL(`http://${ipv6Mapped[1]}`))
 
-  // pure IPv6 literals
+  // WHATWG `url.hostname` for IPv6 is unbracketed (`::1`); keep the
+  // bracketed form for callers that pass a literal from elsewhere.
   if (host.startsWith('[') && host.endsWith(']')) {
     return checkIpv6(host.slice(1, -1))
   }
+  if (host.includes(':')) return checkIpv6(host)
 
   // pure IPv4 literals
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {

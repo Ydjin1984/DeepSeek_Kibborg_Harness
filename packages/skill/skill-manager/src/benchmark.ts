@@ -473,7 +473,7 @@ async function runTask(ctx: Context, input: TaskInput): Promise<TaskMetrics> {
         // manager tool would leak the on-disk catalog and let the run rewrite the
         // very skill under test (creating versions and breaking the baseline's
         // blind evaluation).
-        agentCtx.tools.restrict({ deny: ['skill_manage'] })
+        agentCtx.tools.restrict({ deny: ['skill_manage', 'skill'] })
         if (input.skill === undefined) return
         // `ctx.get` resolves the scope-bound skills service: the agent scope
         // declares no inject, and the registry's register() files into the

@@ -21,6 +21,10 @@ import { OrchestratorSection } from './OrchestratorSection.tsx'
 import type {
   OrchestratorSectionInjected, OrchestratorSettingsView,
 } from './OrchestratorSection.tsx'
+import { OpenRouterFreeSection } from './OpenRouterFreeSection.tsx'
+import type {
+  OpenRouterFreeSectionInjected, OpenRouterFreeSettingsView,
+} from './OpenRouterFreeSection.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -144,6 +148,10 @@ export function apply(ctx: ClientContext): void {
         enabled: value.enabled === true,
         executorProvider: value.executorProvider ?? '',
         executorModel: value.executorModel ?? '',
+        roiEnabled: value.roiEnabled === true,
+        roiWorkers: typeof value.roiWorkers === 'number' ? value.roiWorkers : 5,
+        roiRetries: typeof value.roiRetries === 'number' ? value.roiRetries : 2,
+        roiNames: Array.isArray(value.roiNames) ? value.roiNames : [],
       }
     },
     async save(patch) {
@@ -169,6 +177,78 @@ export function apply(ctx: ClientContext): void {
     label: () => t('orchestratorNav'),
     inject: orchestratorInjected,
   }, OrchestratorSection))
+
+  // OpenRouter free-model pool: reads/writes the `openrouter-free` settings
+  // namespace consumed by @deepseek-ai/dsh-llm-openrouter-free, and stores the
+  // key under the credential reference the published route resolves. The
+  // section renders the pool's own reported `status` rows, which the service
+  // rewrites after every scan and every settled lease.
+  // The key field writes whatever reference the section last read; a
+  // configuration that renames `apiKeyEnv` therefore stores the key it shows.
+  let openRouterFreeCredentialRef = 'OPENROUTER_API_KEY'
+  const openRouterFreeInjected = (): OpenRouterFreeSectionInjected => ({
+    async load() {
+      const response = await connection.api.settings.describe({})
+      const namespaces = response.result.ok ? response.result.value.namespaces : []
+      const entry = namespaces.find(namespace => namespace.ns === 'openrouter-free')
+      const value = (entry?.value ?? {}) as Partial<OpenRouterFreeSettingsView>
+      const credentialRef = typeof value.apiKeyEnv === 'string' && value.apiKeyEnv !== ''
+        ? value.apiKeyEnv
+        : 'OPENROUTER_API_KEY'
+      openRouterFreeCredentialRef = credentialRef
+      let keyConfigured = false
+      try {
+        const described = await connection.api.credentials.describe({ refs: [credentialRef] })
+        keyConfigured = described.result.ok
+          && described.result.value.credentials[credentialRef]?.configured === true
+      } catch {
+        // The key's presence is an enrichment: a credential read that fails
+        // leaves the field blank rather than failing the whole section.
+        keyConfigured = false
+      }
+      return {
+        credentialRef,
+        keyConfigured,
+        settings: {
+          enabled: value.enabled === true,
+          providerRoute: value.providerRoute ?? 'openrouter-free',
+          baseURL: value.baseURL ?? 'https://openrouter.ai/api/v1',
+          apiKeyEnv: credentialRef,
+          refreshMinutes: typeof value.refreshMinutes === 'number' ? value.refreshMinutes : 30,
+          refreshNonce: typeof value.refreshNonce === 'number' ? value.refreshNonce : 0,
+          maxModels: typeof value.maxModels === 'number' ? value.maxModels : 20,
+          requestsPerDayPerModel: typeof value.requestsPerDayPerModel === 'number'
+            ? value.requestsPerDayPerModel
+            : 50,
+          scannedAt: typeof value.scannedAt === 'number' ? value.scannedAt : 0,
+          status: Array.isArray(value.status) ? value.status : [],
+        },
+      }
+    },
+    async save(patch) {
+      const response = await connection.api.settings.update({ ns: 'openrouter-free', patch })
+      if (!response.result.ok) {
+        throw new Error(`${response.result.error.code}: ${response.result.error.message}`)
+      }
+    },
+    async saveKey(value) {
+      const response = await connection.api.credentials.set({
+        ref: openRouterFreeCredentialRef,
+        value,
+      })
+      if (!response.result.ok) {
+        throw new Error(`${response.result.error.code}: ${response.result.error.message}`)
+      }
+    },
+  })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'openrouter-free',
+    order: 16,
+    locale: NS,
+    label: () => t('openRouterNav'),
+    inject: openRouterFreeInjected,
+  }, OpenRouterFreeSection))
 
   ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
     name: 'settings.onboarding',

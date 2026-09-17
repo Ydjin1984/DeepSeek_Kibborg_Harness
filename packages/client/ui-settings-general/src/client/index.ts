@@ -7,8 +7,9 @@
  * Feature-owned rows and sections stay with their features.
  * Export discipline: packages/client/AGENTS.md.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-api-remotes/client'
+import { setUiDebugEnabled } from '@deepseek-ai/dsh-debug-log'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the settings slot declarations plus the ctx.settingsScope Context
 // merge. Cross-plugin collaboration goes through the service, never a value
@@ -22,6 +23,12 @@ import type {
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
+import { DebugRow } from './DebugRow.tsx'
+import type { DebugRowInjected } from './DebugRow.tsx'
+import {
+  UI_DEBUG_ENABLED_FIELD, UI_DEBUG_SETTINGS_NAMESPACE, decodeUiDebugSettings,
+  type UiDebugSettings,
+} from '../debug-settings.ts'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
 import { SettingsDocumentStore } from './settings-document-store.ts'
@@ -33,10 +40,16 @@ export type {
 export type {
   GeneralSectionComponentProps,
 } from './GeneralSection.tsx'
+export { DebugRow } from './DebugRow.tsx'
 export type { SettingsDocumentActionInjected, SettingsDocumentActionProps } from './SettingsDocumentAction.tsx'
 export type { SettingsDocumentState } from './settings-document-store.ts'
 export { SettingsDocumentStore } from './settings-document-store.ts'
 export type { SettingsKey } from './locales.ts'
+export type { DebugRowInjected, DebugRowProps } from './DebugRow.tsx'
+export {
+  UI_DEBUG_ENABLED_FIELD, UI_DEBUG_SETTINGS_NAMESPACE, UiDebugSettingsSchema,
+  decodeUiDebugSettings, type UiDebugSettings,
+} from '../debug-settings.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -174,4 +187,29 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     children: { 'settings.general.item': { kind: 'list', scope: 'root' } },
   }, GeneralSection))
+
+  const debugHost = ctx.settingsScope.bind<UiDebugSettings>({
+    namespace: UI_DEBUG_SETTINGS_NAMESPACE,
+    decode: decodeUiDebugSettings,
+  })
+  const debugEnabled = createSnapshotStore(false)
+  ctx.effect(() => {
+    const adopt = (): void => {
+      const enabled = debugHost.getSnapshot().value?.enabled === true
+      setUiDebugEnabled(enabled)
+      if (debugEnabled.getSnapshot() !== enabled) debugEnabled.set(enabled)
+    }
+    adopt()
+    return debugHost.subscribe(adopt)
+  }, 'ui-settings-general: ui-debug client enablement')
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'ui-debug',
+    order: 90,
+    locale: NS,
+    inject: (): DebugRowInjected => ({
+      hooks: { enabled: debugEnabled },
+      setEnabled: (enabled) => { void debugHost.set(UI_DEBUG_ENABLED_FIELD, enabled) },
+    }),
+  }, DebugRow))
 }

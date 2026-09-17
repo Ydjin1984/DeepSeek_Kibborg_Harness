@@ -54,11 +54,12 @@ function styleInjectionModule(
 
 /**
  * Wire/type layers a client bundle may inline: browser-safe contracts
- * with no runtime identity to share (no Symbol/instanceof/singleton state).
- * Everything else under @deepseek-ai/* is either a module-table entry
- * (external) or a leak the purity gate rejects.
+ * with no runtime identity to share (no Symbol/instanceof/singleton state),
+ * plus `dsh-debug-log` whose enablement lives on `globalThis` so inlined
+ * copies still share one tracer. Everything else under @deepseek-ai/* is
+ * either a module-table entry (external) or a leak the purity gate rejects.
  */
-export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand)(\/|$)/
+export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand|debug-log)(\/|$)/
 
 /**
  * Vendored framework libraries: rescoped into @deepseek-ai, so the gate below

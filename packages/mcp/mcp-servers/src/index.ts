@@ -50,6 +50,20 @@ export const DEFAULT_USER_REGISTRY_FILE = 'mcpServers.json'
 /** Default project-registry file name next to the host working directory. */
 export const DEFAULT_PROJECT_REGISTRY_FILE = '.mcp.json'
 
+/** Drop query and credentials from a status URL so interpolated secrets never leave the host. */
+function redactUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    url.search = ''
+    url.hash = ''
+    url.username = ''
+    url.password = ''
+    return url.toString()
+  } catch {
+    return value
+  }
+}
+
 /** Config for the mcp-servers connector. */
 export interface Config {
   /**
@@ -395,7 +409,7 @@ export class McpServers extends Service {
       }
       if (server.kind !== undefined) status.kind = server.kind
       if (server.command !== undefined) status.command = server.command
-      if (server.url !== undefined) status.url = server.url
+      if (server.url !== undefined) status.url = redactUrl(server.url)
       if (error !== undefined) status.error = error
       statuses.push(status)
     }

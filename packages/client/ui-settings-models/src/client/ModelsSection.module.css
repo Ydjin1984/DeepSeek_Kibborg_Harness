@@ -795,6 +795,8 @@ select.input {
 }
 
 .orchestratorRow input[type='text'],
+.orchestratorRow input[type='number'],
+.orchestratorRow input[type='password'],
 .orchestratorRow input:not([type]) {
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
@@ -803,4 +805,18 @@ select.input {
   font-size: 13px;
   padding: 5px 8px;
   min-width: 220px;
+}
+
+.orchestratorRow input[type='number'] {
+  min-width: 90px;
+}
+
+/* Pooled free models: the last scan's survivors and what each has left today. */
+.orchestratorList {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  max-height: 220px;
+  overflow-y: auto;
 }

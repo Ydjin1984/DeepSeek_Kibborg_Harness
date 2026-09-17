@@ -37,6 +37,10 @@ function mount(options: {
       enabled: false,
       executorProvider: '',
       executorModel: '',
+      roiEnabled: false,
+      roiWorkers: 5,
+      roiRetries: 2,
+      roiNames: ['Бася', 'Петя', 'Федя'],
       ...options.view,
     }))
     : vi.fn(() => Promise.reject(new Error(options.loadRejects)))
@@ -76,7 +80,7 @@ describe('OrchestratorSection', () => {
       },
     })
     await screen.findByRole('button', { name: t('orchestratorSave') })
-    const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+    const checkbox = screen.getByRole<HTMLInputElement>('checkbox', { name: t('orchestratorEnable') })
     expect(checkbox.checked).toBe(true)
     expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorProvider')).value).toBe('kibborg')
     expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorModel')).value).toBe('Kibborg_Flash_v5.7')
@@ -87,7 +91,7 @@ describe('OrchestratorSection', () => {
       view: { executorProvider: 'kibborg', executorModel: 'Kibborg_Flash_v5.7' },
     })
     await screen.findByRole('button', { name: t('orchestratorSave') })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: t('orchestratorEnable') }))
     fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
     await screen.findByRole('status')
     expect(save).toHaveBeenCalledTimes(1)
@@ -104,14 +108,14 @@ describe('OrchestratorSection', () => {
     await screen.findByRole('button', { name: t('orchestratorSave') })
     fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
     expect((await screen.findByRole('alert')).textContent).toBe('revision conflict')
-    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: t('orchestratorEnable') }).checked).toBe(true)
     expect(save).toHaveBeenCalledTimes(1)
   })
 
   it('refuses to enable the mode without a local route', async () => {
     const { save } = mount()
     await screen.findByRole('button', { name: t('orchestratorSave') })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: t('orchestratorEnable') }))
     fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
     expect((await screen.findByRole('alert')).textContent).toBe(t('orchestratorRouteRequired'))
     expect(save).not.toHaveBeenCalled()
@@ -146,10 +150,50 @@ describe('OrchestratorSection', () => {
     mount({ view: { executorProvider: 'deepseek-official' }, catalog: [] })
     await screen.findByRole('button', { name: t('orchestratorSave') })
     const fieldsets = screen.getAllByRole('group')
-    expect(fieldsets).toHaveLength(1)
+    expect(fieldsets).toHaveLength(2)
     expect((fieldsets[0] as HTMLFieldSetElement).disabled).toBe(true)
     // The saved route survives even without catalog suggestions.
     expect(screen.getByLabelText<HTMLInputElement>(t('orchestratorProvider')).value)
       .toBe('deepseek-official')
+  })
+
+  it('edits the ROI swarm roster and persists it with the mode', async () => {
+    const { save } = mount({
+      view: {
+        enabled: true,
+        executorProvider: 'kibborg',
+        executorModel: 'Kibborg_Flash_v5.7',
+        roiNames: ['Бася', 'Петя'],
+      },
+    })
+    await screen.findByRole('button', { name: t('orchestratorSave') })
+    const checkboxes = screen.getAllByRole('checkbox')
+    expect(checkboxes).toHaveLength(2)
+    fireEvent.click(checkboxes[1]!)
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(t('orchestratorRoiWorkers')), {
+      target: { value: '12' },
+    })
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(t('orchestratorRoiRetries')), {
+      target: { value: '4' },
+    })
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(t('orchestratorRoiNames')), {
+      target: { value: 'Бася, Петя, Федя' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
+    await screen.findByRole('status')
+    const patch = save.mock.calls[0]![0] as OrchestratorSettingsView
+    expect(patch.roiEnabled).toBe(true)
+    expect(patch.roiWorkers).toBe(12)
+    expect(patch.roiRetries).toBe(4)
+    expect(patch.roiNames).toEqual(['Бася', 'Петя', 'Федя'])
+  })
+
+  it('refuses ROI mode while orchestrator mode is off', async () => {
+    const { save } = mount({ view: { roiEnabled: false } })
+    await screen.findByRole('button', { name: t('orchestratorSave') })
+    fireEvent.click(screen.getAllByRole('checkbox')[1]!)
+    fireEvent.click(screen.getByRole('button', { name: t('orchestratorSave') }))
+    expect((await screen.findByRole('alert')).textContent).toBe(t('orchestratorRoiNeedsMode'))
+    expect(save).not.toHaveBeenCalled()
   })
 })

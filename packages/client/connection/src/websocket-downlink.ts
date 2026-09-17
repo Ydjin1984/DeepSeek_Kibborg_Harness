@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from 'ws'
 import type {
   ApiProxy, HostFrame, MuxFrame, RpcRequest, ServerRequest,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { uiDebug, uiDebugTick } from '@deepseek-ai/dsh-debug-log'
 import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 type Frame = MuxFrame | HostFrame
@@ -20,6 +21,13 @@ function serverRequest(frame: RpcRequest<Frame>): ServerRequest {
   }
 }
 
+/** Pause the pump once the kernel buffer holds this many unsent bytes. */
+const HIGH_WATER_BYTES = 256 * 1024
+/** Resume once the kernel has drained below this watermark. */
+const LOW_WATER_BYTES = 64 * 1024
+/** Keepalive so a long-lived tab's NAT mapping does not silently drop the mux. */
+const PING_INTERVAL_MS = 25_000
+
 function send(socket: WebSocket, frame: RpcRequest<Frame>): Promise<void> {
   return new Promise((resolve, reject) => {
     if (socket.readyState !== WebSocket.OPEN) {
@@ -30,6 +38,18 @@ function send(socket: WebSocket, frame: RpcRequest<Frame>): Promise<void> {
       if (error) reject(error)
       else resolve()
     })
+  })
+}
+
+function waitForDrain(socket: WebSocket): Promise<void> {
+  if (socket.bufferedAmount <= LOW_WATER_BYTES) return Promise.resolve()
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN || socket.bufferedAmount <= LOW_WATER_BYTES) {
+        clearInterval(timer)
+        resolve()
+      }
+    }, 16)
   })
 }
 
@@ -102,9 +122,16 @@ export class WebSocketDownlinks {
     head: Buffer,
     open: (signal: AbortSignal) => AsyncIterable<RpcRequest<F>>,
   ): void {
+    uiDebug('mux', 'upgrade')
     this.server.handleUpgrade(req, socket, head, (websocket) => {
       const abort = new AbortController()
-      websocket.once('close', () => { abort.abort() })
+      const ping = setInterval(() => {
+        if (websocket.readyState === WebSocket.OPEN) websocket.ping()
+      }, PING_INTERVAL_MS)
+      websocket.once('close', () => {
+        clearInterval(ping)
+        abort.abort()
+      })
       websocket.once('error', () => { abort.abort() })
       websocket.once('message', () => {
         websocket.close(1008, 'downlink only')
@@ -121,7 +148,14 @@ export class WebSocketDownlinks {
     abort: AbortController,
   ): Promise<void> {
     try {
-      for await (const frame of frames) await send(socket, frame)
+      for await (const frame of frames) {
+        uiDebugTick('mux', 'downlink', { type: frame.payload.type })
+        await send(socket, frame)
+        if (socket.bufferedAmount > HIGH_WATER_BYTES) {
+          uiDebug('mux', 'backpressure', { buffered: socket.bufferedAmount })
+          await waitForDrain(socket)
+        }
+      }
     } catch (error) {
       if (!abort.signal.aborted) {
         try {

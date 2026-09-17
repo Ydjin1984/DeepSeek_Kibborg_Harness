@@ -353,7 +353,9 @@ describe('runBenchmark', () => {
     // Both arms (baseline and with-skill) get the restriction, so the task model
     // can neither read the on-disk catalog through the manager nor rewrite the
     // skill under test while it is being scored.
-    expect(harness.restrictions.filter(restriction => restriction.deny?.includes('skill_manage'))).toHaveLength(2)
+    expect(harness.restrictions.filter(restriction =>
+      restriction.deny?.includes('skill_manage') && restriction.deny.includes('skill'),
+    )).toHaveLength(2)
   })
 
   it('fails loudly when the with-skill agent scope lacks the skills service', async () => {

@@ -25,6 +25,7 @@ import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionRemotes } from './remotes.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import type { ProjectionsBaseline } from './projection-store.ts'
+import { uiDebug, uiDebugSpan, uiDebugSpanSync, uiDebugTick } from '@deepseek-ai/dsh-debug-log'
 import { resolvedClientTimeZone } from '../time-zone.ts'
 import { SessionQueueMirror } from './queue-mirror.ts'
 
@@ -369,6 +370,7 @@ export class Session implements SessionFace {
   open(): Promise<void> {
     if (this.openState === 'open') return Promise.resolve()
     if (this.openPromise !== null) return this.openPromise
+    uiDebug('session', 'open', { sessionId: this.sessionId, generation: this.openGeneration })
     const promise = this.doOpen(this.openGeneration).finally(() => {
       // Identity-guarded: a superseded open must not null out the promise resync just started.
       if (this.openPromise === promise) this.openPromise = null
@@ -383,7 +385,13 @@ export class Session implements SessionFace {
     this.loadingOlder = true
     this.notifier.markDirty()
     try {
-      const { result } = await this.history({ beforeSeq: this.baseSeq, maxMessages: PAGE_MESSAGES })
+      const { result } = await uiDebugSpan(
+        'session',
+        'loadOlder',
+        { sessionId: this.sessionId, beforeSeq: this.baseSeq },
+        () => this.history({ beforeSeq: this.baseSeq, maxMessages: PAGE_MESSAGES }),
+        response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
+      )
       if (!result.ok) return // keep the window as-is; do not overwrite openError (open already succeeded)
       const older = result.value.events
       if (older.length === 0) {
@@ -414,30 +422,29 @@ export class Session implements SessionFace {
   }
 
   /** Reconnect rebuild (manager calls this on onConnected for instances that were opened):
-   *  reset the window and rerun open; pending waits for the baseline replay. Invalidates any
-   *  in-flight open first — its history request rode the dead connection and must not settle
-   *  the fresh generation into 'error'. */
+   *  rerun open against the new mux generation. Invalidates any in-flight open first —
+   *  its history request rode the dead connection and must not settle the fresh
+   *  generation into 'error'. The current window stays on screen until history
+   *  lands: wiping it here blanks the transcript for the whole cold inspect. */
   async resync(): Promise<void> {
     // The queue mirror is NOT cleared here: onConnected (which drives resync)
     // races the mux frames — the fresh generation's baseline may have landed
     // already, and the host never resends it. The mirror re-baselines on the
     // session/subscribed frame instead (same stream as the queue snapshot
-    // that follows it, so ordering is guaranteed).
+    // that follows it, so ordering is guaranteed). subscribedLastSeq and
+    // liveBuffer keep the same posture: the host never resends the baseline,
+    // and live frames that arrived after it must stitch onto the new window.
     if (this.openState === 'cold') return // never opened: no window to rebuild (doOpen flips to 'loading' synchronously, so cold implies no in-flight open)
     this.openGeneration++
     this.openPromise = null
     this.openState = 'cold'
     this.openError = null
-    this.events = []
-    this.views = []
-    this.baseSeq = 0
     // Superseded, not settled: the baseline replay re-sends still-pending requested frames verbatim
     // (same rpcId), re-minting fresh waits; a stale reference's respond() still reaches the host.
     this.pending.clear()
     this.pendingRev++
-    this.subscribedLastSeq = null
-    this.liveBuffer = []
     this.notifier.markDirty()
+    uiDebug('session', 'resync', { sessionId: this.sessionId, generation: this.openGeneration })
     await this.open()
   }
 
@@ -471,6 +478,7 @@ export class Session implements SessionFace {
   handleMuxEnvelope(rpcId: RpcId, frame: MuxFrame): void {
     switch (frame.type) {
       case 'session/event': {
+        uiDebugTick('session', 'liveEvent', { type: frame.event.type })
         this.acceptLiveEvent(frame.event, frame.view)
         return
       }
@@ -620,7 +628,17 @@ export class Session implements SessionFace {
     this.openError = null
     this.notifier.markDirty()
     try {
-      let { result } = await this.history({ maxMessages: PAGE_MESSAGES })
+      let { result } = await uiDebugSpan(
+        'session',
+        'historyTail',
+        { sessionId: this.sessionId, generation },
+        () => this.history({ maxMessages: PAGE_MESSAGES }),
+        response => ({
+          ok: response.result.ok,
+          events: response.result.ok ? response.result.value.events.length : 0,
+          hasMore: response.result.ok ? response.result.value.hasMore : false,
+        }),
+      )
       if (generation !== this.openGeneration) return
       if (!result.ok) {
         this.openState = 'error'
@@ -631,7 +649,13 @@ export class Session implements SessionFace {
       // Gap detection: baseline past the window tail and liveBuffer did not cover it -> pull the tail page once more.
       const tailSeq = this.windowTailSeq()
       if (this.subscribedLastSeq !== null && tailSeq !== null && this.subscribedLastSeq > tailSeq) {
-        result = (await this.history({ maxMessages: PAGE_MESSAGES })).result
+        result = (await uiDebugSpan(
+          'session',
+          'historyGapFill',
+          { sessionId: this.sessionId, subscribedLastSeq: this.subscribedLastSeq, tailSeq },
+          () => this.history({ maxMessages: PAGE_MESSAGES }),
+          response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
+        )).result
         if (generation !== this.openGeneration) return
         if (result.ok) this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }
@@ -655,6 +679,15 @@ export class Session implements SessionFace {
    *  baseline cannot overwrite a newer push frame); the window events themselves are
    *  never folded — the host is the only computation site. */
   private installWindow(entries: HistoryEntry[], hasMore: boolean, projections?: ProjectionsBaseline): void {
+    uiDebugSpanSync(
+      'session',
+      'installWindow',
+      { sessionId: this.sessionId, events: entries.length, hasMore, liveBuffer: this.liveBuffer.length },
+      () => { this.installWindowWork(entries, hasMore, projections) },
+    )
+  }
+
+  private installWindowWork(entries: HistoryEntry[], hasMore: boolean, projections?: ProjectionsBaseline): void {
     this.events = entries.map(e => e.event)
     this.views = entries.map(e => e.view)
     this.baseSeq = this.events[0]?.seq ?? 0
@@ -677,7 +710,42 @@ export class Session implements SessionFace {
     if (event.type === 'turn/start') this.firstPromptPendingTurn = false
     const queueChanged = this.queueMirror.acceptDurable(event)
     const publication = this.conversation.append({ event, view })
+    this.trimLiveWindow()
     return queueChanged ? 'immediate' : publication
+  }
+
+  /**
+   * Drop the oldest message groups once the live window grows past one history
+   * page. Open loads {@link PAGE_MESSAGES}; without a cap, a long tab holds
+   * every subsequent event in the assembler and the React tree until refresh.
+   */
+  private trimLiveWindow(): void {
+    let count = 0
+    let cut = this.baseSeq
+    for (let i = this.events.length - 1; i >= 0; i--) {
+      const event = this.events[i]
+      if (event === undefined || (event.type !== 'user/message' && event.type !== 'assistant/message')) continue
+      count++
+      if (count < PAGE_MESSAGES) continue
+      cut = event.seq
+      const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
+      if (sources !== undefined) {
+        for (const source of sources) {
+          if (source < cut) cut = source
+        }
+      }
+      break
+    }
+    if (count < PAGE_MESSAGES || cut <= this.baseSeq) return
+    let start = 0
+    while (start < this.events.length && (this.events[start]?.seq ?? 0) < cut) start++
+    if (start === 0) return
+    this.events = this.events.slice(start)
+    this.views = this.views.slice(start)
+    this.baseSeq = this.events[0]?.seq ?? cut
+    this.hasMore = true
+    const remaining = this.events.map((event, index) => ({ event, view: this.views[index] }))
+    this.conversation.replaceWindow(remaining, true)
   }
 
   /** Land a live session/event (open/repair in flight -> buffer; overlapping seq -> drop;
@@ -715,8 +783,13 @@ export class Session implements SessionFace {
     this.stitching = true
     const generation = this.openGeneration
     try {
-      const { result } = await this.history({ maxMessages: PAGE_MESSAGES })
-      // Failure or superseded by a full resync: drop — the resync path rebuilds and clears the buffer itself.
+      const { result } = await uiDebugSpan(
+        'session',
+        'repairGap',
+        { sessionId: this.sessionId },
+        () => this.history({ maxMessages: PAGE_MESSAGES }),
+        response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
+      )
       if (result.ok && generation === this.openGeneration && this.openState === 'open') {
         this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }
@@ -724,7 +797,26 @@ export class Session implements SessionFace {
       console.error('[web-runtime] gap repair failed:', error)
     } finally {
       this.stitching = false
+      if (generation === this.openGeneration && this.openState === 'open') {
+        this.drainContiguousBuffer()
+      }
     }
+  }
+
+  /** Append liveBuffer items that continue the window; leave a remaining gap for the next repair. */
+  private drainContiguousBuffer(): void {
+    if (this.liveBuffer.length === 0) return
+    const kept: { event: SessionEvent; view: ToolEventView | undefined }[] = []
+    for (const item of this.liveBuffer) {
+      const tailSeq = this.windowTailSeq()
+      if (tailSeq !== null && item.event.seq > tailSeq + 1) {
+        kept.push(item)
+        continue
+      }
+      this.appendLive(item.event, item.view)
+    }
+    this.liveBuffer = kept
+    this.notifier.markDirty()
   }
 
   private windowTailSeq(): number | null {

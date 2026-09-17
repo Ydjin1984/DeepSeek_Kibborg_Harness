@@ -48,6 +48,9 @@
       "path": "../../runtime-diagnostics/invariants"
     },
     {
+      "path": "../../util/debug-log"
+    },
+    {
       "path": "../../typert/protocol"
     },
     {

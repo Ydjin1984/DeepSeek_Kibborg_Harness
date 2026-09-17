@@ -30,6 +30,9 @@
       "path": "../../util/brand"
     },
     {
+      "path": "../../util/debug-log"
+    },
+    {
       "path": "../../attachment/attachment"
     },
     {

@@ -5,6 +5,7 @@
  * abstract doFetch (transport) + overridable onEnvelope (tap). ApiProxy (the impl face) is untouched.
  */
 
+import { uiDebugSpan } from '@deepseek-ai/dsh-debug-log'
 import type { z } from 'zod'
 import type { ApiProxy, HostFrame, MuxFrame } from '../api/index.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
@@ -437,17 +438,30 @@ export abstract class AbstractApiClient implements IApiClient {
     signal?: AbortSignal,
     timeoutPolicy: UnaryTimeoutPolicy = 'default',
   ): Promise<RpcResponse<ResponseValue<K>>> {
-    const message: ClientRequest = { type: 'client-request', rpcId: this.mintRpcId(), method, payload }
-    this.onEnvelope(message)
-    const response = await this.postJson(`/api/${method}`, message, signal, timeoutPolicy)
-    const full = serverResponseSchema.parse(await response.json())
-    this.onEnvelope(full)
-    if (full.rpcId !== message.rpcId) throw new Error(`rpcId mismatch for ${method}: sent ${message.rpcId}, got ${full.rpcId}`)
-    if (!full.result.ok) return { rpcId: full.rpcId, result: full.result }
-    // Second-level S→C parse: the ok value must match the method's Value schema (mirror of the
-    // handler's request-payload parse). The cast collapses the Wire<> widening, same as the handler side.
-    const value = UNARY_VALUE_SCHEMAS[method].parse(full.result.value) as ResponseValue<K>
-    return { rpcId: full.rpcId, result: { ok: true, value } }
+    const body = payload as Record<string, unknown>
+    return uiDebugSpan(
+      'rpc',
+      method,
+      {
+        ...typeof body.sessionId === 'string' ? { sessionId: body.sessionId } : {},
+        ...typeof body.beforeSeq === 'number' ? { beforeSeq: body.beforeSeq } : {},
+        ...typeof body.maxMessages === 'number' ? { maxMessages: body.maxMessages } : {},
+      },
+      async () => {
+        const message: ClientRequest = { type: 'client-request', rpcId: this.mintRpcId(), method, payload }
+        this.onEnvelope(message)
+        const response = await this.postJson(`/api/${method}`, message, signal, timeoutPolicy)
+        const full = serverResponseSchema.parse(await response.json())
+        this.onEnvelope(full)
+        if (full.rpcId !== message.rpcId) throw new Error(`rpcId mismatch for ${method}: sent ${message.rpcId}, got ${full.rpcId}`)
+        if (!full.result.ok) return { rpcId: full.rpcId, result: full.result }
+        // Second-level S→C parse: the ok value must match the method's Value schema (mirror of the
+        // handler's request-payload parse). The cast collapses the Wire<> widening, same as the handler side.
+        const value = UNARY_VALUE_SCHEMAS[method].parse(full.result.value) as ResponseValue<K>
+        return { rpcId: full.rpcId, result: { ok: true, value } }
+      },
+      result => ({ ok: result.result.ok }),
+    )
   }
 
   /** Mux stream opener; virtual for the same override reason as callUnary. */

@@ -18,6 +18,7 @@ import type { PendingInteractionStatus } from './pending.ts'
 // the 'title' projection key this manager projects into list rows (and any
 // useProjection('title') consumer reads). Zero value imports by construction.
 import type {} from '@deepseek-ai/dsh-session-title/client'
+import { uiDebug, uiDebugSpan } from '@deepseek-ai/dsh-debug-log'
 import { Notifier } from '../contract/notifier.ts'
 import { ProjectionValueStore } from './projection-store.ts'
 import { Session } from './session.ts'
@@ -508,7 +509,17 @@ export class SessionManager {
     this.notifier.markDirty()
     this.listInflight = (async () => {
       try {
-        const { result } = await this.api.sessions.list({})
+        uiDebug('session', 'listRefresh')
+        const { result } = await uiDebugSpan(
+          'session',
+          'list',
+          undefined,
+          () => this.api.sessions.list({}),
+          response => ({
+            ok: response.result.ok,
+            items: response.result.ok ? response.result.value.items.length : 0,
+          }),
+        )
         if (result.ok) {
           const baseline = this.listPhase === 'pending'
             ? result.value.items

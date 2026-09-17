@@ -1,5 +1,6 @@
 /**
- * Bundled `orchestrator-head` and `orchestrator-executor` runtime skills.
+ * Bundled `orchestrator-head`, `orchestrator-executor`, and `orchestrator-roi`
+ * runtime skills.
  *
  * Orchestrator mode is a product feature: its operating protocol must be
  * available in every project that enables the mode, not only in checkouts that
@@ -20,9 +21,12 @@ import type { SkillRegistration } from '@deepseek-ai/dsh-skill'
 export const ORCHESTRATOR_HEAD_SKILL = 'orchestrator-head'
 /** Stable name of the executor-side orchestrator skill body. */
 export const ORCHESTRATOR_EXECUTOR_SKILL = 'orchestrator-executor'
+/** Stable name of the ROI-swarm skill body, loaded when the swarm is available. */
+export const ORCHESTRATOR_ROI_SKILL = 'orchestrator-roi'
 
 const HEAD_BODY_URL = new URL('../assets/orchestrator-head/SKILL.md', import.meta.url)
 const EXECUTOR_BODY_URL = new URL('../assets/orchestrator-executor/SKILL.md', import.meta.url)
+const ROI_BODY_URL = new URL('../assets/orchestrator-roi/SKILL.md', import.meta.url)
 
 /**
  * Load and parse one bundled orchestrator skill body. The parse doubles as a
@@ -54,14 +58,16 @@ async function loadSkill(bodyUrl: URL, expectedName: string): Promise<SkillRegis
 }
 
 /**
- * Load both bundled orchestrator companion skills. The head skill must stay
+ * Load the bundled orchestrator companion skills. The head skill must stay
  * model-invocable so the head can load it through the `skill` tool after the
- * prompt section tells it to; the executor skill is its protocol companion.
- * @returns the two runtime skill registrations, head first.
+ * prompt section tells it to; the executor and ROI skills are its protocol
+ * companions.
+ * @returns the three runtime skill registrations, head first.
  */
 export async function loadOrchestratorSkills(): Promise<SkillRegistration[]> {
   return [
     await loadSkill(HEAD_BODY_URL, ORCHESTRATOR_HEAD_SKILL),
     await loadSkill(EXECUTOR_BODY_URL, ORCHESTRATOR_EXECUTOR_SKILL),
+    await loadSkill(ROI_BODY_URL, ORCHESTRATOR_ROI_SKILL),
   ]
 }

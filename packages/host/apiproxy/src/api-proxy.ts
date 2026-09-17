@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { uiDebug, uiDebugSpan, uiDebugSpanSync } from '@deepseek-ai/dsh-debug-log'
 import { access, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -431,11 +432,28 @@ function paginate(
   beforeSeq: number | undefined,
   maxMessages: number,
 ): { events: SessionEvent[]; hasMore: boolean } {
-  const window = beforeSeq === undefined ? [...events] : events.filter(event => event.seq < beforeSeq)
+  return uiDebugSpanSync(
+    'history',
+    'paginate',
+    { total: events.length, beforeSeq, maxMessages },
+    () => paginateWindow(events, beforeSeq, maxMessages),
+    page => ({ page: page.events.length, hasMore: page.hasMore }),
+  )
+}
+
+function paginateWindow(
+  events: readonly SessionEvent[],
+  beforeSeq: number | undefined,
+  maxMessages: number,
+): { events: SessionEvent[]; hasMore: boolean } {
+  let end = events.length
+  if (beforeSeq !== undefined) {
+    while (end > 0 && (events[end - 1]?.seq ?? 0) >= beforeSeq) end -= 1
+  }
   let count = 0
   let cut = 0
-  for (let i = window.length - 1; i >= 0; i--) {
-    const event = window[i] as SessionEvent
+  for (let i = end - 1; i >= 0; i--) {
+    const event = events[i] as SessionEvent
     if (!MESSAGE_TYPES.has(event.type) || !isAppendSurfaceEvent(event)) continue
     count++
     const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
@@ -450,8 +468,9 @@ function paginate(
       break
     }
   }
-  const page = window.filter(event => event.seq >= cut)
-  return { events: page, hasMore: cut > 0 }
+  let start = 0
+  while (start < end && (events[start]?.seq ?? 0) < cut) start += 1
+  return { events: events.slice(start, end), hasMore: cut > 0 }
 }
 
 /** Wrap an ok result echoing the request's rpcId. */
@@ -1027,14 +1046,22 @@ function historyPage(
   maxMessages: number | undefined,
   scope?: ScopeKey,
 ): { events: HistoryEntry[]; hasMore: boolean } {
-  const page = paginate(events, beforeSeq, maxMessages ?? DEFAULT_MAX_MESSAGES)
-  return {
-    events: page.events.map((event) => {
-      const view = viewFor(ctx, event, callId => backscanArgs(page.events, callId), scope)
-      return { event, ...view === undefined ? {} : { view } }
-    }),
-    hasMore: page.hasMore,
-  }
+  return uiDebugSpanSync(
+    'history',
+    'presentPage',
+    { total: events.length, beforeSeq, maxMessages },
+    () => {
+      const page = paginate(events, beforeSeq, maxMessages ?? DEFAULT_MAX_MESSAGES)
+      return {
+        events: page.events.map((event) => {
+          const view = viewFor(ctx, event, callId => backscanArgs(page.events, callId), scope)
+          return { event, ...view === undefined ? {} : { view } }
+        }),
+        hasMore: page.hasMore,
+      }
+    },
+    page => ({ page: page.events.length, hasMore: page.hasMore }),
+  )
 }
 
 /**
@@ -1054,7 +1081,7 @@ function historyPage(
  */
 type HistorySource =
   | { readonly kind: 'attached'; readonly session: Session }
-  | { readonly kind: 'detached'; readonly header: SessionHeader; readonly events: SessionEvent[] }
+  | { readonly kind: 'detached'; readonly header: SessionHeader; readonly events: readonly SessionEvent[] }
 
 function projectionsFor(ctx: Context, session: Session): SessionProjectionsBlock | undefined {
   const registry = ctx.get('sessionProjections')
@@ -1480,8 +1507,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   ): boolean => hasApiRemoteSubagentOwner(ctx, session, agent)
   const subagentOwnershipError = (sessionId: SessionId): RpcError =>
     apiRemoteSubagentOwnershipError(sessionId)
-  const inspectServable = (sessionId: SessionId): Promise<{ meta: SessionHeader; events: SessionEvent[] }> =>
-    inspectApiRemoteSession(ctx, sessionId)
+  const inspectServable = (sessionId: SessionId): Promise<{ meta: SessionHeader; events: readonly SessionEvent[] }> =>
+    uiDebugSpan(
+      'history',
+      'inspect',
+      { sessionId },
+      () => inspectApiRemoteSession(ctx, sessionId),
+      inspected => ({ events: inspected.events.length }),
+    )
   // Cold resume composes the preset the session recorded, for the same reason
   // `session.create` does: its history was produced under that composition.
   // Every generic entry point — prompt, models, commands — arrives here, so
@@ -1722,7 +1755,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   type SessionReadState = {
     id: SessionId
     header: SessionHeader
-    events: SessionEvent[]
+    events: readonly SessionEvent[]
   }
 
   /** Read one stable session prefix without acquiring an Agent owner. */
@@ -1763,8 +1796,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    */
   async function historySourceFor(sessionId: SessionId): Promise<HistorySource> {
     const attached = ctx.sessions.get(sessionId)
-    if (attached !== undefined) return { kind: 'attached', session: attached }
+    if (attached !== undefined) {
+      uiDebug('history', 'source', { sessionId, kind: 'attached', events: attached.events.length })
+      return { kind: 'attached', session: attached }
+    }
     const inspected = await inspectServable(sessionId)
+    uiDebug('history', 'source', { sessionId, kind: 'detached', events: inspected.events.length })
     return { kind: 'detached', header: inspected.meta, events: inspected.events }
   }
 
@@ -1794,12 +1831,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   function historyCutOf(
     source: HistorySource,
     includeProjections: boolean,
-  ): { events: SessionEvent[]; projections?: SessionProjectionsBlock } {
+  ): { events: readonly SessionEvent[]; projections?: SessionProjectionsBlock } {
     if (source.kind === 'detached') {
       const projections = includeProjections ? detachedProjectionsFor(ctx, source.events) : undefined
       return { events: source.events, ...projections === undefined ? {} : { projections } }
     }
-    const events = [...source.session.events]
+    const events = source.session.events
     const projections = includeProjections ? projectionsFor(ctx, source.session) : undefined
     return { events, ...projections === undefined ? {} : { projections } }
   }
@@ -1828,21 +1865,23 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     sessionId: SessionId,
     session: PresetBearingSession,
   ): Promise<ScopeKey | undefined> {
-    const live = ctx.get('agents')?.get(sessionId)
-    if (live !== undefined) return live
-    const presets = ctx.get('agentPresets')
-    if (presets === undefined) return undefined
-    try {
-      // An unrecorded preset (a log from before the roster existed) renders
-      // through the DEFAULT preset's standing layer: that is the composition
-      // an unnamed session composes today, and presenters are pure display,
-      // so the worst a mismatch produces is the generic card it had anyway.
-      return await presets.standingKeyFor(resolveSessionPreset(session))
-    } catch {
-      // Swallows only the unknown/unusable-preset rejection from the roster:
-      // a deleted or broken preset must degrade this read, never fail it.
-      return undefined
-    }
+    return uiDebugSpan('history', 'presenterScope', { sessionId, events: session.events.length }, async () => {
+      const live = ctx.get('agents')?.get(sessionId)
+      if (live !== undefined) return live
+      const presets = ctx.get('agentPresets')
+      if (presets === undefined) return undefined
+      try {
+        // An unrecorded preset (a log from before the roster existed) renders
+        // through the DEFAULT preset's standing layer: that is the composition
+        // an unnamed session composes today, and presenters are pure display,
+        // so the worst a mismatch produces is the generic card it had anyway.
+        return await presets.standingKeyFor(resolveSessionPreset(session))
+      } catch {
+        // Swallows only the unknown/unusable-preset rejection from the roster:
+        // a deleted or broken preset must degrade this read, never fail it.
+        return undefined
+      }
+    })
   }
 
   /** Resolve one requested identity to a live agent, creating or resuming it once. */
@@ -1954,6 +1993,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * persistence, and the final order is newest-first.
    */
   async function listVisibleSessionSummaries(signal?: AbortSignal): Promise<SessionSummary[]> {
+    return uiDebugSpan('history', 'listVisible', undefined, () => listVisibleSessionSummariesWork(signal), items => ({ items: items.length }))
+  }
+
+  async function listVisibleSessionSummariesWork(signal?: AbortSignal): Promise<SessionSummary[]> {
     signal?.throwIfAborted()
     const summarizeAttached = (session: Session): SessionSummary => {
       const agent = ctx.agents.get(session.id)
@@ -2884,7 +2927,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // in-memory snapshot and the registry's live watermark projections; a
         // cold child is one persistence inspection plus a detached fold.
         let header: SessionHeader
-        let events: SessionEvent[]
+        let events: readonly SessionEvent[]
         let projections: SessionProjectionsBlock | undefined
         const attached = ctx.sessions.get(childSessionId)
         if (attached !== undefined) {

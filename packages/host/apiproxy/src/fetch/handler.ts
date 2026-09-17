@@ -7,6 +7,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { uiDebugSpan } from '@deepseek-ai/dsh-debug-log'
 import type { z } from 'zod'
 import type { ApiProxy, MuxFrame, HostFrame } from '../api/index.ts'
 import { sessionLogQuerySchema } from '../api/downloads.schema.ts'
@@ -247,7 +248,18 @@ async function handleUnary<K extends keyof RpcMethodMap>(
     return errorResponse(message.rpcId, { code: 'bad-request', message: `invalid payload for ${method}`, details: { issues: payload.error.issues } })
   }
   try {
-    return fullResponse(await route.invoke(api, { rpcId: message.rpcId, payload: payload.data }, signal))
+    const body = payload.data as Record<string, unknown>
+    return fullResponse(await uiDebugSpan(
+      'rpc',
+      method,
+      {
+        ...typeof body.sessionId === 'string' ? { sessionId: body.sessionId } : {},
+        ...typeof body.beforeSeq === 'number' ? { beforeSeq: body.beforeSeq } : {},
+        ...typeof body.maxMessages === 'number' ? { maxMessages: body.maxMessages } : {},
+      },
+      () => route.invoke(api, { rpcId: message.rpcId, payload: payload.data }, signal),
+      response => ({ ok: response.result.ok }),
+    ))
   } catch (error: unknown) {
     // The impl never throws business errors; reaching here means the implementation itself crashed — 500, carrier layer.
     console.error(`api-proxy: handler failure on "${method}": ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)

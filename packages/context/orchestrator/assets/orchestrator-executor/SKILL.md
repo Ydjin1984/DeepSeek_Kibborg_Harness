@@ -25,17 +25,17 @@ description: Режим оркестра. Исполнительная (лока
 На машине почти всегда запущен Chrome в режиме разработчика с DevTools Protocol на **127.0.0.1:9222** (профиль DaVinchi\chrome-profile). Это твой инструмент для веб-задач: посмотреть страницу, вытянуть информацию с сайта, «потыкать» сайт, сделать визуальный осмотр. Управление — через CDP-клиент (Node, без зависимостей):
 
 ```powershell
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" ensure          # Chrome жив? если нет — запустить
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" status          # версия + вкладки
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" tabs            # список вкладок (id, title, url)
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" open "<url>"    # открыть (новая вкладка или навигация)
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" shot "C:\путь\page.png" --tab <id>   # скриншот в PNG
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" text --tab <id> --max 8000           # текст страницы
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" html --tab <id> --max 20000          # HTML страницы
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" eval "document.title" --tab <id>     # произвольный JS
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" click ".css-selector" --tab <id>     # клик по элементу
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" wait 1500        # пауза
-node "C:\Users\lex66\.dsh\chrome\cdp.mjs" close --tab <id> # закрыть вкладку
+node "$DSH_HOME/chrome/cdp.mjs" ensure          # Chrome жив? если нет — запустить
+node "$DSH_HOME/chrome/cdp.mjs" status          # версия + вкладки
+node "$DSH_HOME/chrome/cdp.mjs" tabs            # список вкладок (id, title, url)
+node "$DSH_HOME/chrome/cdp.mjs" open "<url>"    # открыть (новая вкладка или навигация)
+node "$DSH_HOME/chrome/cdp.mjs" shot "C:\путь\page.png" --tab <id>   # скриншот в PNG
+node "$DSH_HOME/chrome/cdp.mjs" text --tab <id> --max 8000           # текст страницы
+node "$DSH_HOME/chrome/cdp.mjs" html --tab <id> --max 20000          # HTML страницы
+node "$DSH_HOME/chrome/cdp.mjs" eval "document.title" --tab <id>     # произвольный JS
+node "$DSH_HOME/chrome/cdp.mjs" click ".css-selector" --tab <id>     # клик по элементу
+node "$DSH_HOME/chrome/cdp.mjs" wait 1500        # пауза
+node "$DSH_HOME/chrome/cdp.mjs" close --tab <id> # закрыть вкладку
 ```
 
 Типичная цепочка веб-осмотра: `ensure` → `open <url>` → подождать загрузки (`wait`) → `shot <файл.png> --tab <id>` → открыть скриншот через **read_image** (у тебя есть зрение) и описать увиденное → при необходимости `text`/`html`/`eval`/`click` для деталей и взаимодействия. После работы закрой вкладки, которые открыл ты (`close --tab <id>`); вкладки пользователя не трогай. Если задание просит визуальный осмотр сайта — скриншот обязателен: текста страницы недостаточно для оценки внешнего вида, layout, UI-фич.

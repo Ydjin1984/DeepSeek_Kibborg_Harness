@@ -34,6 +34,14 @@ export interface OrchestratorSettingsView {
   readonly enabled: boolean
   readonly executorProvider: string
   readonly executorModel: string
+  /** ROI swarm: run one task per worker on the free pooled models. */
+  readonly roiEnabled: boolean
+  /** Workers one swarm call may start. */
+  readonly roiWorkers: number
+  /** Extra models one task may be retried on when its model answers a rate limit. */
+  readonly roiRetries: number
+  /** Worker roster names, assigned in order. */
+  readonly roiNames: readonly string[]
 }
 
 /** Injected actions for the section: read/write the namespace and the model catalog. */
@@ -104,6 +112,10 @@ export function OrchestratorSection({ load, save, listModels, t }: OrchestratorS
       setError(t('orchestratorRouteRequired'))
       return
     }
+    if (view.roiEnabled && !view.enabled) {
+      setError(t('orchestratorRoiNeedsMode'))
+      return
+    }
     setSaving(true)
     setError(null)
     setMessage(null)
@@ -168,6 +180,58 @@ export function OrchestratorSection({ load, save, listModels, t }: OrchestratorS
           <datalist id="orchestrator-executor-models">
             {modelOptions(executorGroup, view.executorModel).map(id => <option key={id} value={id} />)}
           </datalist>
+        </div>
+      </fieldset>
+
+      <fieldset className={css.orchestratorGroup}>
+        <legend>{t('orchestratorRoiEnable')}</legend>
+        <p className={css.orchestratorIntro}>{t('orchestratorRoiIntro')}</p>
+        <label className={css.orchestratorRow}>
+          <input
+            type="checkbox"
+            checked={view.roiEnabled}
+            onChange={(event) => { update({ roiEnabled: event.currentTarget.checked }) }}
+          />
+          {t('orchestratorRoiEnable')}
+        </label>
+        <div className={css.orchestratorRow}>
+          <span className={css.orchestratorLabel}>{t('orchestratorRoiWorkers')}</span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            aria-label={t('orchestratorRoiWorkers')}
+            value={String(view.roiWorkers)}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.currentTarget.value, 10)
+              update({ roiWorkers: Number.isFinite(parsed) ? Math.min(20, Math.max(1, parsed)) : view.roiWorkers })
+            }}
+          />
+          <span className={css.orchestratorLabel}>{t('orchestratorRoiRetries')}</span>
+          <input
+            type="number"
+            min={0}
+            max={5}
+            aria-label={t('orchestratorRoiRetries')}
+            value={String(view.roiRetries)}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.currentTarget.value, 10)
+              update({ roiRetries: Number.isFinite(parsed) ? Math.min(5, Math.max(0, parsed)) : view.roiRetries })
+            }}
+          />
+          <span className={css.orchestratorLabel}>{t('orchestratorRoiNames')}</span>
+          <input
+            aria-label={t('orchestratorRoiNames')}
+            value={view.roiNames.join(', ')}
+            onChange={(event) => {
+              update({
+                roiNames: event.currentTarget.value
+                  .split(',')
+                  .map(part => part.trim())
+                  .filter(part => part !== ''),
+              })
+            }}
+          />
         </div>
       </fieldset>
 

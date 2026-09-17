@@ -1,3 +1,4 @@
+import { uiDebug, uiDebugSpan, uiDebugTick } from '@deepseek-ai/dsh-debug-log'
 import type { HostDescription, IApiClient, HostFrame, MuxFrame, RpcRequest } from './api.ts'
 
 /** Reconnect/backoff tunables (deployment-varying — no hardcoded tunables; these become the
@@ -106,6 +107,7 @@ export class ConnectionController {
 
   private async loop(): Promise<void> {
     while (this.running) {
+      uiDebug('connection', 'generation', { generation: this.generation + 1, attempt: this.attempt })
       const gen = ++this.generation
       const ac = new AbortController()
       this.current = ac
@@ -136,10 +138,15 @@ export class ConnectionController {
         // subscribed baseline. The timeout guards against a carrier that never fires onOpen
         // (see ConnectionConfig.streamOpenTimeoutMs).
         const timeout = new AbortController()
-        const [description] = await Promise.all([
-          this.api.host.describe({}),
-          Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)]),
-        ])
+        const [description] = await uiDebugSpan(
+          'connection',
+          'handshake',
+          { generation: gen },
+          () => Promise.all([
+            this.api.host.describe({}),
+            Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)]),
+          ]),
+        )
         timeout.abort()
         const descriptionResult = description.result
         if (!descriptionResult.ok) {
@@ -147,6 +154,7 @@ export class ConnectionController {
         }
         if (ac.signal.aborted) throw new Error('generation aborted during readiness handshake')
         this.attempt = 0
+        uiDebug('connection', 'connected', { generation: gen })
         this.emitState('connected')
         // A state sink may synchronously stop this controller. Do not publish
         // a description for a generation that no longer exists afterward.
@@ -183,6 +191,7 @@ export class ConnectionController {
     try {
       for await (const envelope of stream) {
         if (envelope.payload.type === 'stream/error') break
+        uiDebugTick('connection', 'frame', { type: envelope.payload.type })
         if (sink !== undefined) this.callSink(() => { sink(envelope) })
       }
     } catch {

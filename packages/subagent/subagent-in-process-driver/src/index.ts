@@ -223,11 +223,19 @@ function readResult(
   // Disposal can tear the owner down before the loop records its ordinary
   // `aborted` end, yielding `disposed` instead.
   const stopReason: SubagentStopReason = cancelled && recorded !== 'completed' ? 'aborted' : recorded
+  const diagnostic = errorDiagnostic(lastEnd?.data.reason)
   if (structured !== undefined) {
     if (structured.captured !== undefined) {
-      return { output, structured: structured.captured.value, stopReason }
+      return { output, structured: structured.captured.value, stopReason, ...diagnostic === undefined ? {} : { diagnostic } }
     }
     if (stopReason === 'completed') return { output, stopReason: cancelled ? 'aborted' : 'error' }
   }
-  return { output, stopReason }
+  return { output, stopReason, ...diagnostic === undefined ? {} : { diagnostic } }
+}
+
+/** Provider failure text from a turn/end error, when one was recorded. */
+function errorDiagnostic(reason: TurnEndReason | undefined): string | undefined {
+  if (reason?.kind !== 'error') return undefined
+  const message = reason.error.message.trim()
+  return message === '' ? undefined : message
 }

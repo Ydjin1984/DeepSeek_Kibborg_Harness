@@ -5,6 +5,7 @@ import type {
   ConversationViewDefinition, ConversationViewNode, ConversationViewSnapshotMap,
   ConversationViewSnapshotStore,
 } from '../contract/conversation.ts'
+import { uiDebugSpanSync } from '@deepseek-ai/dsh-debug-log'
 import { conversationContextKey } from '../contract/conversation.ts'
 import {
   ConversationLocationIndex, type ConversationLocationDataChange,
@@ -166,6 +167,15 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
    * @returns immediate publication request.
    */
   replaceWindow(entries: readonly ConversationEventInput[], hasMore: boolean): ConversationPublication {
+    return uiDebugSpanSync(
+      'conversation',
+      'replaceWindow',
+      { events: entries.length, hasMore },
+      () => this.replaceWindowWork(entries, hasMore),
+    )
+  }
+
+  private replaceWindowWork(entries: readonly ConversationEventInput[], hasMore: boolean): ConversationPublication {
     this.contexts.clear()
     this.contextsByKind.clear()
     this.contextsBySeq.clear()

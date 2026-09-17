@@ -11,6 +11,7 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react'
+import { uiDebugSpanSync } from '@deepseek-ai/dsh-debug-log'
 import clsx from 'clsx'
 import type { ChatSnapshot, ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
 import {
@@ -62,16 +63,24 @@ export function ExecutionView({
   // Normalized events: re-derived whenever the Chat snapshot swaps (order or
   // any node content), so the header summary and filters stay current.
   const { list: events, byKey } = useMemo(() => {
-    const list: ExecutionEvent[] = []
-    const byKey = new Map<string, ExecutionEvent>()
-    for (const key of chat.order) {
-      const node = chat.nodes.get(key)
-      if (node === undefined) continue
-      const event = executionEventFromNode(node as ChatNode)
-      list.push(event)
-      byKey.set(key, event)
-    }
-    return { list, byKey }
+    return uiDebugSpanSync(
+      'ui',
+      'execution.events',
+      { nodes: chat.order.length },
+      () => {
+        const list: ExecutionEvent[] = []
+        const byKey = new Map<string, ExecutionEvent>()
+        for (const key of chat.order) {
+          const node = chat.nodes.get(key)
+          if (node === undefined) continue
+          const event = executionEventFromNode(node as ChatNode)
+          list.push(event)
+          byKey.set(key, event)
+        }
+        return { list, byKey }
+      },
+      result => ({ events: result.list.length }),
+    )
   }, [chat])
 
   const summary = useMemo(
@@ -160,8 +169,13 @@ export function ExecutionView({
     const el = listRef.current
     /* v8 ignore next -- ref-null guard: the effect runs after the list node commits. */
     if (el === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => { setViewport(el.clientHeight) })
+    const flow = el.querySelector(`.${css.flow}`) ?? el
+    const observer = new ResizeObserver(() => {
+      setViewport(el.clientHeight)
+      if (followRef.current) el.scrollTop = el.scrollHeight
+    })
     observer.observe(el)
+    observer.observe(flow)
     setViewport(el.clientHeight)
     return () => { observer.disconnect() }
   }, [])
