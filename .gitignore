@@ -54,6 +54,24 @@ REVIEW-FINDINGS.md
 browser-demo/
 review-out/
 
+# конфигурация агентных инструментов с credentials (Ydjin1984 fork)
+.codex/
+
+# сгенерированные tsc-артефакты рядом с исходниками (локальные сборки форка)
+packages/**/src/**/*.js
+packages/**/src/**/*.js.map
+packages/**/src/**/*.d.ts
+packages/**/src/**/*.d.ts.map
+!packages/**/src/**/css-modules.d.ts
+!packages/**/src/**/use-sync-external-store.d.ts
+!packages/**/src/**/ripgrep.d.ts
+!packages/**/src/**/turndown-plugin-gfm.d.ts
+vendor/**/src/**/*.js
+vendor/**/src/**/*.js.map
+vendor/**/src/**/*.d.ts
+vendor/**/src/**/*.d.ts.map
+!vendor/hmr/src/index.d.ts
+
 # локальные артефакты сессий и тестов (Ydjin1984 fork)
 /kibborg-transcript-session-*.md
 /kibborg-session-*.zip
