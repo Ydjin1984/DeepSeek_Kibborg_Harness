@@ -7,7 +7,7 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import { writeClipboard } from '../clipboard.ts'
-import { grammarLoadCount, highlightToHtml, subscribeGrammarLoaded } from './highlight.ts'
+import { grammarLoadCount, highlightToHtml, inferCodeLanguage, subscribeGrammarLoaded } from './highlight.ts'
 import css from './CodeBlock.module.css'
 
 export interface CodeBlockProps {
@@ -21,15 +21,22 @@ export interface CodeBlockProps {
   copyLabel?: string | undefined
   /** Copy-button label during the post-copy confirmation window. */
   copiedLabel?: string | undefined
+  /** Copy the exact source, including its terminal newline. */
+  preserveTrailingNewline?: boolean | undefined
+  /** Infer a grammar for an unlabeled message fence when its syntax is recognizable. */
+  inferLanguage?: boolean | undefined
+  /** Show a compact line gutter for highlighted message fences. */
+  lineNumbers?: boolean | undefined
 }
 
-export function CodeBlock({ code, lang, className, copyLabel = '复制', copiedLabel = '复制成功' }: CodeBlockProps) {
+export function CodeBlock({ code, lang, className, copyLabel = '复制', copiedLabel = '复制成功', preserveTrailingNewline = false, inferLanguage = false, lineNumbers = false }: CodeBlockProps) {
   const trimmed = code.endsWith('\n') ? code.slice(0, -1) : code
+  const displayLang = useMemo(() => lang ?? (inferLanguage ? inferCodeLanguage(trimmed) : undefined), [lang, inferLanguage, trimmed])
   // Re-render when a lazy grammar finishes loading, so a fence that showed plain
   // text while its language's grammar imported picks up highlighting. The
   // snapshot value is opaque; only its change across renders drives the memo.
   const loaded = useSyncExternalStore(subscribeGrammarLoaded, grammarLoadCount, grammarLoadCount)
-  const html = useMemo(() => highlightToHtml(trimmed, lang), [trimmed, lang, loaded])
+  const html = useMemo(() => highlightToHtml(trimmed, displayLang), [trimmed, displayLang, loaded])
   const rootRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
 
@@ -37,13 +44,13 @@ export function CodeBlock({ code, lang, className, copyLabel = '复制', copiedL
     if (copied) return
     /* v8 ignore next -- both arms always mount a <pre>; trimmed is the
        typed fallback if the DOM shape ever diverges. */
-    const text = rootRef.current?.querySelector('pre')?.textContent ?? trimmed
+    const text = preserveTrailingNewline ? code : rootRef.current?.querySelector('pre')?.textContent ?? trimmed
     void writeClipboard(text).then((ok) => {
       if (!ok) return
       setCopied(true)
       window.setTimeout(() => { setCopied(false) }, 1000)
     })
-  }, [copied, trimmed])
+  }, [copied, trimmed, code, preserveTrailingNewline])
 
   const body = html === undefined
     ? (
@@ -57,10 +64,10 @@ export function CodeBlock({ code, lang, className, copyLabel = '复制', copiedL
     )
 
   return (
-    <div ref={rootRef} className={clsx(css.block, 'md-code-block', className)}>
+    <div ref={rootRef} className={clsx(css.block, lineNumbers && html !== undefined && css.numbered, 'md-code-block', className)}>
       <div className={css.bannerWrap}>
         <div className={css.banner}>
-          <div className={css.infostring}>{lang ?? ''}</div>
+          <div className={css.infostring}>{displayLang ?? ''}</div>
           <div className={css.action}>
             <button type="button" className={css.copyButton} onClick={onCopy}>
               {copied ? copiedLabel : copyLabel}

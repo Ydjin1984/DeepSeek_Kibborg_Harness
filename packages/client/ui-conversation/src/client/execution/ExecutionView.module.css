@@ -135,6 +135,11 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+.toolButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .toolButton:focus-visible {
   outline: 2px solid var(--dsw-alias-state-business-primary);
   outline-offset: -1px;
@@ -167,6 +172,22 @@
   min-width: 0;
 }
 
+.groupHeading {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  min-width: 0;
+  padding: 6px 20px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* One expanded event's inner content must not stretch the column; the flow
    and the row slot both cap at the scrollport width. */
 .rowSlot > div {
@@ -175,6 +196,7 @@
 
 .jumpLatest {
   position: sticky;
+  z-index: 9;
   /* Clears the overlay composer seat (same variable as the list's bottom
      padding), so the pill stays clickable above the input card instead of
      sticking behind it. */

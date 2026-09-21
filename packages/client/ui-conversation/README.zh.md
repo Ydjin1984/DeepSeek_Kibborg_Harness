@@ -2,6 +2,12 @@
 
 [English](README.md) | 中文
 
+已发送的用户代码围栏使用共用的 CodeBlock，复制横幅在顶部，并显示行号。未标注语言但源码语法可识别的围栏，与已定稿的助手代码围栏一样按需加载语法高亮；普通文本仍按纯文本显示。
+
+执行记录只在已记录的轮次和步骤边界分组。行默认折叠，显示动作、目标、状态和时间；单击文件路径会在原位展开已有的读取或差异卡片。长历史只挂载经过实测的可见行窗口。聊天和执行视图通过数量受限的请求刻度在已加载的用户请求间导航。读者位于底部时各视图跟随实时尾部；向上滚动会暂停跟随，手动回到底部或使用现有的跳至最新按钮会恢复。Session 壳在切换标签页时保留各视图的阅读锚点，切换会话时清除。用户文本中的三个反引号代码围栏在发送后显示为代码块，在输入框底层中高亮；围栏内的引用和命令触发字符保持普通文本，包括未闭合围栏。
+
+历史记录首先加载数量受限的末尾窗口。只要还有更早的事件，聊天和执行视图都会提供“加载更早”；即使当前窗口没有用户请求，请求刻度栏仍会显示加载更早请求的控制。请求进入已加载窗口后才会出现对应刻度，因此刻度数量反映已加载的请求，而不是持久会话中的全部请求。
+
 会话领域：骨架（标题栏／标签页／编辑器／空状态）、聊天视图（分组步骤摘要流、流式尾部隔离与轮次状态）、编辑器 dock（与输入区一同 sticky 的会话统计行）、输入区 dock（队列行加 todo 计划条）、详情壳层，以及按 scope 寻址的 ConversationController。工具展示属于 [`ui-tool`](../ui-tool/README.md)。
 
 压缩（compaction）在检查点自身的消息流位置渲染为一行折叠标记，不替换其上方的 transcript（文本记录）。自动压缩使用「上下文已压缩」标题。每个已加载对应 `compaction/summary` 事件的完成标记都会显示被替换条目数量和估算 token 数量，并可点击展开摘要。手动 `/compact` 开始时显示为运行中的 `compact` 行；成功结算后，其显式摘要事件引用会在保持同一 React key 的前提下把该命令折叠进检查点行。完成的检查点静止时保留上下文压缩（context compaction）图标，仅在悬停或键盘聚焦时将其替换为收起／展开指示图标。输入被拒绝、没有可压缩历史、取消和失败时仍使用通用命令行及处理器撰写的文本。配对绝不依赖相邻关系，因为压缩运行期间可能注入持久上下文。面向模型的带框检查点载荷绝不渲染；被引用的 `compaction/summary` 事件位于已加载窗口之外时，检查点仍然可见但不可展开。
@@ -12,7 +18,7 @@
 
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
-执行视图（`id: 'execution'`）是视图环的默认标签页：基于同一会话快照的专业 trace 时间线。它把每个最终 Chat node 投影为规范化 `ExecutionEvent`（type、category、status、标题字段、diff 计数、duration），每个事件渲染一行带图标／时钟／类型徽标的时间线行，并把 trace 折叠进 sticky 页头（会话标题、运行状态、计数器、当前动作、计划、改动文件）加工具栏（自由文本搜索、分类 chips、全部展开／全部折叠）。事件列表是带实测行高、follow-scroll、跳至最新与空状态的窗口化虚拟列表。follow-scroll 让钉在底部的读者在新事件到来以及实测高度增长（含行内展开）时始终停在最底部；向上滚动会解除钉住，滚回最底部则重新钉住。由于视图选用编辑器 overlay，列表把悬浮编辑器 seat 的实时高度（`--dsh-composer-height`，由骨架的 seat observer 发布，另加一个间隙）预留为底部 padding，因此 trace 尾部恰好停在输入卡片上方，跳至最新胶囊也一并避开它；Chat 的输入遮罩淡出不受影响。node seat 声明（`'conversation.chat.node'`、`'conversation.message.images'`）位于会话主体配置项上——slot 允许每个 key 只有一个声明者——主体通过 `'conversation.view'` owner share 把 `renderChatNode`／`renderMessageImages` 交给每个视图，因此 Chat 与 Execution 通过同一个分发点派发同一批 node renderer（ui-tool 行、markdown、命令）。
+执行视图（`id: 'execution'`）是视图环的默认标签页：基于同一会话快照的专业 trace 时间线。它把每个最终 Chat node 投影为规范化 `ExecutionEvent`（type、category、status、标题字段、diff 计数、duration），每个事件渲染一行带动作／目标／状态／时间清晰的记录行，并把 trace 折叠进 sticky 页头（会话标题、运行状态、计数器、当前动作、计划、改动文件）加工具栏（自由文本搜索、分类 chips、全部展开／全部折叠）。事件列表是带实测行高、follow-scroll、跳至最新与空状态的窗口化虚拟列表。follow-scroll 让钉在底部的读者在新事件到来以及实测高度增长（含行内展开）时始终停在最底部；向上滚动会解除钉住，滚回最底部则重新钉住。由于视图选用编辑器 overlay，列表把悬浮编辑器 seat 的实时高度（`--dsh-composer-height`，由骨架的 seat observer 发布，另加一个间隙）预留为底部 padding，因此 trace 尾部恰好停在输入卡片上方，跳至最新胶囊也一并避开它；Chat 的输入遮罩淡出不受影响。node seat 声明（`'conversation.chat.node'`、`'conversation.message.images'`）位于会话主体配置项上——slot 允许每个 key 只有一个声明者——主体通过 `'conversation.view'` owner share 把 `renderChatNode`／`renderMessageImages` 交给每个视图，因此 Chat 与 Execution 通过同一个分发点派发同一批 node renderer（ui-tool 行、markdown、命令）。
 
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.md)。
 

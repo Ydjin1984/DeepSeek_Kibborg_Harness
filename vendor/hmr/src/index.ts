@@ -361,7 +361,7 @@ class Hmr extends Service {
     while (pending.length) {
       let index = 0, hasUpdate = false
       while (index < pending.length) {
-        const url = pending[index]
+        const url = pending[index]!
         const children = await this.getLinked(url)
         let isDeclined = true, isAccepted = false
         for (const child of children) {
@@ -412,7 +412,7 @@ class Hmr extends Service {
 
     // Resolve each plugin name to its file URL and check if it needs reload
     for (const baseUrl in nameMap) {
-      for (const name of nameMap[baseUrl]) {
+      for (const name of nameMap[baseUrl] ?? []) {
         try {
           const { url } = await this._resolve(name, baseUrl, {})
           if (this.declined.has(url)) continue
@@ -438,7 +438,7 @@ class Hmr extends Service {
 
       reloads.set(plugin, {
         filename: job.url,
-        runtime: this.ctx.registry.get(plugin),
+        runtime: this.ctx.registry.get(plugin)!,
       })
     }
 
@@ -503,8 +503,11 @@ class Hmr extends Service {
       if (!runtime) return
       for (const oldFiber of runtime.fibers) {
         const fiber = oldFiber.parent.registry.plugin(plugin, oldFiber._config, this.getOuterStack)
-        fiber.entry = oldFiber.entry
-        if (fiber.entry) fiber.entry.fiber = fiber
+        const { entry } = oldFiber
+        if (entry !== undefined) {
+          fiber.entry = entry
+          entry.fiber = fiber
+        }
       }
     }
 

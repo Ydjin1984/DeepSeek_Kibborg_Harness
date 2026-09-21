@@ -124,3 +124,17 @@ describe('detectTrigger span and query', () => {
     expect(hit).toMatchObject({ trigger: '/', query: 'com', position: 'inline', span: { start: 18, end: 22 } })
   })
 })
+
+describe('detectTrigger fenced code', () => {
+  it('keeps @ and / literal within a completed block and resumes after it', () => {
+    const draft = 'ТЗ\n```ts\n@file /goal\n```\n@real'
+    expect(detectTrigger(draft, draft.indexOf('@file') + 5, plain)).toBeNull()
+    expect(detectTrigger(draft, draft.indexOf('/goal') + 5, plain)).toBeNull()
+    expect(detectTrigger(draft, draft.length, plain)).toMatchObject({ trigger: '@', query: 'real' })
+  })
+
+  it('keeps triggers literal to the end of an unfinished block', () => {
+    const draft = 'intro\n```\n@file /goal'
+    expect(detectTrigger(draft, draft.length, plain)).toBeNull()
+  })
+})

@@ -20,8 +20,17 @@ import {
   wrapBlockChildren,
 } from './render.tsx'
 import type { MarkdownCodeLabels, MarkdownFileMentions, MarkdownRenderContext, ReferenceTargets } from './render.tsx'
+import { MessageText } from './MessageText.tsx'
 import 'katex/dist/katex.min.css'
 import css from './MarkdownText.module.css'
+
+/**
+ * Ceiling on Markdown source length the parser will accept. Beyond it the
+ * pipeline degrades to literal text: oversized or pathologically nested input
+ * makes the upstream grammar quadratic or exhausts the call stack, freezing
+ * the tab. The bound sits above any ordinary assistant reply.
+ */
+const MAX_MARKDOWN_LENGTH = 64 * 1024
 
 export type { MarkdownCodeLabels, MarkdownFileMentions } from './render.tsx'
 
@@ -161,16 +170,27 @@ export const MarkdownText = memo(function MarkdownText({ text, streaming = false
 }) {
   const streamRef = useRef<StreamingRenderer | null>(null)
   const streamLabelsRef = useRef<MarkdownCodeLabels | undefined>(codeLabels)
+  // Oversized or pathologically nested input renders literally instead of
+  // parsing: the grammar is quadratic on long lists/tables and can exhaust
+  // the call stack on deep blockquote/list nesting.
+  const overBudget = text.length > MAX_MARKDOWN_LENGTH
   const children = useMemo(() => {
-    if (!streaming) {
-      streamRef.current = null
-      return renderSettled(text, codeLabels, fileMentions)
+    if (overBudget) return null
+    try {
+      if (!streaming) {
+        streamRef.current = null
+        return renderSettled(text, codeLabels, fileMentions)
+      }
+      if (streamRef.current === null || streamLabelsRef.current !== codeLabels) {
+        streamRef.current = new StreamingRenderer(codeLabels)
+        streamLabelsRef.current = codeLabels
+      }
+      return streamRef.current.render(text)
+    } catch (error) {
+      if (error instanceof RangeError) return null
+      throw error
     }
-    if (streamRef.current === null || streamLabelsRef.current !== codeLabels) {
-      streamRef.current = new StreamingRenderer(codeLabels)
-      streamLabelsRef.current = codeLabels
-    }
-    return streamRef.current.render(text)
-  }, [text, streaming, codeLabels, fileMentions])
+  }, [text, streaming, codeLabels, fileMentions, overBudget])
+  if (children === null) return <MessageText text={text} />
   return <div className={css.markdown}>{children}</div>
 })

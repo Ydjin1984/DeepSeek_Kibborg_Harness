@@ -1,0 +1,11 @@
+groups=Turn 62 / Turn 63 / Turn 64 / Turn 67 / Turn 68
+prompt-buttons=9
+older-control=false
+older-prompt-control=false
+action=File edit | edit | notes/demo.txt | success
+action=File write | write | notes/new-demo.txt | success
+action=File edit | edit | src/config.ts | success
+action=File read | grep | packages/client | success
+action=File read | glob | packages/client | success
+action=File read | read | packages/client/ui-primitives/src/ReadBlock.tsx | success
+read-open=true

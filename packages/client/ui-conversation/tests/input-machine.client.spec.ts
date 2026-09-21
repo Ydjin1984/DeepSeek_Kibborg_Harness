@@ -734,6 +734,14 @@ describe('decorations: scanTextRefs', () => {
     ])
   })
 
+  it('decorates references around fenced code but leaves its tokens literal', () => {
+    const draft = '@worker-1\n```ts\n@worker-1 /commit-helper @src/\n```\n/commit-helper'
+    expect(scanTextRefs(draft, LEX)).toEqual([
+      { start: 0, end: 9, trigger: '@' },
+      { start: draft.lastIndexOf('/commit-helper'), end: draft.length, trigger: '/' },
+    ])
+  })
+
   it('deriveDecorations threads the lexicon through as textRefs', () => {
     const m = new InputMachine()
     m.dispatch({ type: 'draft-changed', draft: 'use /commit-helper now' })
@@ -744,6 +752,22 @@ describe('decorations: scanTextRefs', () => {
 })
 
 describe('input-machine: decorations', () => {
+  it('demotes a structured reference when an opening fence is inserted before it', () => {
+    const m = new InputMachine()
+    m.dispatch({ type: 'draft-changed', draft: '@alp' })
+    m.dispatch({ type: 'insert-ref', reference: refOf('alpha'), span: spanOf(m, 0, 4) })
+    const withReference = m.state.draft
+    expect(m.state.occurrences).toHaveLength(1)
+
+    m.dispatch({ type: 'draft-changed', draft: `\`\`\`\n${withReference}` })
+    expect(m.state.draft).toBe(`\`\`\`\n${withReference}`)
+    expect(m.state.occurrences).toEqual([])
+
+    m.dispatch({ type: 'undo' })
+    expect(m.state.draft).toBe(withReference)
+    expect(m.state.occurrences).toHaveLength(1)
+  })
+
   it('projects chips from the occurrence table with identity, offset, label, and invalid bit', () => {
     const m = new InputMachine()
     m.dispatch({ type: 'draft-changed', draft: '/alp' })
@@ -766,6 +790,7 @@ describe('input-machine: decorations', () => {
         invalid: true,
       }],
       textRefs: [],
+      fences: [],
       hint: null,
     })
   })
@@ -778,6 +803,7 @@ describe('input-machine: decorations', () => {
       token: { start: 0, end: 6 },
       chips: [],
       textRefs: [],
+      fences: [],
       hint: 'objective',
     })
     m.dispatch({ type: 'draft-changed', draft: '/goal x' })
@@ -787,7 +813,7 @@ describe('input-machine: decorations', () => {
   it('the token range persists through submitting; a hintless claim never ghosts', () => {
     const m = new InputMachine()
     enterSubmitting(m, 'goal', '')
-    expect(deriveDecorations(m.state)).toEqual({ token: { start: 0, end: 6 }, chips: [], textRefs: [], hint: null })
+    expect(deriveDecorations(m.state)).toEqual({ token: { start: 0, end: 6 }, chips: [], textRefs: [], fences: [], hint: null })
   })
 })
 

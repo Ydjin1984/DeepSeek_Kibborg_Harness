@@ -117,4 +117,28 @@ describe('question response validation', () => {
     })
     abort.abort()
   })
+
+  it('delivers a live question ahead of a session/event backlog', async () => {
+    const { ctx, api } = await harness()
+    const abort = new AbortController()
+    const mux = openMux(api, abort)
+    const owned = agent(ctx)
+    await Promise.resolve()
+    owned.session.append('turn/start', { turn: 1 })
+    for (let index = 0; index < 40; index++) {
+      owned.session.append('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index, text: 'x' },
+      })
+    }
+    const asked = ctx.userQuestions.ask({
+      agent: owned,
+      questions: [{ id: 'q', question: 'Choose', options: [{ label: 'A' }] }],
+    })
+    const envelope = await mux.waitForQuestion()
+    expect(envelope.payload.type).toBe('question/requested')
+    abort.abort()
+    void asked.catch(() => {})
+  })
 })

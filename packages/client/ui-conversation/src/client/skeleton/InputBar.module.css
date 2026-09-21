@@ -148,13 +148,24 @@
 }
 
 .backdropDisabled,
-.backdropDisabled :is(.hlToken, .hint, .textRef, .chip, .chipInvalid) {
+.backdropDisabled :is(.hlToken, .hint, .textRef, .chip, .chipInvalid, .codeFence, .codeContent) {
   color: var(--dsw-alias-label-tertiary);
 }
 
 .hlToken {
   background-color: transparent;
   color: var(--dsw-alias-state-warn-label);
+}
+
+.codeFence {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.codeContent {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-specific-selector);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .hlSegment {

@@ -85,7 +85,18 @@ export function apiRemoteSubagentOwnershipError(sessionId: SessionId): ApiRemote
 }
 
 /**
+ * Persistence backends throw this exact text when `inspect` has no artifact.
+ * @param sessionId - identity that was not stored.
+ * @returns the miss text to match or rethrow as {@link ApiRemoteSessionNotFound}.
+ */
+function persistedSessionMissMessage(sessionId: SessionId): string {
+  return `session "${sessionId}" not found`
+}
+
+/**
  * Inspect one cold served session without repairing, resuming, or publishing it.
+ * Looks up by identity through `inspect`, not by scanning `list()`, so a
+ * single history read does not enumerate the whole home catalog.
  * @param ctx - Host Context carrying the optional persistence provider.
  * @param sessionId - durable identity to inspect.
  * @returns detached metadata and events for a servable session.
@@ -99,11 +110,19 @@ export async function inspectApiRemoteSession(
   if (persistence === undefined) {
     throw new Error('session persistence is not configured (load a dsh-session-persistence backend)')
   }
-  const inspected = await persistence.inspect(sessionId)
-  if (inspected.meta.cwd === undefined) {
-    throw new ApiRemoteSessionNotFound(`session "${sessionId}" not found`)
+  try {
+    const inspected = await persistence.inspect(sessionId)
+    if (inspected.meta.cwd === undefined) {
+      throw new ApiRemoteSessionNotFound(persistedSessionMissMessage(sessionId))
+    }
+    return { meta: inspected.meta, events: inspected.events }
+  } catch (error: unknown) {
+    if (error instanceof ApiRemoteSessionNotFound) throw error
+    if (error instanceof Error && error.message === persistedSessionMissMessage(sessionId)) {
+      throw new ApiRemoteSessionNotFound(error.message)
+    }
+    throw error
   }
-  return { meta: inspected.meta, events: inspected.events }
 }
 
 /**

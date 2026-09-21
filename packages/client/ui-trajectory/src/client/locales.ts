@@ -19,6 +19,7 @@ export type TrajectoryKey =
   | 'toolbar.collapseCalls'
   | 'toolbar.search'
   | 'toolbar.searchPlaceholder'
+  | 'toolbar.jumpLatest'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -43,6 +44,7 @@ export const zh: Record<TrajectoryKey, string> = {
   'toolbar.collapseCalls': 'Collapse calls',
   'toolbar.search': '搜索轨迹',
   'toolbar.searchPlaceholder': '搜索',
+  'toolbar.jumpLatest': '跳至最新',
 }
 
 /** English dictionary. */
@@ -61,6 +63,7 @@ export const en: Record<TrajectoryKey, string> = {
   'toolbar.collapseCalls': 'Collapse calls',
   'toolbar.search': 'Search trajectory',
   'toolbar.searchPlaceholder': 'Search',
+  'toolbar.jumpLatest': 'Jump to latest',
 }
 
 /** Russian dictionary. */
@@ -79,4 +82,5 @@ export const ru: Record<TrajectoryKey, string> = {
   'toolbar.collapseCalls': 'Свернуть вызовы',
   'toolbar.search': 'Поиск по траектории',
   'toolbar.searchPlaceholder': 'Поиск',
+  'toolbar.jumpLatest': 'К последнему',
 }

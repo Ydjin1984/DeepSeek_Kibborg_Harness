@@ -5,29 +5,35 @@
 // follow), and a directly-rendered event list. Each event row owns its header
 // chrome and dispatches its Chat node through the shared
 // 'conversation.chat.node' seat, so the specialized renderers stay in one
-// place. The view owns its scrollport (`data-conversation-composer-overlay`),
+// place. Long traces mount a measured window of rows. The view owns its
+// scrollport (`data-conversation-composer-overlay`),
 // which keeps the sticky composer seat intact below it.
 
 import {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react'
 import { uiDebugSpanSync } from '@deepseek-ai/dsh-debug-log'
 import clsx from 'clsx'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { ChatSnapshot, ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   IconChevronDownOutline14,
   IconSearchOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNode, ToolChatData } from '../contract/chat-nodes.ts'
+import { activePromptAtSeq, promptEntries } from '../contract/prompt-nav.ts'
+import { PromptRail } from '../skeleton/PromptRail.tsx'
 import type {
   ChatNodeOwnerProps, ExecutionViewSlotProps,
 } from '../contract/slots.ts'
 import { ExecutionEventRow } from './ExecutionEventRow.tsx'
 import { ExecutionHeader } from './ExecutionHeader.tsx'
-import { executionEventFromNode, isDefaultExpanded, type ExecutionEvent } from './execution-event.ts'
+import { executionEventFromNode, type ExecutionEvent } from './execution-event.ts'
+import { groupExecutionEvents } from './execution-groups.ts'
 import { EXECUTION_FILTERS, matchesFilter, matchesQuery, type ExecutionFilter } from './execution-filter.ts'
 import { executionTraceSummary } from './execution-summary.ts'
 import { isAtScrollFloor } from './execution-virtual.ts'
+import { nextFollowMode, type FollowMode } from '../contract/bottom-follow.ts'
 import css from './ExecutionView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -50,15 +56,18 @@ function findCallKey(chat: ChatSnapshot, callId: string): string | null {
 
 export function ExecutionView({
   useSession, useSessions, useProjection, useStore, actions, sessionId, t,
-  openFile, inspectCall, forkAt, fileMentions, inspect, onInspectDone,
-  renderChatNode, renderMessageImages,
+  openFile, loadOlder, inspectCall, forkAt, fileMentions, inspect, onInspectDone,
+  renderChatNode, renderMessageImages, viewBookmark, saveViewBookmark,
 }: ExecutionViewSlotProps) {
   const chat = useSession(s => s.chat)
   const running = useSession(s => s.running)
   const partial = useSession(s => s.partial)
+  const hasMore = useSession(s => s.hasMore)
+  const loadingOlder = useSession(s => s.loadingOlder)
   const selectedCallId = useStore(s => s.selection?.callId)
   const todos = useProjection('todos') ?? []
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
+  const eventCache = useRef(new Map<string, { node: ChatNode; event: ExecutionEvent }>())
 
   // Normalized events: re-derived whenever the Chat snapshot swaps (order or
   // any node content), so the header summary and filters stay current.
@@ -70,13 +79,18 @@ export function ExecutionView({
       () => {
         const list: ExecutionEvent[] = []
         const byKey = new Map<string, ExecutionEvent>()
+        const nextCache = new Map<string, { node: ChatNode; event: ExecutionEvent }>()
         for (const key of chat.order) {
           const node = chat.nodes.get(key)
           if (node === undefined) continue
-          const event = executionEventFromNode(node as ChatNode)
+          const typedNode = node as ChatNode
+          const cached = eventCache.current.get(key)
+          const event = cached?.node === typedNode ? cached.event : executionEventFromNode(typedNode)
           list.push(event)
           byKey.set(key, event)
+          nextCache.set(key, { node: typedNode, event })
         }
+        eventCache.current = nextCache
         return { list, byKey }
       },
       result => ({ events: result.list.length }),
@@ -107,43 +121,116 @@ export function ExecutionView({
     const event = byKey.get(key)
     return event !== undefined && matchesFilter(event, filter) && matchesQuery(event, query)
   }), [chat.order, byKey, filter, query])
+  const groups = useMemo(() => groupExecutionEvents(events, chat.timeline), [events, chat.timeline])
+  const visibleRows = useMemo(() => {
+    const groupByEvent = new Map(groups.flatMap(group => group.eventKeys.map(key => [key, group] as const)))
+    const seen = new Set<string>()
+    const rows: Array<{ key: string; kind: 'event' } | { key: string; kind: 'group'; number: number }> = []
+    for (const key of visibleKeys) {
+      const group = groupByEvent.get(key)
+      if (group !== undefined && !seen.has(group.key)) {
+        rows.push({ key: group.key, kind: 'group', number: group.number })
+        seen.add(group.key)
+      }
+      rows.push({ key, kind: 'event' })
+    }
+    return rows
+  }, [visibleKeys, groups])
 
   const effectiveExpanded = useCallback((key: string): boolean => {
     if (revealed.has(key)) return true
-    const node = chat.nodes.get(key)
-    const base = executionExpand === 'expand' ? true : executionExpand === 'collapse' ? false : isDefaultExpanded(node?.kind ?? '')
+    const base = executionExpand === 'expand'
     return flipped.has(key) ? !base : base
-  }, [executionExpand, flipped, revealed, chat])
+  }, [executionExpand, flipped, revealed])
 
   const toggleRow = useCallback((key: string) => {
+    const nextExpanded = !effectiveExpanded(key)
     actions.setExecutionExpand('default')
-    setFlipped((prev) => {
+    setRevealed((prev) => {
+      if (!prev.has(key)) return prev
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      next.delete(key)
       return next
     })
-  }, [actions])
+    setFlipped((prev) => {
+      const next = new Set(prev)
+      if (nextExpanded) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }, [actions, effectiveExpanded])
 
   const expandAll = useCallback(() => {
     actions.setExecutionExpand('expand')
     setFlipped(new Set())
+    setRevealed(new Set())
   }, [actions])
 
   const collapseAll = useCallback(() => {
     actions.setExecutionExpand('collapse')
     setFlipped(new Set())
+    setRevealed(new Set())
   }, [actions])
 
-  // Scroll geometry. The trace renders every visible row directly (like the
-  // Chat view), so the scrollport's own scrollHeight is authoritative: the
-  // tail jump and bottom-follow need no per-row measurement and cannot overlap
-  // rows. `viewport` only tracks the scrollport height for resize re-follow.
+  // Scroll geometry uses the scrollport's scrollHeight for bottom follow.
+  // The virtualizer measures long lists and `viewport` triggers resize follow.
   const listRef = useRef<HTMLDivElement | null>(null)
+  const virtualized = visibleRows.length > 120
+  const getScrollElement = useCallback(() => listRef.current, [])
+  const virtualizer = useVirtualizer({
+    count: virtualized ? visibleRows.length : 0,
+    enabled: virtualized,
+    getScrollElement,
+    estimateSize: index => visibleRows[index]?.kind === 'group' ? 36 : 52,
+    getItemKey: index => visibleRows[index]?.key ?? index,
+    overscan: 8,
+    initialRect: { width: 800, height: 640 },
+  })
+  const visibleRowIndex = useMemo(() => new Map(visibleRows.map((row, index) => [row.key, index])), [visibleRows])
+  const prompts = useMemo(() => promptEntries(chat), [chat])
+  const [activePrompt, setActivePrompt] = useState<string | null>(null)
+  const promptFrame = useRef<number | null>(null)
+  const pendingPrompt = useRef<string | null>(null)
   const [viewport, setViewport] = useState(0)
   const [atBottom, setAtBottom] = useState(true)
-  // Follow the trace tail while the reader is pinned to the floor.
+  const modeRef = useRef<FollowMode>('following')
+  const gestureRef = useRef<'up' | 'other' | null>(null)
   const followRef = useRef(true)
+  const changeMode = useCallback((action: Parameters<typeof nextFollowMode>[1]) => {
+    modeRef.current = nextFollowMode(modeRef.current, action)
+    followRef.current = modeRef.current === 'following'
+  }, [])
+
+  useLayoutEffect(() => {
+    const el = listRef.current
+    const bookmark = viewBookmark?.('execution')
+    if (el === null || bookmark?.mode !== 'reading') return
+    modeRef.current = 'reading'
+    followRef.current = false
+    setAtBottom(false)
+    const index = bookmark.anchorKey === null ? undefined : visibleRowIndex.get(bookmark.anchorKey)
+    if (index !== undefined && virtualized) {
+      virtualizer.scrollToIndex(index, { align: 'start' })
+      el.scrollTop -= bookmark.anchorOffset
+    } else el.scrollTop = bookmark.scrollTop
+  }, [])
+
+  const saveBookmarkRef = useRef<() => void>(() => {})
+  saveBookmarkRef.current = () => {
+    const el = listRef.current
+    if (el === null || saveViewBookmark === undefined) return
+    const first = virtualized ? virtualizer.getVirtualItems()[0] : undefined
+    const key = first === undefined
+      ? el.querySelector<HTMLElement>('[data-execution-row-key]')?.dataset.executionRowKey ?? null
+      : visibleRows[first.index]?.key ?? null
+    saveViewBookmark('execution', {
+      mode: modeRef.current === 'following' ? 'following' : 'reading',
+      anchorKey: key,
+      anchorOffset: first === undefined ? 0 : first.start - el.scrollTop,
+      scrollTop: el.scrollTop,
+    })
+  }
+  useLayoutEffect(() => () => { saveBookmarkRef.current() }, [])
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current
@@ -156,13 +243,18 @@ export function ExecutionView({
   const scrollToKey = useCallback((key: string) => {
     const el = listRef.current
     if (el === null) return
+    if (virtualized) {
+      const index = visibleRowIndex.get(key)
+      if (index !== undefined) virtualizer.scrollToIndex(index, { align: 'center' })
+      return
+    }
     for (const row of el.querySelectorAll<HTMLElement>('[data-execution-row-key]')) {
       if (row.dataset.executionRowKey !== key) continue
       /* v8 ignore next -- jsdom lacks scrollIntoView; browsers always have it. */
       if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' })
       return
     }
-  }, [])
+  }, [virtualized, visibleRowIndex, virtualizer])
 
   // Own scrollport height; re-measure on resize.
   useEffect(() => {
@@ -185,9 +277,58 @@ export function ExecutionView({
     /* v8 ignore next -- ref-null guard: the handler only fires while mounted. */
     if (el === null) return
     const floor = isAtScrollFloor(el.scrollTop, el.scrollHeight, el.clientHeight, FOLLOW_THRESHOLD)
-    followRef.current = floor
-    setAtBottom(floor)
+    if (modeRef.current === 'jumping' && floor) changeMode('jump-complete')
+    else if (gestureRef.current !== null) {
+      changeMode(gestureRef.current === 'up' ? 'reader-left' : floor ? 'reader-at-floor' : 'reader-left')
+    }
+    gestureRef.current = null
+    setAtBottom(modeRef.current === 'following')
+    if (promptFrame.current !== null) cancelAnimationFrame(promptFrame.current)
+    promptFrame.current = requestAnimationFrame(() => {
+      promptFrame.current = null
+      const key = virtualized
+        ? visibleRows[virtualizer.getVirtualItems()[0]?.index ?? 0]?.key
+        : [...el.querySelectorAll<HTMLElement>('[data-execution-row-key]')]
+          .find(row => row.getBoundingClientRect().bottom >= el.getBoundingClientRect().top)?.dataset.executionRowKey
+      const event = key === undefined ? undefined : byKey.get(key)
+      setActivePrompt(modeRef.current === 'following'
+        ? prompts.at(-1)?.key ?? null
+        : event === undefined ? null : activePromptAtSeq(prompts, event.seq))
+    })
+  }, [changeMode, virtualized, visibleRows, virtualizer, byKey, prompts])
+
+  useEffect(() => () => {
+    if (promptFrame.current !== null) cancelAnimationFrame(promptFrame.current)
   }, [])
+
+  useEffect(() => {
+    if (pendingPrompt.current === null) return
+    const key = pendingPrompt.current
+    pendingPrompt.current = null
+    scrollToKey(key)
+  }, [visibleRows, scrollToKey])
+
+  const selectPrompt = useCallback((key: string) => {
+    changeMode('reader-left')
+    setAtBottom(false)
+    setActivePrompt(key)
+    pendingPrompt.current = visibleRowIndex.has(key) ? null : key
+    setFilter('all')
+    setQuery('')
+    scrollToKey(key)
+  }, [changeMode, scrollToKey, visibleRowIndex])
+
+  const onReaderGesture = useCallback((up: boolean) => {
+    gestureRef.current = up ? 'up' : 'other'
+    if (modeRef.current === 'jumping') {
+      changeMode('jump-interrupted')
+      setAtBottom(false)
+    }
+    else if (up) {
+      changeMode('reader-left')
+      setAtBottom(false)
+    }
+  }, [changeMode])
 
   // Follow the trace tail while the reader is pinned: re-scroll whenever the
   // flow grows — a new row (visibleKeys.length) or a scrollport resize that
@@ -201,9 +342,19 @@ export function ExecutionView({
   }, [visibleKeys.length, viewport])
 
   const jumpToLatest = useCallback(() => {
-    followRef.current = true
-    scrollToBottom()
-  }, [scrollToBottom])
+    const el = listRef.current
+    if (el === null) return
+    gestureRef.current = null
+    changeMode('jump')
+    const reducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion || typeof el.scrollTo !== 'function') {
+      scrollToBottom()
+      changeMode('jump-complete')
+      return
+    }
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [scrollToBottom, changeMode])
 
   // One-shot inspect handoff: reveal and expand the addressed tool call.
   useEffect(() => {
@@ -293,6 +444,11 @@ export function ExecutionView({
           ))}
         </div>
         <div className={css.actions}>
+          {hasMore && (
+            <button type="button" className={css.toolButton} disabled={loadingOlder} onClick={loadOlder}>
+              {loadingOlder ? t('loading') : t('chat.loadOlder')}
+            </button>
+          )}
           <button type="button" className={css.toolButton} onClick={expandAll} aria-label={t('execution.expandAll')}>
             {t('execution.expandAll')}
           </button>
@@ -306,18 +462,50 @@ export function ExecutionView({
         className={css.list}
         data-testid="execution-list"
         onScroll={onScroll}
+        onWheel={(event) => { onReaderGesture(event.deltaY < 0) }}
+        onTouchStart={() => { onReaderGesture(false) }}
+        onPointerDown={() => { onReaderGesture(false) }}
+        onKeyDown={(event) => {
+          if (['ArrowUp', 'PageUp', 'Home', 'ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) {
+            onReaderGesture(['ArrowUp', 'PageUp', 'Home'].includes(event.key))
+          }
+        }}
+        tabIndex={0}
       >
-        <div className={css.flow}>
-          {visibleKeys.map(key => (
+        <PromptRail
+          entries={prompts}
+          activeKey={activePrompt ?? prompts.at(-1)?.key ?? null}
+          onSelect={selectPrompt}
+          navLabel={t('promptRail.label')}
+          label={(index, preview) => t('promptRail.prompt', { index: index + 1, preview })}
+          older={hasMore ? { label: t('promptRail.older'), loading: loadingOlder, onLoad: loadOlder } : undefined}
+        />
+        <div className={css.flow} style={virtualized ? { height: virtualizer.getTotalSize(), position: 'relative' } : undefined}>
+          {(virtualized ? virtualizer.getVirtualItems().flatMap((item) => {
+            const row = visibleRows[item.index]
+            return row === undefined ? [] : [{ row, index: item.index, start: item.start }]
+          })
+            : visibleRows.map((row, index) => ({ row, index, start: 0 }))).map(({ row, index, start }) => row.kind === 'group' ? (
             <div
-              key={key}
+              key={row.key}
+              ref={virtualized ? virtualizer.measureElement : undefined}
+              data-index={virtualized ? index : undefined}
+              className={css.groupHeading}
+              style={virtualized ? { position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${start}px)` } : undefined}
+            >{t('execution.group.turn', { number: row.number })}</div>
+          ) : (
+            <div
+              key={row.key}
+              ref={virtualized ? virtualizer.measureElement : undefined}
+              data-index={virtualized ? index : undefined}
               className={css.rowSlot}
-              data-execution-row-key={key}
+              data-execution-row-key={row.key}
+              style={virtualized ? { position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${start}px)` } : undefined}
             >
               <ExecutionEventRow
-                nodeKey={key}
-                expanded={effectiveExpanded(key)}
-                onToggle={() => { toggleRow(key) }}
+                nodeKey={row.key}
+                expanded={effectiveExpanded(row.key)}
+                onToggle={() => { toggleRow(row.key) }}
                 owner={owner}
                 useSession={useSession}
                 useSessions={useSessions}

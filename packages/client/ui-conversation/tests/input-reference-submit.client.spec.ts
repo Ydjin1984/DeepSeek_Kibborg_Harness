@@ -253,4 +253,39 @@ describe('submit transaction hardening', () => {
     shell.insertText(' plain ', { start: 0, end: 0, draftRev: shell.snapshot.draftRev })
     expect(track).not.toHaveBeenCalled()
   })
+
+  it('sends a fenced occurrence as literal code without its structured payload', async () => {
+    const serializeRef = vi.fn(() => Promise.resolve('RESOLVED'))
+    const sink = vi.fn(() => Promise.resolve<SubmitOutcome>({ kind: 'success' }))
+    const inputTriggers = {
+      serializeReference: serializeRef,
+      track: vi.fn(),
+    } as unknown as InputTriggerController
+
+    const shell = new SessionInputShell({
+      actx: {} as ClientContext,
+      inputTriggers: () => inputTriggers,
+      defaultSink: sink,
+      commandImages,
+      commandFiles,
+    })
+    chip(shell)
+    expect(shell.snapshot.draft).toBe('@Research ')
+    // Wrapping an existing chip in a fence demotes it to literal draft text.
+    shell.insertText('```\n', { start: 0, end: 0, draftRev: shell.snapshot.draftRev })
+    const chipEnd = 4 + '@Research '.length
+    shell.insertText('\n```', { start: chipEnd, end: chipEnd, draftRev: shell.snapshot.draftRev })
+    expect(shell.snapshot.draft).toBe('```\n@Research \n```')
+    expect(shell.snapshot.occurrences).toHaveLength(0)
+
+    shell.submit('queue')
+    await vi.waitFor(() => {
+      // The display text stays byte-exact inside the fence; the serializer
+      // never runs, so no model form replaces the chip.
+      expect(sink).toHaveBeenCalledWith(
+        '```\n@Research \n```', [], [], 'queue', expect.any(AbortSignal),
+      )
+    })
+    expect(serializeRef).not.toHaveBeenCalled()
+  })
 })

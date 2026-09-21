@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { CodeBlock } from '../src/markdown/CodeBlock.tsx'
-import { highlightToHtml } from '../src/markdown/highlight.ts'
+import { highlightToHtml, inferCodeLanguage } from '../src/markdown/highlight.ts'
 
 afterEach(cleanup)
 
@@ -17,6 +17,11 @@ beforeEach(() => {
 })
 
 describe('highlightToHtml', () => {
+  it('recognizes unlabeled source while leaving prose diagrams plain', () => {
+    expect(inferCodeLanguage('// open database\nfunc Open(path string) (*Store, error) {\n return nil, nil\n}')).toBe('go')
+    expect(inferCodeLanguage('const value: number = 1')).toBe('typescript')
+    expect(inferCodeLanguage('MCP client → nginx → home machine')).toBeUndefined()
+  })
   it('highlights a registered grammar into css-variables token spans', () => {
     const html = highlightToHtml('const x: number = 1', 'typescript')
     expect(html).toContain('pre class="shiki css-variables"')
@@ -60,6 +65,16 @@ describe('CodeBlock', () => {
     expect(pre!.querySelectorAll('span[style]').length).toBeGreaterThan(1)
   })
 
+  it('keeps copy chrome before a numbered highlighted code body', () => {
+    const view = render(<CodeBlock code={'const value = 1\nreturn value\n'} inferLanguage lineNumbers />)
+    const block = view.container.querySelector('.md-code-block')!
+    expect(block.children[0]?.querySelector('button')?.textContent).toBe('复制')
+    expect(block.children[1]?.querySelector('pre.shiki')).not.toBeNull()
+    expect(block.querySelectorAll('pre.shiki .line')).toHaveLength(2)
+    expect(block.className).toContain('numbered')
+    expect(block.textContent).toContain('typescript')
+  })
+
   it('renders the plain arm for an unknown language with the text verbatim', () => {
     const view = render(<CodeBlock code={'IDENTIFICATION DIVISION.'} lang="cobol" />)
     expect(view.container.querySelector('pre.shiki')).toBeNull()
@@ -93,6 +108,14 @@ describe('CodeBlock', () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1000)
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
+  })
+
+  it('copies an authored terminal newline when the caller requests exact source', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<CodeBlock code={'const a = 1\n'} lang="ts" preserveTrailingNewline />)
+    fireEvent.click(screen.getByRole('button', { name: '复制' }))
+    expect(writeText).toHaveBeenCalledWith('const a = 1\n')
   })
 
   it('does not claim success when clipboard.writeText rejects', async () => {

@@ -83,6 +83,9 @@ export interface ExecutionEvent {
   readonly title: string
   /** One-line secondary summary (path, command, first result line). */
   readonly description: string
+  /** Engine-registered turn and step coordinates, when the node carries them. */
+  readonly turn?: number
+  readonly step?: number
   /** Wire tool name for tool-backed events. */
   readonly toolName?: string
   /** Primary touched path for file/tool events. */
@@ -93,23 +96,6 @@ export interface ExecutionEvent {
   readonly deletions?: number
   /** Settled call duration (result time minus call time). */
   readonly durationMs?: number
-}
-
-/** Default collapsed state of one event kind: heavy technical rows start folded.
- * @param kind - the event type identifier.
- * @returns true for user, steering, context, assistant-step, and command kinds.
- */
-export function isDefaultExpanded(kind: string): boolean {
-  switch (kind) {
-    case 'user':
-    case 'steering':
-    case 'context':
-    case 'assistant-step':
-    case 'command':
-      return true
-    default:
-      return false
-  }
 }
 
 /** First non-empty line of a string, capped for one-line headers. */
@@ -196,7 +182,7 @@ function argsPath(argsRaw: string): string | undefined {
     const parsed: unknown = JSON.parse(argsRaw)
     if (typeof parsed !== 'object' || parsed === null) return undefined
     const record = parsed as Record<string, unknown>
-    for (const key of ['path', 'filePath', 'file', 'target', 'filename', 'name']) {
+    for (const key of ['path', 'file_path', 'filePath', 'file', 'target', 'filename', 'name']) {
       const value = record[key]
       if (typeof value === 'string' && value.trim() !== '') return value
     }
@@ -312,11 +298,24 @@ function turnDurationText(node: ChatNode<'turn-tail'>): string {
  * @returns the timeline event model for that node.
  */
 export function executionEventFromNode(node: ChatNode): ExecutionEvent {
+  const coordinates = (() => {
+    switch (node.kind) {
+      case 'assistant-step': return { turn: node.data.turn, step: node.data.step }
+      case 'tool-call': return 'kind' in node.data.root
+        ? {} : { turn: node.data.root.turn, step: node.data.root.step }
+      case 'model-retry': return { turn: node.data.current.turn, step: node.data.current.step }
+      case 'turn-error': return { turn: node.data.turn, step: node.data.step }
+      case 'turn-max-tokens': return { turn: node.data.turn, step: node.data.step }
+      case 'turn-tail': return { turn: node.data.turn }
+      default: return {}
+    }
+  })()
   const base = {
     key: node.key,
     seq: node.anchorSeq,
     time: eventTime(node),
     kind: node.kind,
+    ...coordinates,
   }
   switch (node.kind) {
     case 'user':

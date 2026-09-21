@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TrajectoryTable } from '../src/client/TrajectoryTable.tsx'
 import type { TrajectoryTurnModel } from '../src/client/layout.ts'
+import type { ViewScrollBookmark } from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo')
 })
 
@@ -371,6 +373,7 @@ describe('TrajectoryTable', () => {
     )
     expect(tablePane.scrollTop).toBe(260)
 
+    fireEvent.wheel(tablePane, { deltaY: -80 })
     tablePane.scrollTop = 20
     fireEvent.scroll(tablePane)
     scrollHeight = 320
@@ -390,6 +393,69 @@ describe('TrajectoryTable', () => {
       />,
     )
     expect(tablePane.scrollTop).toBe(20)
+  })
+
+  it('pauses tail follow after a one-pixel upward wheel gesture', () => {
+    const view = render(<TrajectoryTable turns={TURNS} {...FOLD_PROPS} />)
+    const pane = screen.getByRole('table').parentElement as HTMLElement
+    let scrollHeight = 200
+    Object.defineProperties(pane, {
+      clientHeight: { configurable: true, get: () => 100 },
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+    })
+    pane.scrollTop = 100
+    fireEvent.scroll(pane)
+    fireEvent.wheel(pane, { deltaY: -1 })
+    pane.scrollTop = 99
+    fireEvent.scroll(pane)
+    scrollHeight = 260
+    view.rerender(<TrajectoryTable turns={[...TURNS, {
+      turn: 2, groups: [{ title: 'Step 1', cells: [{ index: 4, kind: 'message', text: 'later', timeSeconds: 0.1 }] }],
+    }]} {...FOLD_PROPS} />)
+    expect(pane.scrollTop).toBe(99)
+  })
+
+  it('follows a growing streaming row after its measured height changes, only while following', () => {
+    let resized: (() => void) | undefined
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resized = callback }
+      observe() {}
+      disconnect() { disconnect() }
+    })
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    let height = 200
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+      height, width: 100, top: 0, bottom: height, left: 0, right: 100, x: 0, y: 0,
+      toJSON: () => {},
+    }))
+    const view = render(<TrajectoryTable turns={TURNS} {...FOLD_PROPS} />)
+    const pane = screen.getByRole('table').parentElement as HTMLElement
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, get: () => height })
+    height = 240
+    resized?.()
+    resized?.()
+    expect(frames).toHaveLength(1)
+    frames.shift()?.(0)
+    expect(pane.scrollTop).toBe(240)
+
+    fireEvent.wheel(pane, { deltaY: -1 })
+    pane.scrollTop = 80
+    fireEvent.scroll(pane)
+    view.rerender(<TrajectoryTable turns={TURNS} streamingCells={[{
+      ...TURNS[0]!.groups[0]!.cells[0]!, text: 'more streaming text',
+    }]} {...FOLD_PROPS} />)
+    height = 280
+    resized?.()
+    frames.shift()?.(0)
+    expect(pane.scrollTop).toBe(80)
+    view.unmount()
+    expect(disconnect).toHaveBeenCalled()
   })
 
   it('preserves the visible anchor when the last older page disables virtualization', async () => {
@@ -615,6 +681,48 @@ describe('TrajectoryTable', () => {
 
     expect(scrollTo).not.toHaveBeenCalled()
     expect(screen.getByText('Context 1 streaming update')).toBeTruthy()
+  })
+
+  it('restores a virtual reading position by a stable row key after earlier records arrive', async () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(600)
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true, value: scrollTo,
+    })
+    const cells = Array.from({ length: 500 }, (_, index) => ({
+      index: index + 1,
+      sourceSeq: index + 1,
+      kind: 'context' as const,
+      text: `Context ${index + 1}`,
+      timeSeconds: 0,
+    }))
+    const turns: readonly TrajectoryTurnModel[] = [{
+      turn: 1, groups: [{ title: 'Context', cells }],
+    }]
+    let bookmark: ViewScrollBookmark | undefined
+    const first = render(<TrajectoryTable turns={turns} saveViewBookmark={(value) => { bookmark = value }} {...FOLD_PROPS} />)
+    const pane = screen.getByRole('table').parentElement as HTMLElement
+    pane.scrollTop = 9_000
+    fireEvent.wheel(pane, { deltaY: -1 })
+    fireEvent.scroll(pane)
+    await waitFor(() => {
+      expect(Number(first.container.querySelector('tr[data-virtual-position]')?.getAttribute('data-virtual-position')))
+        .toBeGreaterThan(0)
+    })
+    first.unmount()
+    expect(bookmark?.mode).toBe('reading')
+    expect(bookmark?.anchorKey).toBeTruthy()
+    scrollTo.mockClear()
+
+    render(<TrajectoryTable
+      turns={[{ turn: 0, groups: [{ title: 'Earlier', cells: [{
+        index: 0, sourceSeq: 0, kind: 'context', text: 'Earlier', timeSeconds: 0,
+      }] }] }, ...turns]}
+      viewBookmark={() => bookmark}
+      {...FOLD_PROPS}
+    />)
+    expect(scrollTo).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeTruthy()
   })
 
   it('keeps the virtual tail reachable with collapsed-summary row heights', async () => {

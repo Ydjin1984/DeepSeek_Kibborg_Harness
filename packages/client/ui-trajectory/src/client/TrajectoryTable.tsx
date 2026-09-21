@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import type { ViewScrollBookmark } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { nextFollowMode, type FollowMode } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
+  IconChevronDownOutline14,
   IconChevronRightOutline14,
   IconSettingsOutline16,
   IconSparkle16,
@@ -237,6 +240,8 @@ interface OlderLoadAnchor {
   readonly historyStartSeq: number | undefined
   readonly scrollHeight: number
   readonly scrollTop: number
+  readonly rowKey: string | null
+  readonly rowOffset: number
 }
 
 function clampDetailsWidth(width: number, splitWidth: number): number {
@@ -345,6 +350,10 @@ function AssistantTimingPanel({ metrics }: { metrics: AssistantMetricDetail }) {
 
 /** Props for the trajectory ledger. */
 export interface TrajectoryTableProps {
+  /** Session-scoped reading position retained across view switches. */
+  viewBookmark?: (() => ViewScrollBookmark | undefined) | undefined
+  saveViewBookmark?: ((bookmark: ViewScrollBookmark) => void) | undefined
+  jumpLatestLabel?: string | undefined
   /** Session-global request numbers for the request groups visible in this context. */
   requestNumbers?: readonly TrajectoryRequestNumber[]
   /** Grouped records in display order. */
@@ -1691,6 +1700,7 @@ function OverviewSection({
  * @returns The ledger and an optional local record inspector.
  */
 export function TrajectoryTable({
+  viewBookmark, saveViewBookmark, jumpLatestLabel = 'Jump to latest',
   requestNumbers: sessionRequestNumbers,
   turns,
   streamingCells = [],
@@ -1726,6 +1736,10 @@ export function TrajectoryTable({
   const rootRef = useRef<HTMLDivElement>(null)
   const tablePaneRef = useRef<HTMLDivElement>(null)
   const followsTableTail = useRef(false)
+  const [atTail, setAtTail] = useState(true)
+  const followMode = useRef<FollowMode>('following')
+  const readerGesture = useRef<'up' | 'other' | null>(null)
+  const observedTop = useRef(0)
   const tableScrollInitialized = useRef(false)
   const [tableScrollReady, setTableScrollReady] = useState(false)
   const pendingScrollRecordId = useRef<string | null>(null)
@@ -1807,6 +1821,24 @@ export function TrajectoryTable({
     return indexes
   }, [projectedVirtualRows])
   const virtualItems = virtualizationEnabled ? rowVirtualizer.getVirtualItems() : []
+  const captureVirtualAnchor = (): { rowKey: string | null; rowOffset: number } => {
+    const pane = tablePaneRef.current
+    if (pane === null || !virtualizationEnabled) return { rowKey: null, rowOffset: 0 }
+    const row = rowVirtualizer.getVirtualItems().find(item => item.end > pane.scrollTop)
+    return {
+      rowKey: row === undefined ? null : virtualRowStructure[row.index]?.key ?? null,
+      rowOffset: row === undefined ? 0 : pane.scrollTop - row.start,
+    }
+  }
+  const restoreVirtualAnchor = (rowKey: string | null, rowOffset: number): boolean => {
+    if (rowKey === null || !virtualizationEnabled) return false
+    const index = virtualRowStructure.findIndex(row => row.key === rowKey)
+    if (index < 0) return false
+    rowVirtualizer.scrollToIndex(index, { align: 'start', behavior: 'auto' })
+    const pane = tablePaneRef.current
+    if (pane !== null) pane.scrollTop += rowOffset
+    return true
+  }
   const virtualTop = Math.max(0, (virtualItems[0]?.start ?? 0) - virtualScrollMargin)
   const virtualBottom = virtualItems.length === 0
     ? 0
@@ -2144,10 +2176,13 @@ export function TrajectoryTable({
     ) return
     loadingOlder.current = true
     setOlderLoading(true)
+    const { rowKey, rowOffset } = captureVirtualAnchor()
     olderLoadAnchor.current = {
       historyStartSeq,
       scrollHeight: pane.scrollHeight,
       scrollTop: pane.scrollTop,
+      rowKey,
+      rowOffset,
     }
     void onLoadOlder().then((advanced) => {
       if (!advanced) olderLoadAnchor.current = null
@@ -2161,32 +2196,112 @@ export function TrajectoryTable({
     if (pane === null) return
     const anchor = olderLoadAnchor.current
     if (anchor !== null && anchor.historyStartSeq !== historyStartSeq) {
-      if (!virtualizationEnabled) {
+      if (!restoreVirtualAnchor(anchor.rowKey, anchor.rowOffset)) {
         pane.scrollTop = anchor.scrollTop + pane.scrollHeight - anchor.scrollHeight
       }
       olderLoadAnchor.current = null
       followsTableTail.current = false
+      followMode.current = nextFollowMode(followMode.current, 'reader-left')
       return
     }
     if (!tableScrollInitialized.current) {
       if (historyLoading) return
       tableScrollInitialized.current = true
+      const bookmark = viewBookmark?.()
+      if (bookmark?.mode === 'reading') {
+        followMode.current = 'reading'
+        followsTableTail.current = false
+        setAtTail(false)
+        if (!restoreVirtualAnchor(bookmark.anchorKey, bookmark.anchorOffset)) {
+          pane.scrollTop = bookmark.scrollTop
+        }
+        observedTop.current = pane.scrollTop
+        setTableScrollReady(true)
+        return
+      }
       followsTableTail.current = true
+      setAtTail(true)
       if (virtualizationEnabled) rowVirtualizer.scrollToEnd({ behavior: 'auto' })
       else pane.scrollTop = pane.scrollHeight
+      observedTop.current = pane.scrollTop
       setTableScrollReady(true)
       return
     }
     if (!followsTableTail.current) return
     if (virtualizationEnabled) rowVirtualizer.scrollToEnd({ behavior: 'auto' })
     else pane.scrollTop = pane.scrollHeight
+    observedTop.current = pane.scrollTop
   }, [
     historyLoading,
     historyStartSeq,
     rowVirtualizer,
     virtualRowStructure,
     virtualizationEnabled,
+    viewBookmark,
   ])
+
+  const saveBookmarkRef = useRef<() => void>(() => {})
+  saveBookmarkRef.current = () => {
+    const pane = tablePaneRef.current
+    if (pane === null || saveViewBookmark === undefined) return
+    const { rowKey, rowOffset } = captureVirtualAnchor()
+    saveViewBookmark({
+      mode: followMode.current === 'following' ? 'following' : 'reading',
+      anchorKey: rowKey,
+      anchorOffset: rowOffset,
+      scrollTop: pane.scrollTop,
+    })
+  }
+  useLayoutEffect(() => () => { saveBookmarkRef.current() }, [])
+
+  const followAfterResize = useRef<() => void>(() => {})
+  followAfterResize.current = () => {
+    const pane = tablePaneRef.current
+    if (pane === null || followMode.current !== 'following') return
+    if (virtualizationEnabled) rowVirtualizer.scrollToEnd({ behavior: 'auto' })
+    else pane.scrollTop = pane.scrollHeight
+    observedTop.current = pane.scrollTop
+  }
+  useLayoutEffect(() => {
+    const table = tablePaneRef.current?.querySelector('table')
+    if (table === undefined || table === null || typeof ResizeObserver === 'undefined') return
+    let frame: number | null = null
+    let previousHeight = table.getBoundingClientRect().height
+    const observer = new ResizeObserver(() => {
+      const height = table.getBoundingClientRect().height
+      if (height === previousHeight) return
+      previousHeight = height
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        followAfterResize.current()
+      })
+    })
+    observer.observe(table)
+    return () => {
+      observer.disconnect()
+      if (frame !== null) cancelAnimationFrame(frame)
+    }
+  }, [tableScrollReady])
+
+  const jumpToTail = (): void => {
+    const pane = tablePaneRef.current
+    if (pane === null) return
+    readerGesture.current = null
+    followMode.current = nextFollowMode(followMode.current, 'jump')
+    const reducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion || typeof pane.scrollTo !== 'function') {
+      if (virtualizationEnabled) rowVirtualizer.scrollToEnd({ behavior: 'auto' })
+      else pane.scrollTop = pane.scrollHeight
+      followMode.current = nextFollowMode(followMode.current, 'jump-complete')
+      followsTableTail.current = true
+      setAtTail(true)
+      observedTop.current = pane.scrollTop
+      return
+    }
+    pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' })
+  }
 
   const olderBusy = olderHistoryLoading || olderLoading
   const showInitialLoading = historyLoading || !tableScrollReady
@@ -2200,10 +2315,38 @@ export function TrajectoryTable({
         data-trajectory-scroll=""
         onScroll={(event) => {
           const pane = event.currentTarget
-          followsTableTail.current =
-            pane.scrollHeight - pane.clientHeight - pane.scrollTop
-              <= BOTTOM_FOLLOW_THRESHOLD_PX
+          const floor = pane.scrollHeight - pane.clientHeight - pane.scrollTop <= 0.5
+          if (followMode.current === 'jumping' && floor) {
+            followMode.current = nextFollowMode(followMode.current, 'jump-complete')
+            followsTableTail.current = true
+            setAtTail(true)
+          }
+          if (readerGesture.current !== null) {
+            const up = readerGesture.current === 'up' || pane.scrollTop < observedTop.current - 0.5
+            followMode.current = nextFollowMode(followMode.current, up
+              ? 'reader-left' : floor ? 'reader-at-floor' : 'reader-left')
+            followsTableTail.current = followMode.current === 'following'
+            setAtTail(followsTableTail.current)
+          }
+          readerGesture.current = null
+          observedTop.current = pane.scrollTop
           requestOlder(pane, true)
+        }}
+        onWheel={(event) => {
+          readerGesture.current = event.deltaY < 0 ? 'up' : 'other'
+          if (event.deltaY < 0) {
+            followMode.current = nextFollowMode(followMode.current,
+              followMode.current === 'jumping' ? 'jump-interrupted' : 'reader-left')
+            followsTableTail.current = false
+            setAtTail(false)
+          }
+        }}
+        onTouchStart={() => { readerGesture.current = 'other' }}
+        onPointerDown={() => { readerGesture.current = 'other' }}
+        onKeyDown={(event) => {
+          if (['ArrowUp', 'PageUp', 'Home', 'ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) {
+            readerGesture.current = ['ArrowUp', 'PageUp', 'Home'].includes(event.key) ? 'up' : 'other'
+          }
         }}
         onClick={(event) => {
           if (event.target === event.currentTarget) clearAllSelections()
@@ -2526,6 +2669,11 @@ export function TrajectoryTable({
             )}
           </tbody>
         </table>
+        {!atTail && (
+          <button type="button" className={css.jumpLatest} aria-label={jumpLatestLabel} onClick={jumpToTail}>
+            <IconChevronDownOutline14 />
+          </button>
+        )}
       </div>
       {(selectedRequest !== null
         || promptSelected

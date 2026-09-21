@@ -223,6 +223,14 @@ describe('MarkdownText', () => {
     expect(plain.container.querySelector('pre code')?.textContent).toContain('no language here')
   })
 
+  it('highlights an unlabeled source fence in a settled assistant answer', () => {
+    const view = render(<MarkdownText text={'Explanation\n\n```\nconst answer: number = 42\n```'} />)
+    const block = view.container.querySelector('.md-code-block')!
+    expect(block.children[0]?.querySelector('button')).not.toBeNull()
+    expect(block.querySelector('pre.shiki .line')).not.toBeNull()
+    expect(block.textContent).toContain('typescript')
+  })
+
   it('streaming renders fences plain; the finalize swap highlights them', () => {
     const fence = '```ts\nconst answer = 42\n```'
     const live = render(<MarkdownText text={fence} streaming />)

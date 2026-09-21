@@ -710,6 +710,13 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
     try {
       const { size: before } = await handle.stat()
+      // `open(path, 'a')` silently recreates a deleted log without its header
+      // line, leaving an artifact every later read rejects. Refuse loudly
+      // instead of appending a header-less batch.
+      if (before === 0) {
+        await closeAppendHandle()
+        throw new Error(`session log "${path}" was recreated empty; refusing to append without a header`)
+      }
       try {
         await handle.writeFile(content)
         await handle.sync()
@@ -923,7 +930,13 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
 
   /** Reject a root that already belongs to the other physical encoding. */
   private ensureRootEncoding(): Promise<void> {
-    this.rootEncodingCheck ??= this.checkRootEncoding()
+    this.rootEncodingCheck ??= this.checkRootEncoding().catch((error: unknown) => {
+      // A transient EACCES/EIO on the first probe must not poison every later
+      // read with the same stale rejection; clear the cached promise so the
+      // next call re-probes the filesystem.
+      this.rootEncodingCheck = undefined
+      throw error
+    })
     return this.rootEncodingCheck
   }
 

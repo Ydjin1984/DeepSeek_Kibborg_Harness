@@ -324,6 +324,104 @@ describe('mux live view computation', () => {
     }
   })
 
+  it('caps a history page by event count when fewer than maxMessages exist', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    appendUserText(session, 'prompt')
+    for (let index = 0; index < 500; index++) {
+      session.append('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index, text: 'x' },
+      })
+    }
+    const response = await api.sessions.history({
+      rpcId: RpcId('t-hist-event-cap'),
+      payload: { sessionId: session.id, maxMessages: 50 },
+    })
+    if (!response.result.ok) throw new Error('unreachable')
+    expect(response.result.value.events.length).toBeLessThanOrEqual(400)
+    expect(response.result.value.hasMore).toBe(true)
+  })
+
+  it('does not start a capped page on orphan chunks of a finalized message', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    appendUserText(session, 'prompt')
+    const sources: number[] = []
+    for (let index = 0; index < 500; index++) {
+      sources.push(session.append('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index, text: 'x' },
+      }).seq)
+    }
+    const message = session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'x'.repeat(sources.length) }],
+        source: { kind: 'model', provider: 'p', model: 'm' },
+      }),
+    }, { surfaceOp: 'append', sourceEventSeqs: sources })
+    const response = await api.sessions.history({
+      rpcId: RpcId('t-hist-event-cap-align'),
+      payload: { sessionId: session.id, maxMessages: 50 },
+    })
+    if (!response.result.ok) throw new Error('unreachable')
+    const page = response.result.value.events.map(entry => entry.event)
+    expect(page[0]?.type).toBe('assistant/message')
+    expect(page[0]?.seq).toBe(message.seq)
+    expect(page.some(event => event.type === 'assistant/chunk')).toBe(false)
+    expect(response.result.value.hasMore).toBe(true)
+  })
+
+  it('drops an incomplete oldest group when a later complete turn still fits', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    appendUserText(session, 'first')
+    const firstSources: number[] = []
+    for (let index = 0; index < 450; index++) {
+      firstSources.push(session.append('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index, text: 'a' },
+      }).seq)
+    }
+    session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'first-reply' }],
+        source: { kind: 'model', provider: 'p', model: 'm' },
+      }),
+    }, { surfaceOp: 'append', sourceEventSeqs: firstSources })
+    const turn2 = session.append('turn/start', { turn: 2 })
+    appendUserText(session, 'second')
+    appendAssistantText(session, 'second-reply', 1)
+    const response = await api.sessions.history({
+      rpcId: RpcId('t-hist-event-cap-drop-oldest'),
+      payload: { sessionId: session.id, maxMessages: 50 },
+    })
+    if (!response.result.ok) throw new Error('unreachable')
+    const page = response.result.value.events.map(entry => entry.event)
+    expect(page[0]?.seq).toBe(turn2.seq)
+    expect(page.some(event => event.seq === firstSources[0])).toBe(false)
+    expect(page.some(event => event.type === 'user/message')).toBe(true)
+    expect(response.result.value.hasMore).toBe(true)
+  })
+
   it('drops a disposed session from the live open-call table (result after dispose gets no view)', async () => {
     const { ctx } = await harness()
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })

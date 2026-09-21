@@ -139,7 +139,6 @@ export class SessionProjectionCache extends Service {
    */
   async write(session: Session): Promise<void> {
     const rows = this.ctx.sessionProjections.checkpoint(session)
-    this.markClean(session)
     // Durability barrier: the checkpoint cut was taken above, so flushing
     // AFTER it guarantees every event inside the cut is durably logged
     // before the cache row lands — a crash can leave the cache behind the
@@ -149,6 +148,9 @@ export class SessionProjectionCache extends Service {
     // any residual overreach is caught by the cold read's anchored floor.
     if (this.ctx.sessions.get(session.id) === session) await this.ctx.sessions.flush(session)
     await this.put(session.id, identityOf(session.header), rows)
+    // Clear bookkeeping only AFTER the durable write lands: a failed put must
+    // leave the session dirty so the next mandatory/throttle point retries it.
+    this.markClean(session)
   }
 
   /**
@@ -268,7 +270,20 @@ export class SessionProjectionCache extends Service {
     if (detached === undefined) {
       throw new TypeError('projection checkpoint is not losslessly JSON-serializable (a unit state violates the plain-JSON contract)')
     }
-    await this.requireTable().put(id, { identity, rows: detached as CheckpointRecord['rows'] })
+    const next: CheckpointRecord = { identity, rows: detached as CheckpointRecord['rows'] }
+    const table = this.requireTable()
+    const existing = table.get(id)
+    // First write for this id, or a record bound to a different lifecycle:
+    // replace whole-record (there is nothing fresher to protect).
+    if (existing === undefined || !identityMatches(existing.identity, identity)) {
+      await table.put(id, next)
+      return
+    }
+    // Same lifecycle: two overlapping write() calls can land out of order
+    // because the durability barrier awaits between cut and put. An atomic
+    // read-modify-write keeps the newest cut (highest max watermark) in the
+    // domain instead of letting a stale cut clobber it.
+    await table.update(id, current => (maxSeqOf(next.rows) >= maxSeqOf(current.rows) ? next : current))
   }
 
   /** Fail-soft {@link put}: cache writes must never fail their caller's read or event path. */
@@ -295,6 +310,16 @@ function identityOf(header: SessionHeader): CheckpointIdentity {
 /** Whether a stored record's bound identity names the caller's lifecycle. */
 function identityMatches(stored: CheckpointIdentity, expected: CheckpointIdentity): boolean {
   return stored.createdAt === expected.createdAt && stored.cwd === expected.cwd
+}
+
+/** Highest row watermark across a checkpoint; -1 for an empty row set. */
+function maxSeqOf(rows: CheckpointRecord['rows']): number {
+  let max = -1
+  for (const key of Object.keys(rows)) {
+    const row = rows[key]
+    if (row !== undefined && row.seq > max) max = row.seq
+  }
+  return max
 }
 
 export default SessionProjectionCache

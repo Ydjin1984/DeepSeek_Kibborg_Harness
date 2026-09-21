@@ -12,6 +12,7 @@ import type {
   ArbitrateKey, ArbitrateOutcome, CommandClaim, ConsumeTokenRequest, PickOutcome,
   ReferenceInsert, InputTriggerController, SubmitImageAttachment, SubmitOutcome, TokenSpan,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import { scanFencedSegments } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   DraftAttachmentId, EditRange, EditSelection, InputActions, InputEffect, InputNotice, InputState,
   PasteComponent, QueuedMessage, SessionInput, SubmitAttempt,
@@ -553,7 +554,12 @@ export class SessionInputShell implements SessionInput {
   private sinkSerialized(attempt: SubmitAttempt, draft: string, mode: InputSubmitMode): void {
     const imageIds = [...this.imageIds]
     const fileIds = [...this.fileIds]
+    // An occurrence the user fenced is literal code: its display text stays
+    // in the draft and no structured payload expands over it.
+    const code = scanFencedSegments(draft)
+      .flatMap(segment => segment.kind === 'code' ? [[segment.fenceStart, segment.fenceEnd] as const] : [])
     const occurrences = this.core.state.occurrences
+      .filter(o => !code.some(([start, end]) => o.offset < end && o.offset + o.length > start))
     if (occurrences.length === 0) {
       this.settleSubmit(
         attempt,

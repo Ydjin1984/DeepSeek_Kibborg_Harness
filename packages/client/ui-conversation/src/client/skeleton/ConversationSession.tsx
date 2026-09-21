@@ -1,9 +1,10 @@
 /** Strict per-session header/body content inserted into the resident conversation layout. */
 
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import clsx from 'clsx'
 import type { SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../contract/chat-nodes.ts'
+import type { ViewScrollBookmark } from '../contract/bottom-follow.ts'
 import type {
   ConversationSessionHeaderSlotProps, ConversationSessionSlotProps, RenderChatNode, RenderMessageImages,
 } from '../contract/slots.ts'
@@ -158,6 +159,11 @@ export function ConversationSession({
   useSyncExternalStore(views.subscribe, views.version)
   const tabs = views.list()
   const selectedId = useStore(s => s.view)
+  const viewBookmarks = useMemo(() => new Map<string, ViewScrollBookmark>(), [sessionId])
+  const viewBookmark = useCallback((viewId: string) => viewBookmarks.get(viewId), [viewBookmarks])
+  const saveViewBookmark = useCallback((viewId: string, bookmark: ViewScrollBookmark) => {
+    viewBookmarks.set(viewId, bookmark)
+  }, [viewBookmarks])
   const active = resolveActiveView(tabs, selectedId)
   const composerPhase = useSession(s => s.composerPhase)
   const blank = useSession(s => s.blank)
@@ -199,6 +205,8 @@ export function ConversationSession({
   return (
     <div className={css.viewArea}>
       {active !== undefined && renderSlot('conversation.view', {
+        viewBookmark,
+        saveViewBookmark,
         inspect,
         onInspectDone: () => { actions.setInspect(null) },
         renderChatNode,

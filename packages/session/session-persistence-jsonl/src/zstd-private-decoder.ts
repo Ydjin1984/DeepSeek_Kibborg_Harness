@@ -3,8 +3,8 @@
  * @module dsh-session-persistence-jsonl/zstd-private-decoder
  */
 
-import { constants as bufferConstants } from 'node:buffer'
 import { createZstdDecompress } from 'node:zlib'
+import { MAX_FRAME_PLAINTEXT_BYTES } from './zstd.ts'
 import type { ZstdFrameDecoder, ZstdFrameRange } from './zstd.ts'
 
 const DECODE_CHUNK_SIZE = 1024 * 1024
@@ -146,9 +146,8 @@ export class NodePrivateZstdFrameDecoder implements ZstdFrameDecoder {
       const produced = this.output.length - outputAfter
       if (produced > 0) {
         outputBytes += produced
-        /* v8 ignore next -- Buffer cannot materialize a frame beyond its own process-wide maximum length. */
-        if (outputBytes > bufferConstants.MAX_LENGTH) {
-          throw new Error(`Zstandard frame output exceeds ${bufferConstants.MAX_LENGTH} bytes`)
+        if (outputBytes > MAX_FRAME_PLAINTEXT_BYTES) {
+          throw new Error(`Zstandard frame output exceeds ${MAX_FRAME_PLAINTEXT_BYTES} bytes`)
         }
       }
 

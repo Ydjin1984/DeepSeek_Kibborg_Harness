@@ -38,43 +38,51 @@ export function TelegramMirrorButton(props: TelegramMirrorButtonProps) {
   const [state, setState] = useState<MirrorState>('loading')
 
   useEffect(() => {
-    let live = true
+    const abort = new AbortController()
     const probe = async (): Promise<void> => {
-      const response = await api.status({ sessionId })
-      if (!live) return
-      if (!response.result.ok) {
+      try {
+        const response = await api.status({ sessionId }, abort.signal)
+        if (abort.signal.aborted) return
+        if (!response.result.ok) {
+          setState('unconfigured')
+          return
+        }
+        if (!response.result.value.configured) {
+          setState('unconfigured')
+          return
+        }
+        setState(response.result.value.attached ? 'on' : 'off')
+      } catch (error: unknown) {
+        if (abort.signal.aborted || isAbortError(error)) return
         setState('unconfigured')
-        return
       }
-      if (!response.result.value.configured) {
-        setState('unconfigured')
-        return
-      }
-      setState(response.result.value.attached ? 'on' : 'off')
     }
     void probe()
     return () => {
-      live = false
+      abort.abort()
     }
-    // The api face and session id are stable for the mounted entry.
-  }, [])
+  }, [api, sessionId])
 
   const disabled = removed || state === 'loading' || state === 'unconfigured'
   const title = state === 'on' ? t('titleActive') : (state === 'unconfigured' ? t('notConfiguredTitle') : t('title'))
 
   const toggle = async (): Promise<void> => {
-    if (state === 'on') {
-      await api.detach({ sessionId })
-      setState('off')
-      return
-    }
-    if (state === 'off') {
-      const response = await api.attach({ sessionId })
-      if (!response.result.ok) {
-        setState(response.result.error.code === 'telegram-not-configured' ? 'unconfigured' : 'off')
+    try {
+      if (state === 'on') {
+        await api.detach({ sessionId })
+        setState('off')
         return
       }
-      setState('on')
+      if (state === 'off') {
+        const response = await api.attach({ sessionId })
+        if (!response.result.ok) {
+          setState(response.result.error.code === 'telegram-not-configured' ? 'unconfigured' : 'off')
+          return
+        }
+        setState('on')
+      }
+    } catch (error: unknown) {
+      if (isAbortError(error)) return
     }
   }
 
@@ -96,4 +104,9 @@ export function TelegramMirrorButton(props: TelegramMirrorButtonProps) {
       </svg>
     </button>
   )
+}
+
+/** Fetch abort from unmount or a cancelled in-flight RPC — not a configuration failure. */
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError'
 }

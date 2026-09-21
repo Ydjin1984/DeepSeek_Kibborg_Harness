@@ -32,7 +32,7 @@ import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
-const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], fences: [], hint: null }
 
 export type InputBarProps = ComposerBarProps
 
@@ -567,9 +567,15 @@ export function InputBar({
     type Boundary =
       | { at: number; kind: 'chip'; chip: (typeof deco.chips)[number] }
       | { at: number; kind: 'text-ref'; ref: (typeof deco.textRefs)[number] }
+      | { at: number; end: number; kind: 'code-fence' | 'code-content' }
     const boundaries: Boundary[] = [
       ...deco.chips.map(chip => ({ at: chip.offset, kind: 'chip' as const, chip })),
       ...deco.textRefs.map(ref => ({ at: ref.start, kind: 'text-ref' as const, ref })),
+      ...deco.fences.flatMap(fence => [
+        { at: fence.fenceStart, end: fence.contentStart, kind: 'code-fence' as const },
+        { at: fence.contentStart, end: fence.contentEnd, kind: 'code-content' as const },
+        { at: fence.contentEnd, end: fence.fenceEnd, kind: 'code-fence' as const },
+      ]).filter(range => range.at < range.end),
     ].sort((a, b) => a.at - b.at)
     for (const b of boundaries) {
       if (b.at < cursor) continue // claim-token overlap: the leading mark wins
@@ -598,7 +604,7 @@ export function InputBar({
           </span>,
         )
         cursor = chip.offset + chip.length
-      } else {
+      } else if (b.kind === 'text-ref') {
         // Plain-range highlight: the glyphs stay the
         // textarea's (advance untouched); the mark paints the chip look.
         const text = draft.slice(b.ref.start, b.ref.end)
@@ -618,6 +624,17 @@ export function InputBar({
           </mark>,
         )
         cursor = b.ref.end
+      } else {
+        backdrop.push(
+          <span
+            key={`${b.kind}-${b.at}`}
+            className={b.kind === 'code-fence' ? css.codeFence : css.codeContent}
+            data-decoration={b.kind}
+          >
+            {draft.slice(b.at, b.end)}
+          </span>,
+        )
+        cursor = b.end
       }
     }
     pushPlain(draft.length)

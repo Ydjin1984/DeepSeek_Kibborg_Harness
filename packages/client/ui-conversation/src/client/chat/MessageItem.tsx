@@ -8,7 +8,8 @@ import type { ReactNode } from 'react'
 import type {
   ModelRetryNode, TurnErrorNode, UserMessageNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { CodeBlock, JsonBlock, MessageText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { scanFencedSegments } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import { ReferenceIcon } from '../contract/ReferenceIcon.tsx'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -153,7 +154,7 @@ function TurnMaxTokensItem({ t }: {
  * scan as the composer, minus the lexicon: sent tokens were validated at
  * compose time, so shape alone decorates).
  */
-function projectUserText(text: string, sessionLabels: readonly string[]): ReactNode {
+function projectUserPlainText(text: string, sessionLabels: readonly string[]): ReactNode {
   const ranges: { start: number; end: number; label: string; kind: 'session' | 'plain' }[] = []
   for (const rawLabel of [...new Set(sessionLabels)].sort((a, b) => b.length - a.length)) {
     const label = `@${rawLabel}`
@@ -212,6 +213,25 @@ function projectUserText(text: string, sessionLabels: readonly string[]): ReactN
   return <>{parts}</>
 }
 
+/** Present code cards while keeping the authored fence text in the logged message. */
+function projectUserText(text: string, sessionLabels: readonly string[], t: ChatViewSlotProps['t']): ReactNode {
+  const segments = scanFencedSegments(text)
+  if (segments.length === 1 && segments[0]?.kind === 'text') return projectUserPlainText(text, sessionLabels)
+  return <>{segments.map((segment, index) => segment.kind === 'text'
+    ? <div key={index} className={css.userText}>{projectUserPlainText(text.slice(segment.start, segment.end), sessionLabels)}</div>
+    : <CodeBlock
+      key={index}
+      code={text.slice(segment.contentStart, segment.contentEnd)}
+      lang={segment.lang ?? undefined}
+      inferLanguage
+      lineNumbers
+      className={css.userCode}
+      copyLabel={t('copy')}
+      copiedLabel={t('copied')}
+      preserveTrailingNewline
+    />)}</>
+}
+
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   content, renderMessageImages, actions, pending = false, referenceLabels = [], t,
@@ -234,7 +254,7 @@ function UserStyleBubble({
       <div className={css.userStack}>
         {renderMessageImages({ images, align: 'end' })}
         {showBubble && <div className={css.bubble}>
-          {projectUserText(text, referenceLabels)}
+          {projectUserText(text, referenceLabels, t)}
           {rest.map((block, i) => <JsonBlock key={i} label={t('message.extraBlock')} payload={block} truncatedLabel={truncated} />)}
         </div>}
         {referenceLabels.length > 0 && (

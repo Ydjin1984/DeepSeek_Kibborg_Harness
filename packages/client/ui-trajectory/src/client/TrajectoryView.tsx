@@ -1,7 +1,7 @@
 /** Trajectory view: compact summary over a turn-aware event ledger. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ConvViewProps, ViewScrollBookmark } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
   AssistantBlock, AssistantMessageNode, ConversationSnapshot,
@@ -119,7 +119,7 @@ function addUsage(
 
 export function TrajectoryView({
   useSession, useDuration, loadOlder, setActualDuration,
-  inspect, onInspectDone, t,
+  inspect, onInspectDone, t, viewBookmark, saveViewBookmark,
 }: ConvViewProps & InjectFace<TrajectoryViewInjected> & PropsLocale<'trajectory'>) {
   const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(EMPTY_TURN_IDS)
   const [collapsedAssistants, setCollapsedAssistants] =
@@ -128,6 +128,10 @@ export function TrajectoryView({
   const actualDuration = useDuration(value => value)
   const [actualTime, setActualTime] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const readBookmark = useCallback(() => viewBookmark?.('trajectory'), [viewBookmark])
+  const writeBookmark = useCallback((bookmark: ViewScrollBookmark) => {
+    saveViewBookmark?.('trajectory', bookmark)
+  }, [saveViewBookmark])
   const [searchIndex] = useState(() => new TrajectorySearchIndex())
   const [searchIndexRevision, setSearchIndexRevision] = useState(0)
   const searchIndexTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -478,6 +482,9 @@ export function TrajectoryView({
       />
       <div className={css.ledger}>
         <TrajectoryTable
+          jumpLatestLabel={t('toolbar.jumpLatest')}
+          viewBookmark={readBookmark}
+          saveViewBookmark={writeBookmark}
           requestNumbers={requestNumbers}
           turns={timelineTurns}
           streamingCells={streamingCells}

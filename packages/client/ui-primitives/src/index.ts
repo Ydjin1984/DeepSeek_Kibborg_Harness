@@ -3,6 +3,10 @@
  */
 
 export { StateDot } from './StateDot.tsx'
+export { INITIAL_FOLLOW_MODE, nextFollowMode } from './bottom-follow.ts'
+export type { FollowAction, FollowMode, ViewScrollBookmark } from './bottom-follow.ts'
+export { isFencedCodeOffset, scanFencedSegments } from './fenced-code.ts'
+export type { FencedSegment } from './fenced-code.ts'
 export type { StateDotState } from './StateDot.tsx'
 export { DisclosureRow } from './DisclosureRow.tsx'
 export type { DisclosureRowProps } from './DisclosureRow.tsx'

@@ -17,12 +17,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ConversationTimelineSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
+import { activePromptAtSeq, promptEntries } from '../contract/prompt-nav.ts'
+import { PromptRail } from '../skeleton/PromptRail.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
-const FOLLOW_THRESHOLD = 24
+const FOLLOW_THRESHOLD = 1
 
 /** Active column host when present; otherwise the view-local scroller. */
 function scrollerOf(from: HTMLElement): HTMLElement {
@@ -162,10 +164,11 @@ function TurnStatus({ startTime, t }: {
  */
 export function ChatView({
   useSession, useSessions, useStore, sessionId, openFile, loadOlder, inspectCall, forkAt,
-  fileMentions, renderChatNode, renderMessageImages, t,
+  fileMentions, renderChatNode, renderMessageImages, t, viewBookmark, saveViewBookmark,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
+  const prompts = useMemo(() => promptEntries({ order, nodes: nodeStore }), [order, nodeStore])
   const timeline = useSession(s => s.chat.timeline)
   const inbox = useSession(s => s.queue)
   // Workspace root off the session list row: path summaries display relative to it.
@@ -220,7 +223,9 @@ export function ChatView({
   const listRef = useRef<HTMLDivElement | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
   const atBottomRef = useRef(true)
+  const jumpingRef = useRef(false)
   const [atBottom, setAtBottom] = useState(true)
+  const [activePrompt, setActivePrompt] = useState<string | null>(null)
   /** Last position delivered or written on the main thread. */
   const observedTopRef = useRef(0)
   /** Paging anchor: semantic row/position at click, updated by reader scrolls
@@ -228,7 +233,6 @@ export function ChatView({
   const anchorRef = useRef<PagingAnchor | null>(null)
   const firstSeqRef = useRef<number | null>(null)
   const openedRef = useRef(false)
-  const lastKeyRef = useRef<string | null>(null)
   const lastSteeringIdRef = useRef<string | null>(null)
   /** Flow tip signature — follow-scroll only when this moves, never on a
    *  scroll-driven at-bottom chrome re-render (which would snap inertial
@@ -238,16 +242,29 @@ export function ChatView({
   const firstKey = order[0]
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
   const lastKey = order.at(-1) ?? null
-  const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
   const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
   const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
+    jumpingRef.current = false
     anchorRef.current = null
     el.scrollTop = el.scrollHeight
     observedTopRef.current = el.scrollTop
     atBottomRef.current = true
     setAtBottom(true)
+    setActivePrompt(prompts.at(-1)?.key ?? null)
+  }
+
+  const jumpToBottom = (el: HTMLElement): void => {
+    const reducedMotion = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion || typeof el.scrollTo !== 'function') {
+      toBottom(el)
+      return
+    }
+    jumpingRef.current = true
+    anchorRef.current = null
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }
 
   useLayoutEffect(() => {
@@ -255,14 +272,21 @@ export function ChatView({
     /* v8 ignore next -- ref-null guard: React attaches the ref before layout effects run. */
     if (local === null) return
     const el = scrollerOf(local)
+    if (jumpingRef.current) return
     // Open completed: always land on the latest action. Opening a session or
-    // switching the view tab remounts this component, and each mount jumps to
-    // the floor once so the reader never resumes mid-transcript.
+    // switching the view tab remounts this component. A reading bookmark owns
+    // the return position; a new session starts at the floor.
     if (openState === 'open' && !openedRef.current) {
       openedRef.current = true
-      toBottom(el)
+      const bookmark = viewBookmark?.('chat')
+      if (bookmark?.mode === 'reading') {
+        const row = bookmark.anchorKey === null ? null : anchorElement(local, bookmark.anchorKey)
+        el.scrollTop = row === null ? bookmark.scrollTop : bookmark.scrollTop + flowTop(row, el) - bookmark.anchorOffset
+        observedTopRef.current = el.scrollTop
+        atBottomRef.current = false
+        setAtBottom(false)
+      } else toBottom(el)
       firstSeqRef.current = firstSeq
-      lastKeyRef.current = lastKey
       lastSteeringIdRef.current = lastSteeringId
       followSigRef.current = followSig
       return
@@ -277,25 +301,31 @@ export function ChatView({
       if (row !== null) el.scrollTop += flowTop(row, el) - anchor.top
       observedTopRef.current = el.scrollTop
       firstSeqRef.current = firstSeq
-      /* v8 ignore next -- ?? arm: a prepend adds nodes, so the flow list here is never empty. */
-      lastKeyRef.current = lastKey
       lastSteeringIdRef.current = lastSteeringId
       followSigRef.current = followSig
       return
     }
     firstSeqRef.current = firstSeq
-    // Own words must be visible: a new trailing user node force-scrolls
-    // (send lives in the composer, so arrival is detected here, not armed there).
-    const appendedUser = lastKey !== lastKeyRef.current && lastNode?.kind === 'user'
-    const appendedSteering = lastSteeringId !== null && lastSteeringId !== lastSteeringIdRef.current
     const tipMoved = followSigRef.current !== followSig
-    lastKeyRef.current = lastKey
     lastSteeringIdRef.current = lastSteeringId
     followSigRef.current = followSig
     // Follow new flow content while pinned; do NOT re-pin on every render
     // merely because atBottomRef is true (scroll threshold → setState → snap).
-    if (appendedUser || appendedSteering || (tipMoved && atBottomRef.current)) toBottom(el)
+    if (tipMoved && atBottomRef.current) toBottom(el)
   })
+
+  useLayoutEffect(() => () => {
+    const local = listRef.current
+    if (local === null || saveViewBookmark === undefined) return
+    const el = scrollerOf(local)
+    const position = scrollPosition(local, el)
+    saveViewBookmark('chat', {
+      mode: atBottomRef.current ? 'following' : 'reading',
+      anchorKey: position?.anchorKey ?? null,
+      anchorOffset: position?.anchorTop ?? 0,
+      scrollTop: el.scrollTop,
+    })
+  }, [saveViewBookmark])
 
   const onScrollRef = useRef(() => {})
   onScrollRef.current = () => {
@@ -303,6 +333,12 @@ export function ChatView({
     /* v8 ignore next -- ref-null guard: the handler only fires while mounted. */
     if (local === null) return
     const el = scrollerOf(local)
+    if (jumpingRef.current) {
+      const floor = Math.max(0, el.scrollHeight - el.clientHeight)
+      if (floor - el.scrollTop <= FOLLOW_THRESHOLD) toBottom(el)
+      else observedTopRef.current = el.scrollTop
+      return
+    }
     // Only reader input may make raw scroll geometry change follow ownership:
     // a delivered position that deviates from the observed-top ledger (every
     // programmatic write records itself there synchronously). This covers
@@ -313,7 +349,9 @@ export function ChatView({
     const floor = Math.max(0, el.scrollHeight - el.clientHeight)
     const movedByReader = Math.abs(el.scrollTop - Math.min(observedTopRef.current, floor)) > 0.5
     const isAtBottom = movedByReader
-      ? floor - el.scrollTop <= FOLLOW_THRESHOLD + 1
+      ? el.scrollTop < observedTopRef.current - 0.5
+        ? false
+        : floor - el.scrollTop <= FOLLOW_THRESHOLD
       : atBottomRef.current
     if (!movedByReader && isAtBottom) {
       toBottom(el)
@@ -322,6 +360,11 @@ export function ChatView({
     atBottomRef.current = isAtBottom
     setAtBottom(isAtBottom)
     const position = isAtBottom ? null : scrollPosition(local, el)
+    if (isAtBottom) setActivePrompt(prompts.at(-1)?.key ?? null)
+    else if (position !== null) {
+      const seq = nodeStore.get(position.anchorKey)?.anchorSeq
+      if (seq !== undefined) setActivePrompt(activePromptAtSeq(prompts, seq))
+    }
     if (isAtBottom) {
       anchorRef.current = null
     } else if (anchorRef.current !== null && position !== null) {
@@ -339,9 +382,25 @@ export function ChatView({
     if (local === null) return
     const el = scrollerOf(local)
     const onScroll = (): void => { onScrollRef.current() }
+    const interrupt = (): void => {
+      if (!jumpingRef.current) return
+      jumpingRef.current = false
+      atBottomRef.current = false
+      setAtBottom(false)
+    }
+    const onWheel = (event: WheelEvent): void => { if (event.deltaY < 0) interrupt() }
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) interrupt()
+    }
     el.addEventListener('scroll', onScroll, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: true })
+    el.addEventListener('touchstart', interrupt, { passive: true })
+    el.addEventListener('keydown', onKey)
     return () => {
       el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', interrupt)
+      el.removeEventListener('keydown', onKey)
     }
   }, [])
 
@@ -393,9 +452,31 @@ export function ChatView({
     loadOlder()
   }
 
+  const selectPrompt = (key: string): void => {
+    const local = listRef.current
+    if (local === null) return
+    const row = anchorElement(local, key)
+    if (row === null) return
+    const el = scrollerOf(local)
+    atBottomRef.current = false
+    setAtBottom(false)
+    setActivePrompt(key)
+    anchorRef.current = null
+    el.scrollTop += flowTop(row, el) - 48
+    observedTopRef.current = el.scrollTop
+  }
+
   return (
     <div className={css.root}>
       <div ref={listRef} className={css.scroll}>
+        <PromptRail
+          entries={prompts}
+          activeKey={activePrompt ?? prompts.at(-1)?.key ?? null}
+          onSelect={selectPrompt}
+          navLabel={t('promptRail.label')}
+          label={(index, preview) => t('promptRail.prompt', { index: index + 1, preview })}
+          older={hasMore ? { label: t('promptRail.older'), loading: loadingOlder, onLoad: loadOlderAnchored } : undefined}
+        />
         <div ref={columnRef} className={css.column} data-chat-flow="">
           {openState === 'loading' && <div className={css.hint}>{t('chat.loadingHistory')}</div>}
           {openState === 'error' && openError !== null && (
@@ -450,7 +531,7 @@ export function ChatView({
               onClick={() => {
                 const local = listRef.current
                 /* v8 ignore next -- ref-null guard: the button only renders alongside the mounted list. */
-                if (local !== null) toBottom(scrollerOf(local))
+                if (local !== null) jumpToBottom(scrollerOf(local))
               }}
             >
               <IconChevronDownOutline14 />

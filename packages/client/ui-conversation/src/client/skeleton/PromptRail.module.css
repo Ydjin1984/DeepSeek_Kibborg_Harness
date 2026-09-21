@@ -1,0 +1,64 @@
+.rail {
+  position: sticky;
+  top: 50%;
+  z-index: 8;
+  float: right;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: max-content;
+  gap: 8px;
+  margin-right: 8px;
+  transform: translateY(-50%);
+}
+
+.tick,
+.more {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.tick::before {
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  content: '';
+  opacity: 0.55;
+  transition: width 140ms ease, opacity 140ms ease;
+}
+
+.tick[aria-current] {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tick[aria-current]::before,
+.tick:hover::before {
+  width: 22px;
+  opacity: 1;
+}
+
+.tick:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  border-radius: 4px;
+}
+
+.more:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick::before { transition: none; }
+}

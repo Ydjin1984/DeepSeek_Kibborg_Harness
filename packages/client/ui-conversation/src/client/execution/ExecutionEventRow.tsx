@@ -140,21 +140,28 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
     && SUBAGENT_DELEGATION_TOOLS.has(event.toolName)
   return (
     <div className={css.row} data-status={event.status} data-category={event.category} data-testid="execution-event">
-      <button
-        type="button"
-        className={css.header}
-        aria-expanded={expanded}
-        onClick={onToggle}
-      >
+      <div className={css.header}>
+        <button
+          type="button"
+          className={css.headerToggle}
+          aria-label={[executionTypeLabel(event.type), event.title, event.description].filter(Boolean).join(' ')}
+          aria-expanded={expanded}
+          onClick={onToggle}
+        />
         <span className={css.icon} aria-hidden>{eventIcon(event)}</span>
         <time className={css.time} dateTime={new Date(event.time).toISOString()}>{executionClock(event.time)}</time>
         <span className={css.typeBadge} data-category={event.category}>{executionTypeLabel(event.type)}</span>
         {event.title !== '' && (
           <span className={css.title}>{highlightText(event.title, query)}</span>
         )}
-        {event.description !== '' && (
+        {event.description !== '' && (event.filePath === undefined ? (
           <span className={css.summary}>{highlightText(event.description, query)}</span>
-        )}
+        ) : (
+          <button type="button" className={`${css.summary} ${css.fileAction}`}
+            data-file-path aria-label={event.filePath} aria-expanded={expanded} onClick={onToggle}>
+            {highlightText(event.description, query)}
+          </button>
+        ))}
         {counts && (
           <span className={css.counts} aria-label={`+${event.additions} −${event.deletions}`}>
             <span className={css.add}>+{event.additions}</span>
@@ -166,11 +173,13 @@ export const ExecutionEventRow = memo(function ExecutionEventRow({
         )}
         <span className={css.state} title={t(`execution.status.${event.status}`)}>
           <StateDot state={executionStatusDot(event.status)} />
+          {(event.status === 'running' || event.status === 'error' || event.status === 'warning')
+            && <span className={css.statusLabel}>{t(`execution.status.${event.status}`)}</span>}
         </span>
         <span className={css.chevron} aria-hidden>
           {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </span>
-      </button>
+      </div>
       {isDelegation && !expanded && (
         <SubagentActivityLine sessionId={sessionId} useSessions={useSessions} t={t} />
       )}

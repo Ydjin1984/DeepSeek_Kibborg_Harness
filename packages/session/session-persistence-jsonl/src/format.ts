@@ -104,6 +104,14 @@ function isHeaderLine(value: unknown): value is HeaderLine {
       || (value as { origin?: unknown }).origin === 'subagent')
     && ((value as { agentPreset?: unknown }).agentPreset === undefined
       || typeof (value as { agentPreset?: unknown }).agentPreset === 'string')
+    && ((value as { cwd?: unknown }).cwd === undefined
+      || typeof (value as { cwd?: unknown }).cwd === 'string')
+    && ((value as { parentSession?: unknown }).parentSession === undefined
+      || typeof (value as { parentSession?: unknown }).parentSession === 'string')
+    && ((value as { seedLength?: unknown }).seedLength === undefined
+      || (typeof (value as { seedLength?: unknown }).seedLength === 'number'
+        && Number.isSafeInteger((value as { seedLength: number }).seedLength)
+        && (value as { seedLength: number }).seedLength >= 0))
   )
 }
 

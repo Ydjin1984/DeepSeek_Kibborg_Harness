@@ -8,7 +8,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ChatNode } from '../src/client/contract/chat-nodes.ts'
-import { executionEventFromNode, isDefaultExpanded } from '../src/client/execution/execution-event.ts'
+import { executionEventFromNode } from '../src/client/execution/execution-event.ts'
 import { executionTypeLabel } from '../src/client/execution/execution-labels.ts'
 
 const asChatNode = (node: ChatConversationViewNode): ChatNode => node as ChatNode
@@ -101,6 +101,16 @@ describe('executionEventFromNode', () => {
     })
   })
 
+  it('shows the file_path argument on a collapsed read row', () => {
+    const read = {
+      ...settledEdit('c-read'),
+      call: { name: 'read', argsRaw: '{"file_path":"src/main.ts"}' },
+    }
+    expect(executionEventFromNode(asChatNode(settled('k:read', 8, { root: read })))).toMatchObject({
+      type: 'file_read', description: 'src/main.ts', filePath: 'src/main.ts',
+    })
+  })
+
   it('flags a settled error result as tool_error with the error status', () => {
     const result: ToolResultNode = {
       ...settledEdit('c3', 5), isError: true,
@@ -175,17 +185,6 @@ describe('executionEventFromNode', () => {
       },
     }))
     expect(event).toMatchObject({ type: 'task_completed', status: 'success', title: 'Turn 1 complete' })
-  })
-})
-
-describe('isDefaultExpanded', () => {
-  it('expands prose rows and folds technical rows by default', () => {
-    expect(isDefaultExpanded('user')).toBe(true)
-    expect(isDefaultExpanded('assistant-step')).toBe(true)
-    expect(isDefaultExpanded('command')).toBe(true)
-    expect(isDefaultExpanded('tool-call')).toBe(false)
-    expect(isDefaultExpanded('turn-tail')).toBe(false)
-    expect(isDefaultExpanded('unknown-kind')).toBe(false)
   })
 })
 

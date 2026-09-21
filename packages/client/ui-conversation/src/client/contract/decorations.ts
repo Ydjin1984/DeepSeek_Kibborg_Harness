@@ -5,6 +5,7 @@
  * the instructions; tests drive this directly.
  */
 import type { InputState } from '../contract/input.ts'
+import { scanFencedSegments, type FencedSegment } from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** The claim-token highlight range (always draft-leading while the watch holds). */
 export interface TokenRange {
@@ -52,6 +53,8 @@ export interface DraftDecorations {
   readonly chips: readonly ChipRender[]
   /** Scan-derived lexicon tokens and syntax-recognizable folder ranges. */
   readonly textRefs: readonly TextRefRange[]
+  /** Code ranges whose exact text is painted without changing textarea metrics. */
+  readonly fences: readonly Extract<FencedSegment, { kind: 'code' }>[]
   /** Ghost hint shown while the claim's args are blank; null otherwise. */
   readonly hint: string | null
 }
@@ -74,26 +77,30 @@ export function scanTextRefs(
 ): TextRefRange[] {
   if (draft === '') return []
   const out: TextRefRange[] = []
-  if (lexicon.size > 0) {
-    TEXT_REF_RE.lastIndex = 0
-    let m: RegExpExecArray | null
-    while ((m = TEXT_REF_RE.exec(draft)) !== null) {
-      const trigger = m[2] as '/' | '@'
-      const name = m[3] ?? ''
-      if (lexicon.get(trigger)?.includes(name)) {
-        const start = m.index + (m[1]?.length ?? 0)
-        out.push({ start, end: start + 1 + name.length, trigger })
+  for (const segment of scanFencedSegments(draft)) {
+    if (segment.kind !== 'text') continue
+    const text = draft.slice(segment.start, segment.end)
+    if (lexicon.size > 0) {
+      TEXT_REF_RE.lastIndex = 0
+      let m: RegExpExecArray | null
+      while ((m = TEXT_REF_RE.exec(text)) !== null) {
+        const trigger = m[2] as '/' | '@'
+        const name = m[3] ?? ''
+        if (lexicon.get(trigger)?.includes(name)) {
+          const start = segment.start + m.index + (m[1]?.length ?? 0)
+          out.push({ start, end: start + 1 + name.length, trigger })
+        }
       }
     }
-  }
-  FOLDER_REF_RE.lastIndex = 0
-  let folder: RegExpExecArray | null
-  while ((folder = FOLDER_REF_RE.exec(draft)) !== null) {
-    const token = folder[2] ?? ''
-    const start = folder.index + (folder[1]?.length ?? 0)
-    const end = start + token.length
-    if (!out.some(range => range.start < end && range.end > start)) {
-      out.push({ start, end, trigger: '@', appearance: 'folder' })
+    FOLDER_REF_RE.lastIndex = 0
+    let folder: RegExpExecArray | null
+    while ((folder = FOLDER_REF_RE.exec(text)) !== null) {
+      const token = folder[2] ?? ''
+      const start = segment.start + folder.index + (folder[1]?.length ?? 0)
+      const end = start + token.length
+      if (!out.some(range => range.start < end && range.end > start)) {
+        out.push({ start, end, trigger: '@', appearance: 'folder' })
+      }
     }
   }
   return out.sort((left, right) => left.start - right.start)
@@ -127,5 +134,8 @@ export function deriveDecorations(
   const hint = claimActive && claim.hint !== undefined && draft.slice(claim.token.length).trim() === ''
     ? claim.hint
     : null
-  return { token, chips, textRefs: scanTextRefs(draft, lexicon), hint }
+  const fences = scanFencedSegments(draft).filter(
+    (segment): segment is Extract<FencedSegment, { kind: 'code' }> => segment.kind === 'code',
+  )
+  return { token, chips, textRefs: scanTextRefs(draft, lexicon), fences, hint }
 }

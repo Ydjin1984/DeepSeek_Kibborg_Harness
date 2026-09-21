@@ -1155,6 +1155,20 @@ describe('machine pending lock', () => {
 })
 
 describe('decorations', () => {
+  it('marks fenced code in the backdrop without changing the native draft or selection', () => {
+    const draft = 'Before\n```ts\nconst file = "@src"\n```\nAfter\n```\nmore code'
+    const { view, textarea } = bench({ draft })
+    textarea.setSelectionRange(18, 18)
+    expect([...view.container.querySelectorAll('[data-decoration="code-fence"]')]
+      .map(node => node.textContent)).toEqual(['```ts\n', '```', '```\n'])
+    expect([...view.container.querySelectorAll('[data-decoration="code-content"]')]
+      .map(node => node.textContent)).toEqual(['const file = "@src"\n', 'more code'])
+    expect(view.container.querySelector('[data-decoration="text-ref"]')).toBeNull()
+    expect(textarea.value).toBe(draft)
+    expect(textarea.selectionStart).toBe(18)
+    expect(textarea.selectionEnd).toBe(18)
+  })
+
   it('claimed token renders the mirror highlight and the blank-args hint', () => {
     // Dictionary-less stub: an unmatched hint key keeps the machine's raw hint.
     const { view, shell } = bench({ t: makeTranslate({}) })

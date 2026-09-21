@@ -436,6 +436,11 @@
         fetch: false
         searchTimeoutMs: 60000
 
+    - id: tool-typesafe
+      name: '@deepseek-ai/dsh-typesafe-tool'
+      config:
+        apiKeyEnv: TYPESAFE_API_KEY
+
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
     # The tool registry. Presentation mode is a deployment choice; omitting it here

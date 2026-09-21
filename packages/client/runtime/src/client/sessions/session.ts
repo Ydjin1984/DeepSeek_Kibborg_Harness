@@ -29,8 +29,28 @@ import { uiDebug, uiDebugSpan, uiDebugSpanSync, uiDebugTick } from '@deepseek-ai
 import { resolvedClientTimeZone } from '../time-zone.ts'
 import { SessionQueueMirror } from './queue-mirror.ts'
 
-/** Messages requested per history page. */
-export const PAGE_MESSAGES = 50
+/** Append-origin messages added by one explicit history request. */
+export const PAGE_MESSAGES = 100
+const INITIAL_MESSAGES = 500
+const LIVE_MESSAGE_HEADROOM = PAGE_MESSAGES * 2
+const LIVE_KEEP_EVENTS = 8_000
+const LIVE_MAX_EVENTS = 12_000
+
+function isPageMessage(event: SessionEvent): boolean {
+  return (event.type === 'user/message' || event.type === 'assistant/message')
+    && 'surfaceOp' in event && event.surfaceOp === 'append'
+}
+
+function liveMessageGroupStart(event: SessionEvent): number {
+  let groupStart = event.seq
+  const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
+  if (sources !== undefined) {
+    for (const source of sources) {
+      if (source < groupStart) groupStart = source
+    }
+  }
+  return groupStart
+}
 
 /** Manager-owned observers of a Session object's local state edges. */
 export interface SessionOptions {
@@ -79,6 +99,8 @@ export class Session implements SessionFace {
    *  passes drop all writes once the generation moves on. */
   private openGeneration = 0
   private loadingOlder = false
+  /** Minimum messages retained while this session stays open, including explicitly loaded history. */
+  private retainedMessages = INITIAL_MESSAGES
   private pending = new Map<string, PendingInteraction>()
   private pendingRev = 0
   private pendingCache: { rev: number; value: PendingInteraction[] } | null = null
@@ -379,46 +401,68 @@ export class Session implements SessionFace {
     return promise
   }
 
-  /** Page up: pull one earlier page with the window's first seq as beforeSeq and prepend. */
+  /** Page up: add 100 earlier append-origin messages across bounded wire pages. */
   async loadOlder(): Promise<void> {
-    if (this.openState !== 'open' || !this.hasMore || this.loadingOlder) return
+    const loaded = await this.loadEarlierMessages(PAGE_MESSAGES)
+    this.retainedMessages += loaded
+  }
+
+  /** Pull earlier wire pages until the requested message count is met or history ends. */
+  private async loadEarlierMessages(requested: number): Promise<number> {
+    if (this.openState !== 'open' || !this.hasMore || this.loadingOlder || requested <= 0) return 0
+    const generation = this.openGeneration
     this.loadingOlder = true
     this.notifier.markDirty()
+    let loaded = 0
     try {
-      const { result } = await uiDebugSpan(
-        'session',
-        'loadOlder',
-        { sessionId: this.sessionId, beforeSeq: this.baseSeq },
-        () => this.history({ beforeSeq: this.baseSeq, maxMessages: PAGE_MESSAGES }),
-        response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
-      )
-      if (!result.ok) return // keep the window as-is; do not overwrite openError (open already succeeded)
-      const older = result.value.events
-      if (older.length === 0) {
+      while (loaded < requested && this.hasMore) {
+        const beforeSeq = this.baseSeq
+        const { result } = await uiDebugSpan(
+          'session',
+          'loadOlder',
+          { sessionId: this.sessionId, beforeSeq, remaining: requested - loaded },
+          () => this.history({ beforeSeq, maxMessages: requested - loaded }),
+          response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
+        )
+        if (generation !== this.openGeneration) return 0 // a reconnect owns the new window
+        if (this.baseSeq !== beforeSeq) {
+          // Gap repair replaced the window while this page was in flight.
+          // Its earlier prepends were replaced too; restart against the new head.
+          loaded = 0
+          continue
+        }
+        if (!result.ok) break
+        const older = result.value.events
+        if (older.length === 0) {
+          this.hasMore = result.value.hasMore
+          this.conversation.prepend([], this.hasMore)
+          break
+        }
+        const tail = older[older.length - 1]
+        if (tail === undefined || tail.event.seq + 1 !== this.baseSeq) {
+          // Continuity assertion: on violation drop the page fail-soft rather than render an out-of-order stream.
+          console.error(`[web-runtime] history page discontinuous: tail seq ${tail?.event.seq} vs baseSeq ${this.baseSeq}`)
+          this.hasMore = false
+          this.conversation.prepend([], false)
+          break
+        }
+        this.events = [...older.map(e => e.event), ...this.events]
+        this.views = [...older.map(e => e.view), ...this.views]
+        /* v8 ignore next -- the ?? arm needs older[0] undefined, but the empty-page branch above already returned. */
+        this.baseSeq = older[0]?.event.seq ?? this.baseSeq
         this.hasMore = result.value.hasMore
-        this.conversation.prepend([], this.hasMore)
-        return
+        this.conversation.prepend(older.map(conversationInput), this.hasMore)
+        loaded += older.filter(entry => isPageMessage(entry.event)).length
       }
-      const tail = older[older.length - 1]
-      if (tail === undefined || tail.event.seq + 1 !== this.baseSeq) {
-        // Continuity assertion: on violation drop the page fail-soft rather than render an out-of-order stream.
-        console.error(`[web-runtime] history page discontinuous: tail seq ${tail?.event.seq} vs baseSeq ${this.baseSeq}`)
-        this.hasMore = false
-        this.conversation.prepend([], false)
-        return
-      }
-      this.events = [...older.map(e => e.event), ...this.events]
-      this.views = [...older.map(e => e.view), ...this.views]
-      /* v8 ignore next -- the ?? arm needs older[0] undefined, but the empty-page branch above already returned. */
-      this.baseSeq = older[0]?.event.seq ?? this.baseSeq
-      this.hasMore = result.value.hasMore
-      this.conversation.prepend(older.map(conversationInput), this.hasMore)
     } catch (error) {
       console.error('[web-runtime] loadOlder failed:', error)
     } finally {
-      this.loadingOlder = false
-      this.notifier.markDirty()
+      if (generation === this.openGeneration) {
+        this.loadingOlder = false
+        this.notifier.markDirty()
+      }
     }
+    return loaded
   }
 
   /** Reconnect rebuild (manager calls this on onConnected for instances that were opened):
@@ -439,6 +483,7 @@ export class Session implements SessionFace {
     this.openPromise = null
     this.openState = 'cold'
     this.openError = null
+    this.loadingOlder = false
     // Superseded, not settled: the baseline replay re-sends still-pending requested frames verbatim
     // (same rpcId), re-minting fresh waits; a stale reference's respond() still reaches the host.
     this.pending.clear()
@@ -511,6 +556,7 @@ export class Session implements SessionFace {
       }
       case 'question/requested': {
         const { type: _type, sessionId: _sid, ...payload } = frame
+        uiDebug('session', 'question.requested', { sessionId: this.sessionId, questions: payload.questions.length })
         this.mint(new PendingWait('question', rpcId, this.sessionId, payload, m => this.api.respond(m)))
         this.notifier.markDirty()
         return
@@ -632,7 +678,7 @@ export class Session implements SessionFace {
         'session',
         'historyTail',
         { sessionId: this.sessionId, generation },
-        () => this.history({ maxMessages: PAGE_MESSAGES }),
+        () => this.history({ maxMessages: this.retainedMessages }),
         response => ({
           ok: response.result.ok,
           events: response.result.ok ? response.result.value.events.length : 0,
@@ -653,13 +699,17 @@ export class Session implements SessionFace {
           'session',
           'historyGapFill',
           { sessionId: this.sessionId, subscribedLastSeq: this.subscribedLastSeq, tailSeq },
-          () => this.history({ maxMessages: PAGE_MESSAGES }),
+          () => this.history({ maxMessages: this.retainedMessages }),
           response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
         )).result
         if (generation !== this.openGeneration) return
         if (result.ok) this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }
       this.openState = 'open'
+      const tailMessages = this.events.filter(isPageMessage).length
+      if (this.hasMore && tailMessages < this.retainedMessages) {
+        await this.loadEarlierMessages(this.retainedMessages - tailMessages)
+      }
     } catch (error) {
       if (generation !== this.openGeneration) return
       this.openState = 'error'
@@ -710,33 +760,34 @@ export class Session implements SessionFace {
     if (event.type === 'turn/start') this.firstPromptPendingTurn = false
     const queueChanged = this.queueMirror.acceptDurable(event)
     const publication = this.conversation.append({ event, view })
-    this.trimLiveWindow()
+    this.trimLiveWindow(event)
     return queueChanged ? 'immediate' : publication
   }
 
-  /**
-   * Drop the oldest message groups once the live window grows past one history
-   * page. Open loads {@link PAGE_MESSAGES}; without a cap, a long tab holds
-   * every subsequent event in the assembler and the React tree until refresh.
-   */
-  private trimLiveWindow(): void {
+  /** Trim after completed messages, retaining recent actions through chunk-heavy steps. */
+  private trimLiveWindow(appended: SessionEvent): void {
+    if (!isPageMessage(appended)) return
     let count = 0
-    let cut = this.baseSeq
+    let messageCut = this.baseSeq
+    let eventCut = this.baseSeq
+    let recentCut = this.baseSeq
+    const eventTarget = Math.max(0, this.events.length - LIVE_KEEP_EVENTS)
     for (let i = this.events.length - 1; i >= 0; i--) {
       const event = this.events[i]
-      if (event === undefined || (event.type !== 'user/message' && event.type !== 'assistant/message')) continue
+      if (event === undefined) continue
+      if (!isPageMessage(event)) continue
       count++
-      if (count < PAGE_MESSAGES) continue
-      cut = event.seq
-      const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
-      if (sources !== undefined) {
-        for (const source of sources) {
-          if (source < cut) cut = source
-        }
-      }
-      break
+      const start = liveMessageGroupStart(event)
+      if (count === this.retainedMessages + PAGE_MESSAGES) messageCut = start
+      if (count === this.retainedMessages) recentCut = start
+      if (i >= eventTarget) eventCut = start
     }
-    if (count < PAGE_MESSAGES || cut <= this.baseSeq) return
+    const messageOverflow = count > this.retainedMessages + LIVE_MESSAGE_HEADROOM
+    const eventOverflow = this.events.length > LIVE_MAX_EVENTS
+    if (!messageOverflow && !eventOverflow) return
+    const eventSafeCut = recentCut > this.baseSeq ? Math.min(eventCut, recentCut) : this.baseSeq
+    const cut = Math.max(messageOverflow ? messageCut : this.baseSeq, eventOverflow ? eventSafeCut : this.baseSeq)
+    if (cut <= this.baseSeq) return
     let start = 0
     while (start < this.events.length && (this.events[start]?.seq ?? 0) < cut) start++
     if (start === 0) return
@@ -787,11 +838,15 @@ export class Session implements SessionFace {
         'session',
         'repairGap',
         { sessionId: this.sessionId },
-        () => this.history({ maxMessages: PAGE_MESSAGES }),
+        () => this.history({ maxMessages: this.retainedMessages }),
         response => ({ ok: response.result.ok, events: response.result.ok ? response.result.value.events.length : 0 }),
       )
       if (result.ok && generation === this.openGeneration && this.openState === 'open') {
         this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
+        const visibleMessages = this.events.filter(isPageMessage).length
+        if (this.hasMore && visibleMessages < this.retainedMessages) {
+          await this.loadEarlierMessages(this.retainedMessages - visibleMessages)
+        }
       }
     } catch (error) {
       console.error('[web-runtime] gap repair failed:', error)

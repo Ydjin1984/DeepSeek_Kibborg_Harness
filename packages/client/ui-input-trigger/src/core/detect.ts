@@ -6,6 +6,7 @@
 import { activeAtToken } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { TriggerChar } from '../types.ts'
 import type { DetectTrigger } from './contract.ts'
+import { isFencedCodeOffset } from './fenced-code.ts'
 
 const WORD_CHAR = /[\p{L}\p{N}_]/u
 const WHITESPACE = /\s/u
@@ -35,7 +36,8 @@ function boundaryOk(draft: string, index: number, char: TriggerChar): boolean {
  * scans left to the first whitespace; slashes failing the word boundary are
  * treated as ordinary token chars and the scan continues (URL slashes).
  * Guard tiers: plain = both chars live; claimed = '/' fully suppressed,
- * '@' live; frozen = none.
+ * '@' live; frozen = none. The caret inside authored fenced code suppresses
+ * both triggers regardless of guard tier.
  *
  * @param draft - Full draft text.
  * @param caret - Caret offset into `draft`.
@@ -46,7 +48,7 @@ function boundaryOk(draft: string, index: number, char: TriggerChar): boolean {
  * live at the caret.
  */
 export const detectTrigger: DetectTrigger = (draft, caret, guard) => {
-  if (guard.tier === 'frozen') return null
+  if (guard.tier === 'frozen' || isFencedCodeOffset(draft, caret)) return null
   const at = activeAtToken(draft, caret)
   if (at !== undefined) {
     const start = caret - at.prefix.length

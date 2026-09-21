@@ -69,7 +69,9 @@ function bench(options: {
   const childEvents = [
     { type: 'user/message', seq: 0, time: 1, data: { content: [{ type: 'text', text: 'work' }], source: { kind: 'user' } } },
   ] as unknown as SessionEvent[]
-  const inspect = vi.fn(() => Promise.resolve({ meta: childHeader, events: childEvents }))
+  const inspect = vi.fn(() => options.storedChild === false
+    ? Promise.reject(new Error(`session "${CHILD}" not found`))
+    : Promise.resolve({ meta: childHeader, events: childEvents }))
   const liveBlock = { values: {}, asOfSeq: 3 }
   const coldBlock = { values: {}, asOfSeq: 0 }
   const snapshot = vi.fn(() => {
@@ -135,6 +137,15 @@ describe('subagent gateway', () => {
       },
     })
     expect(listChildren).toHaveBeenCalledWith(PARENT, undefined)
+  })
+
+  it('reuses a parent catalog within the host TTL', async () => {
+    const { api, listChildren } = bench({ parentLive: false })
+    const first = await api.subagents.list(request({ parentSessionId: PARENT }))
+    const second = await api.subagents.list(request({ parentSessionId: PARENT }))
+    expect(first.result).toMatchObject({ ok: true })
+    expect(second.result).toEqual(first.result)
+    expect(listChildren).toHaveBeenCalledTimes(1)
   })
 
   it('derives catalog activity from the live child Agent rather than Session residency', async () => {

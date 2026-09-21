@@ -4,6 +4,7 @@
  */
 
 import { zstdDecompressSync } from 'node:zlib'
+import { MAX_FRAME_PLAINTEXT_BYTES } from './zstd.ts'
 import type { ZstdFrameDecoder, ZstdFrameRange } from './zstd.ts'
 
 /** Multi-frame adapter built exclusively from Node's supported one-shot API. */
@@ -20,7 +21,7 @@ export class PublicZstdFrameDecoder implements ZstdFrameDecoder {
       for (const { start, end } of frames) {
         let decoded: Buffer
         try {
-          decoded = zstdDecompressSync(source.subarray(start, end))
+          decoded = zstdDecompressSync(source.subarray(start, end), { maxOutputLength: MAX_FRAME_PLAINTEXT_BYTES })
         } catch (error) {
           throw new Error(`corrupt Zstandard session log: frame at byte ${start} failed validation`, {
             cause: error,

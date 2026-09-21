@@ -8,7 +8,7 @@ import {
 
 function event(overrides: Partial<ExecutionEvent>): ExecutionEvent {
   return {
-    key: 'k', seq: 1, time: 1_000, kind: 'tool-call', category: 'tools', type: 'tool_call',
+    key: 'k', seq: 1, time: 1_000, kind: 'tool-call', turn: 1, category: 'tools', type: 'tool_call',
     status: 'success', title: 'read_file', description: 'src/auth/login.ts',
     ...overrides,
   }

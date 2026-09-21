@@ -13,7 +13,10 @@
  * as a draftRev advance (begin-command / insert-ref / consume-token /
  * paste-upgrade all answer their bail events this way).
  */
-import type { CommandClaim, ReferenceInsert, TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import {
+  type CommandClaim, type ReferenceInsert, type TokenSpan,
+} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import { isFencedCodeOffset, scanFencedSegments } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
 import type {
   ConsumeTokenGuard, EditRange, EditSelection, InputEffect, InputEvent, InputMachineOptions,
@@ -228,6 +231,15 @@ export class InputMachine {
     this.occurrences = kept
   }
 
+  /** A code fence makes enclosed reference display text literal again. */
+  private demoteFencedReferences(): void {
+    if (this.occurrences.length === 0 || !this.draft.includes('```')) return
+    const code = scanFencedSegments(this.draft).filter(segment => segment.kind === 'code')
+    if (code.length === 0) return
+    this.occurrences = this.occurrences.filter(occurrence => !code.some(segment =>
+      occurrence.offset < segment.end && occurrence.offset + occurrence.length > segment.start))
+  }
+
   /** Claimed integrity watch: any mutation that breaks the token prefix releases the claim. */
   private watchClaim(): void {
     if (this.phase === 'claimed' && this.claim !== undefined && !this.draft.startsWith(this.claim.token)) {
@@ -272,6 +284,7 @@ export class InputMachine {
     this.typingRun = typing ? { end: range.start + 1, at } : undefined
     this.reconcile(range)
     this.adopt(draft)
+    this.demoteFencedReferences()
     this.watchClaim()
     this.paste = undefined
     return []
@@ -300,7 +313,7 @@ export class InputMachine {
 
   private onInsertRef(reference: ReferenceInsert, span: TokenSpan): InputEffect[] {
     if (this.phase !== 'plain' && this.phase !== 'claimed') return []
-    if (!this.casOk(span)) return []
+    if (!this.casOk(span) || isFencedCodeOffset(this.draft, span.start)) return []
     this.replaceSpanWithChip(reference, span)
     this.paste = undefined
     return []
@@ -438,6 +451,7 @@ export class InputMachine {
     this.reconcile({ start, end, insertedLength: inserted.length })
     this.withMinted(minted)
     this.adopt(this.draft.slice(0, start) + inserted + this.draft.slice(end))
+    this.demoteFencedReferences()
     this.watchClaim()
     if (this.phase === 'plain' || this.phase === 'claimed') {
       this.pasteSeq += 1
@@ -461,7 +475,7 @@ export class InputMachine {
     const attempt = this.paste
     if (attempt === undefined || attempt.attemptId !== attemptId) return []
     if (this.phase !== 'plain' && this.phase !== 'claimed') return []
-    if (!this.casOk(span) || span.start === span.end) return []
+    if (!this.casOk(span) || span.start === span.end || isFencedCodeOffset(this.draft, span.start)) return []
     const insertedLength = this.replaceSpanWithChip(reference, span)
     this.paste = {
       ...attempt,

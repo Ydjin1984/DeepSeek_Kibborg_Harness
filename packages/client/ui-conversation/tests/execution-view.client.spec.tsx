@@ -21,6 +21,7 @@ import { createChatStore } from '../src/client/stores.ts'
 import { ExecutionView } from '../src/client/execution/ExecutionView.tsx'
 import { zh } from '../src/client/locales.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
+import { conversationActivityFixture } from './conversation-activity-fixture.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -184,6 +185,7 @@ function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<Conver
     renderChatNode,
     renderMessageImages,
     openFile: vi.fn(),
+    loadOlder: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
     fileMentions: () => undefined,
@@ -198,14 +200,34 @@ function harness(nodes: ConversationSnapshot['nodes'], overrides: Partial<Conver
 }
 
 describe('ExecutionView', () => {
-  it('renders timeline rows with the type chrome and content on expand', () => {
+  it('exposes paging from the execution tab when the loaded tail has no user request', () => {
+    const h = harness([bashResult(3, 'c1', 'npm test')], { hasMore: true })
+    fireEvent.click(h.view.getByRole('button', { name: '加载更早' }))
+    expect(h.props.loadOlder).toHaveBeenCalledOnce()
+    expect(h.view.getByRole('navigation', { name: '按请求导航' })).toBeTruthy()
+  })
+
+  it('waits for an explicit paging action when the loaded execution tail has only one row', () => {
+    const h = harness([bashResult(3, 'c1', 'npm test')], { hasMore: true })
+    expect(h.props.loadOlder).not.toHaveBeenCalled()
+  })
+
+  it.each([1_000, 5_000])('mounts a bounded event window for %i activity events', (count) => {
+    const h = harness(conversationActivityFixture(count).nodes)
+    expect(h.view.container.querySelectorAll('[data-execution-row-key]').length).toBeLessThanOrEqual(120)
+    expect(h.view.container.querySelectorAll('[data-prompt-tick]').length).toBeLessThanOrEqual(9)
+    expect(h.view.getByTestId('execution-list').scrollHeight).toBeGreaterThanOrEqual(0)
+  })
+
+  it('keeps prose rows compact until the reader expands one', () => {
     const h = harness([user(1, 'Fix the auth bug'), assistant(2, 'Inspecting middleware')])
     const rows = h.view.getAllByTestId('execution-event')
     expect(rows.length).toBeGreaterThanOrEqual(2)
-    // Prose rows default expanded: the assistant node body is visible.
-    expect(h.view.getByTestId('node-assistant-step')).toBeTruthy()
+    expect(h.view.queryByTestId('node-assistant-step')).toBeNull()
     // The user row shows its headline.
     expect(within(rows[0]!).getByText('Fix the auth bug')).toBeTruthy()
+    fireEvent.click(within(rows[1]!).getByRole('button'))
+    expect(h.view.getByTestId('node-assistant-step')).toBeTruthy()
   })
 
   it('folds tool-call rows by default and reveals the body on click', () => {
@@ -214,6 +236,19 @@ describe('ExecutionView', () => {
     expect(h.view.queryByTestId('node-tool-c1')).toBeNull()
     fireEvent.click(within(row).getByRole('button'))
     expect(h.view.getByTestId('node-tool-c1')).toBeTruthy()
+  })
+
+  it('opens the recorded file action inline when its path is clicked', () => {
+    const h = harness([editResult(4, 'edit-file', 'src/activity.ts')])
+    const row = h.view.getByTestId('execution-event')
+    expect(row.querySelector('[data-file-path]')?.textContent).toBe('src/activity.ts')
+    const file = within(row).getByRole('button', { name: 'src/activity.ts' })
+    expect(file.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(file)
+    expect(row.querySelector('[data-testid="node-tool-edit-file"]')).not.toBeNull()
+    expect(file.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(file)
+    expect(row.querySelector('[data-testid="node-tool-edit-file"]')).toBeNull()
   })
 
   it('filters the trace by category and status chips', () => {
@@ -250,7 +285,17 @@ describe('ExecutionView', () => {
     expect(h.view.getByTestId('node-tool-c1')).toBeTruthy()
     fireEvent.click(h.view.getByRole('button', { name: '全部折叠' }))
     expect(h.view.queryByTestId('node-tool-c1')).toBeNull()
-    // The assistant body folds too under collapse-all.
+    // The assistant body remains folded under collapse-all.
+    expect(h.view.queryByTestId('node-assistant-step')).toBeNull()
+  })
+
+  it('an individual toggle cancels expand-all and closes its row', () => {
+    const h = harness([assistant(2, 'text'), bashResult(3, 'c1', 'npm test')])
+    fireEvent.click(h.view.getByRole('button', { name: '全部展开' }))
+    expect(h.view.getByTestId('node-tool-c1')).toBeTruthy()
+    const toolRow = h.view.getAllByTestId('execution-event')[1]!
+    fireEvent.click(within(toolRow).getByRole('button'))
+    expect(h.view.queryByTestId('node-tool-c1')).toBeNull()
     expect(h.view.queryByTestId('node-assistant-step')).toBeNull()
   })
 
@@ -272,7 +317,7 @@ describe('ExecutionView', () => {
     expect(h.view.getByTestId('execution-header')).toBeTruthy()
     expect(h.view.getByText('Fix auth bug')).toBeTruthy()
     // Counts line: 1 turn, 2 tools (bash+edit), 1 file.
-    expect(h.view.getByText(/1 轮/)).toBeTruthy()
+    expect(within(h.view.getByTestId('execution-header')).getByText(/1 轮/)).toBeTruthy()
     expect(h.view.getByText(/2 次工具/)).toBeTruthy()
     expect(h.view.getByText(/1 个文件/)).toBeTruthy()
     // Files strip lists the touched path with its diff counts.
@@ -316,19 +361,39 @@ describe('ExecutionView', () => {
     const el = h.view.getByTestId('execution-list')
     const g = mockListGeometry(el, { clientHeight: 300, scrollHeight: 400 })
     // Reader scrolls away from the floor: the tail must not be pulled down.
-    act(() => { el.scrollTop = 0; fireEvent.scroll(el) })
-    expect(g.scrollTop).toBe(0)
+    act(() => { fireEvent.wheel(el, { deltaY: -1 }); el.scrollTop = 95; fireEvent.scroll(el) })
+    expect(g.scrollTop).toBe(95)
     g.scrollHeight = 436
     act(() => { h.source.set({ nodes: [assistant(2, 'a'), bashResult(3, 'c1', 'npm test'), editResult(4, 'c2', 'x.ts')] }) })
-    expect(g.scrollTop).toBe(0)
+    expect(g.scrollTop).toBe(95)
     // Scroll back to the very bottom: follow re-engages.
-    act(() => { el.scrollTop = el.scrollHeight; fireEvent.scroll(el) })
+    act(() => { fireEvent.wheel(el, { deltaY: 40 }); el.scrollTop = el.scrollHeight; fireEvent.scroll(el) })
     expect(g.scrollTop).toBe(136)
     g.scrollHeight = 472
     act(() => {
       h.source.set({ nodes: [assistant(2, 'a'), bashResult(3, 'c1', 'npm test'), editResult(4, 'c2', 'x.ts'), editResult(5, 'c3', 'y.ts')] })
     })
     expect(g.scrollTop).toBe(172)
+  })
+
+  it('ignores a programmatic scroll event and lets a reader interrupt a smooth jump', () => {
+    const h = harness([assistant(2, 'a'), bashResult(3, 'c1', 'npm test')])
+    const el = h.view.getByTestId('execution-list')
+    const g = mockListGeometry(el, { clientHeight: 300, scrollHeight: 400 })
+    act(() => { el.scrollTop = 0; fireEvent.scroll(el) })
+    g.scrollHeight = 436
+    act(() => { h.source.set({ nodes: [assistant(2, 'a'), bashResult(3, 'c1', 'npm test'), editResult(4, 'c2', 'x.ts')] }) })
+    expect(g.scrollTop).toBe(136)
+
+    act(() => { fireEvent.wheel(el, { deltaY: -1 }); el.scrollTop = 131; fireEvent.scroll(el) })
+    const scrollTo = vi.fn()
+    el.scrollTo = scrollTo
+    fireEvent.click(h.view.getByRole('button', { name: h.props.t('execution.jumpLatest') }))
+    expect(scrollTo).toHaveBeenCalledWith({ top: 436, behavior: 'smooth' })
+    act(() => { fireEvent.wheel(el, { deltaY: -1 }); fireEvent.scroll(el) })
+    g.scrollHeight = 472
+    act(() => { h.source.set({ nodes: [assistant(2, 'a'), bashResult(3, 'c1', 'npm test'), editResult(4, 'c2', 'x.ts'), editResult(5, 'c3', 'y.ts')] }) })
+    expect(g.scrollTop).toBe(131)
   })
 
   it('re-follows while pinned when a measured row grows in place', () => {

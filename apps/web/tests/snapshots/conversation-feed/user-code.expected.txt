@@ -1,0 +1,6 @@
+draft-fences=2
+card-language=ts
+card-code=const path = "@literal/path";
+before=true
+after=true
+literal-reference=true

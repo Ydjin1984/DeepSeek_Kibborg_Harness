@@ -51,7 +51,7 @@ import type {
   McpServerView,
   ModelCatalogFailure, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
-  QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
+  QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, SubagentCatalog, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
 import {
@@ -152,12 +152,20 @@ declare module '@deepseek-ai/cordis' {
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
+/**
+ * Hard cap on events in one history page. Message counting alone can keep
+ * tens of thousands of chunks in a "50-message" window. The live client
+ * retains completed message groups separately from this RPC page limit.
+ */
+const MAX_PAGE_EVENTS = 400
 
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */
 const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
 
 /** Bound cold-log stat fan-out and settle each started batch before cancellation returns. */
-const COLD_SUMMARY_BATCH_SIZE = 16
+const COLD_SUMMARY_BATCH_SIZE = 64
+/** Reuse a parent catalog for this long so sidebar refreshes do not re-inspect every child. */
+const SUBAGENT_CATALOG_TTL_MS = 3_000
 /** Default maximum artifact size eligible for one cold blankness read. */
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 
@@ -424,8 +432,11 @@ function isAborted(signal: AbortSignal): boolean {
  * alone — so they consume no quota; the page stays one contiguous raw range,
  * which keeps a compaction's log-only `compaction/summary` record on the same page as its
  * replacement. The cut is the starting seq of the oldest message group (chunks
- * group via sourceEventSeqs — never cut mid-message). The tail page naturally
- * includes the in-progress partial.
+ * group via sourceEventSeqs — never cut mid-message) or, when the window already
+ * holds 400 events, a message-aligned seq: an incomplete oldest group is dropped
+ * when a later complete turn still fits, otherwise the page starts at that
+ * group's finalized message so the assembler does not see orphan chunks. The
+ * tail page naturally includes the in-progress partial.
  */
 function paginate(
   events: readonly SessionEvent[],
@@ -441,6 +452,48 @@ function paginate(
   )
 }
 
+function isCountedPageMessage(event: SessionEvent): boolean {
+  return MESSAGE_TYPES.has(event.type) && isAppendSurfaceEvent(event)
+}
+
+function messageGroupStart(event: SessionEvent): number {
+  let groupStart = event.seq
+  const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
+  if (sources !== undefined) {
+    for (const source of sources) {
+      if (source < groupStart) groupStart = source
+    }
+  }
+  return groupStart
+}
+
+/**
+ * Event-cap cut that does not start a page inside a message group.
+ * @param events - the log being paged.
+ * @param capIndex - oldest index that still fits in the 400-event cap.
+ * @param end - exclusive end of the page window.
+ * @returns starting seq of the page.
+ */
+function eventCapCut(events: readonly SessionEvent[], capIndex: number, end: number): number {
+  const capSeq = events[capIndex]?.seq ?? 0
+  let messageIndex = -1
+  for (let j = capIndex; j < end; j++) {
+    const candidate = events[j] as SessionEvent
+    if (!isCountedPageMessage(candidate)) continue
+    messageIndex = j
+    break
+  }
+  if (messageIndex === -1) return capSeq
+  const message = events[messageIndex] as SessionEvent
+  if (messageGroupStart(message) >= capSeq) return capSeq
+  for (let k = messageIndex + 1; k < end; k++) {
+    const candidate = events[k] as SessionEvent
+    if (candidate.type === 'turn/start') return candidate.seq
+    if (isCountedPageMessage(candidate)) return messageGroupStart(candidate)
+  }
+  return message.seq
+}
+
 function paginateWindow(
   events: readonly SessionEvent[],
   beforeSeq: number | undefined,
@@ -454,17 +507,14 @@ function paginateWindow(
   let cut = 0
   for (let i = end - 1; i >= 0; i--) {
     const event = events[i] as SessionEvent
-    if (!MESSAGE_TYPES.has(event.type) || !isAppendSurfaceEvent(event)) continue
-    count++
-    const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
-    let groupStart = event.seq
-    if (sources !== undefined) {
-      for (const source of sources) {
-        if (source < groupStart) groupStart = source
-      }
+    if (end - i >= MAX_PAGE_EVENTS) {
+      cut = eventCapCut(events, i, end)
+      break
     }
+    if (!isCountedPageMessage(event)) continue
+    count++
     if (count >= maxMessages) {
-      cut = groupStart
+      cut = messageGroupStart(event)
       break
     }
   }
@@ -604,6 +654,13 @@ class FrameQueue<F> {
     this.waiter?.()
   }
 
+  /** Insert at the head so interactive frames skip a backlog of session/event. */
+  prepend(item: F): void {
+    if (this.done) return
+    this.buffer.unshift(item)
+    this.waiter?.()
+  }
+
   end(): void {
     this.done = true
     this.waiter?.()
@@ -661,6 +718,16 @@ export function assertJsonArgs(event: string, args: readonly unknown[]): JsonVal
 /** Queue the subscription baseline frame. */
 function subscribeSession(queue: FrameQueue<RpcRequest<MuxFrame>>, session: Session): void {
   queue.push(frame({ type: 'session/subscribed', sessionId: session.id, lastSeq: session.seq - 1 }))
+}
+
+function isInteractiveMux(type: MuxFrame['type']): boolean {
+  return type === 'question/requested' || type === 'question/resolved'
+    || type === 'approval/requested' || type === 'approval/resolved'
+}
+
+function enqueueMux(queue: FrameQueue<RpcRequest<MuxFrame>>, envelope: RpcRequest<MuxFrame>): void {
+  if (isInteractiveMux(envelope.payload.type)) queue.prepend(envelope)
+  else queue.push(envelope)
 }
 
 /**
@@ -793,7 +860,12 @@ async function summarizeCold(
 ): Promise<SessionSummary> {
   const probed = metadata?.blank === false
     ? undefined
-    : await probeColdSessionMetadata(ctx, persistence, meta, blankProbeMaxBytes, signal)
+    : await uiDebugSpan(
+      'history',
+      'coldProbe',
+      { sessionId: meta.id },
+      () => probeColdSessionMetadata(ctx, persistence, meta, blankProbeMaxBytes, signal),
+    )
   return {
     sessionId: meta.id,
     updatedAt: sessionListUpdatedAt(meta, probed ?? metadata),
@@ -1384,6 +1456,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
   const pendingApprovals = new Map<RpcId, PendingApproval>()
   const muxQueues = new Set<FrameQueue<RpcRequest<MuxFrame>>>()
+  const subagentCatalogCache = new Map<SessionId, {
+    at: number
+    value: SubagentCatalog
+  }>()
   const imageAdmissionChains = new WeakMap<Agent, Promise<void>>()
 
   /** Serialize image admission with model selection for one agent. */
@@ -1533,7 +1609,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   /** Send one transient frame to every connected mux consumer. */
   function broadcast(payload: MuxFrame): void {
     const envelope = frame(payload)
-    for (const queue of muxQueues) queue.push(envelope)
+    for (const queue of muxQueues) enqueueMux(queue, envelope)
   }
 
   // Projection change feed → session/projection push frames. The carrier
@@ -1655,7 +1731,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           rpcId,
           payload: { type: 'question/requested', sessionId, questions: request.questions },
         }
-        for (const queue of muxQueues) queue.push(envelope)
+        uiDebug('mux', 'question.enqueue', { sessionId, questions: request.questions.length })
+        for (const queue of muxQueues) enqueueMux(queue, envelope)
       })
     },
   })
@@ -1747,7 +1824,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         pendingApprovals.set(pending.rpcId, pending)
         req.signal?.addEventListener('abort', onAbort, { once: true })
         const envelope = requestedFrame(pending)
-        for (const queue of muxQueues) queue.push(envelope)
+        for (const queue of muxQueues) enqueueMux(queue, envelope)
       })
     })
   }
@@ -2011,7 +2088,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const attached = new Set(items.map(item => item.sessionId))
     const persistence = ctx.get('sessionPersistence')
     if (persistence !== undefined) {
-      const cold = (await persistence.list(signal))
+      const listed = await uiDebugSpan(
+        'history',
+        'persistence.list',
+        undefined,
+        () => persistence.list(signal),
+        rows => ({ rows: rows.length }),
+      )
+      const cold = listed
         .filter(meta => !attached.has(meta.id) && meta.cwd !== undefined)
       signal?.throwIfAborted()
       for (let offset = 0; offset < cold.length; offset += COLD_SUMMARY_BATCH_SIZE) {
@@ -2885,17 +2969,30 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
     subagents: {
       async list(request, signal) {
+        const parentSessionId = request.payload.parentSessionId
+        const cached = subagentCatalogCache.get(parentSessionId)
+        if (cached !== undefined && Date.now() - cached.at < SUBAGENT_CATALOG_TTL_MS) {
+          return ok(request, cached.value)
+        }
         try {
-          const entries = await ctx.subagents.listChildren(request.payload.parentSessionId, signal)
-          return ok(request, {
-            entries: entries.map(entry => entry.kind === 'child'
+          const entries = await uiDebugSpan(
+            'history',
+            'subagent.listChildren',
+            { parentSessionId },
+            () => ctx.subagents.listChildren(parentSessionId, signal),
+            rows => ({ rows: rows.length }),
+          )
+          const value: SubagentCatalog = {
+            entries: entries.map((entry): SubagentCatalog['entries'][number] => entry.kind === 'child'
               ? {
                 ...entry,
                 activity: ctx.agents.get(entry.id)?.status === 'running' ? 'running' : 'inactive',
               }
               : entry),
-            parentAvailable: ctx.agents.get(request.payload.parentSessionId) !== undefined,
-          })
+            parentAvailable: ctx.agents.get(parentSessionId) !== undefined,
+          }
+          subagentCatalogCache.set(parentSessionId, { at: Date.now(), value })
+          return ok(request, value)
         } catch (error: unknown) {
           if (signal?.aborted || (error instanceof SubagentError && error.code === 'CANCELLED')) {
             return err(request, {

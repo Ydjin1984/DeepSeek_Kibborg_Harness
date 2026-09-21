@@ -18,6 +18,7 @@ export { apply, inject } from './apply.ts'
 export { ConversationController, COMPOSER_FILE_SOURCE_PATH } from './service.ts'
 export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './contract/input.ts'
+export type { FollowAction, FollowMode, ViewScrollBookmark } from './contract/bottom-follow.ts'
 
 export type {
   CallId, ChatStoreState, SelectionTarget, ViewTab,

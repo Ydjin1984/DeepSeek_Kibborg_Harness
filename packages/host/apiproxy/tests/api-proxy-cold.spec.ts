@@ -707,14 +707,15 @@ describe('degenerate composition (no persistence, no factory)', () => {
     }
   })
 
-  it('maps a persistence catalog miss to session-not-found without inspection', async () => {
+  it('maps a persistence inspect miss to session-not-found without listing the catalog', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(UserQuestionService)
-    const inspect = vi.fn()
+    const inspect = vi.fn(() => Promise.reject(new Error('session "session-missing" not found')))
+    const list = vi.fn(() => Promise.resolve([]))
     ctx.provide('sessionPersistence', {
-      list: () => Promise.resolve([]),
+      list,
       inspect,
     } as never)
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
@@ -722,7 +723,8 @@ describe('degenerate composition (no persistence, no factory)', () => {
     const response = await api.sessions.history(request({ sessionId: sid('session-missing') }))
     expect(response.result.ok).toBe(false)
     if (!response.result.ok) expect(response.result.error.code).toBe('session-not-found')
-    expect(inspect).not.toHaveBeenCalled()
+    expect(inspect).toHaveBeenCalledTimes(1)
+    expect(list).not.toHaveBeenCalled()
   })
 })
 

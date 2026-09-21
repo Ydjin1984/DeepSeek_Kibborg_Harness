@@ -22,6 +22,17 @@ const INCOMPLETE_FRAME_OPTIONS: ZstdOptions = {
   finishFlush: constants.ZSTD_e_flush,
 }
 
+/**
+ * Upper bound on one frame's decompressed plaintext. A corrupt or forged frame
+ * must not balloon into a multi-gigabyte allocation (decompression bomb), so
+ * every decode path enforces this ceiling. The bound is far above any
+ * legitimate event batch (token-bounded model output plus tool results) yet
+ * well below a process-killing allocation.
+ */
+export const MAX_FRAME_PLAINTEXT_BYTES = 256 * 1024 * 1024
+/** Header frames carry one short JSON line; bound them independently. */
+const MAX_HEADER_PLAINTEXT_BYTES = 1024 * 1024
+
 /** Byte range occupied by one structurally complete Zstandard frame. */
 export interface ZstdFrameRange {
   /** Inclusive frame start. */
@@ -118,7 +129,7 @@ export async function compressZstdFrame(input: Buffer | string): Promise<Buffer>
  * @returns the frame plaintext.
  */
 export async function decompressZstdFrame(input: Buffer): Promise<Buffer> {
-  return zstdDecompressAsync(input)
+  return zstdDecompressAsync(input, { maxOutputLength: MAX_HEADER_PLAINTEXT_BYTES })
 }
 
 /** Common lifecycle for interchangeable synchronous multi-frame decoders. */
@@ -152,5 +163,5 @@ export function createZstdFrameDecoder(): ZstdFrameDecoder {
  * @returns plaintext produced from the available input.
  */
 export async function decompressZstdPrefix(input: Buffer): Promise<Buffer> {
-  return zstdDecompressAsync(input, INCOMPLETE_FRAME_OPTIONS)
+  return zstdDecompressAsync(input, { ...INCOMPLETE_FRAME_OPTIONS, maxOutputLength: MAX_FRAME_PLAINTEXT_BYTES })
 }

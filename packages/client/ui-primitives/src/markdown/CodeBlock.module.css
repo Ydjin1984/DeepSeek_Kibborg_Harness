@@ -12,6 +12,8 @@
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-markdown-code-block);
   border-radius: var(--dsl-code-block-border-radius);
+  border: 1px solid var(--dsw-alias-border-l2);
+  overflow: hidden;
 }
 
 .block:not(:last-child) {
@@ -19,10 +21,6 @@
 }
 
 .bannerWrap {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  background-color: var(--dsw-alias-bg-base);
   border-top-left-radius: var(--dsl-code-block-border-radius);
   border-top-right-radius: var(--dsl-code-block-border-radius);
 }
@@ -66,6 +64,13 @@
   font: inherit;
 }
 
+.copyButton:hover,
+.copyButton:focus-visible {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .block :where(pre) {
   font: var(--dsl-code-block-content-font);
   padding: 16px;
@@ -74,15 +79,38 @@
   white-space: pre-wrap;
   word-break: break-all;
   background: var(--dsw-alias-markdown-code-block);
-  /* Bottom radii live on <pre>: overflow:hidden on .block would kill the
-     sticky banner, and this opaque fill otherwise squares off the wrapper. */
+  /* The opaque code fill needs its own bottom corners inside the wrapper. */
   border-bottom-left-radius: var(--dsl-code-block-border-radius);
   border-bottom-right-radius: var(--dsl-code-block-border-radius);
 }
 
 /* Shiki inlines its theme background var; route it to the repo token. */
-.block :where(pre.shiki) {
+.block :where(pre[class~='shiki']) {
   background: var(--dsw-alias-markdown-code-block) !important;
+}
+
+.numbered :where(pre[class~='shiki']) {
+  counter-reset: code-line;
+}
+
+.numbered :where(pre[class~='shiki'] [class~='line']) {
+  display: block;
+  position: relative;
+  min-height: 1.4em;
+  padding-left: 3.4em;
+  counter-increment: code-line;
+}
+
+.numbered :where(pre[class~='shiki'] [class~='line'])::before {
+  content: counter(code-line);
+  position: absolute;
+  left: 0;
+  width: 2.3em;
+  padding-right: 0.7em;
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-caption);
+  text-align: right;
+  user-select: none;
 }
 
 .block :where(pre) code {

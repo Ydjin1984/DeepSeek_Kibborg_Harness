@@ -9,9 +9,9 @@
  * JSON) load into the singleton at boot — the set every session renders. The
  * read card's wider extension set (the file-extension language hints the read
  * tool's `langFromPath` emits — `packages/fs/tool-fs`: python, rust, yaml,
- * markup, …) is imported lazily and registered the first time such a language
- * is requested, so a session that never opens a read card in one of those
- * languages pays neither the ~1.6 MB of grammar modules nor their synchronous
+ * markup, …) is imported lazily and registered the first time a read card or
+ * recognizable message fence requests it. A session that never renders such
+ * code pays neither the ~1.6 MB of grammar modules nor their synchronous
  * init. The first render of a lazy language falls back to plain text while its
  * grammar loads, then {@link onGrammarLoaded} notifies subscribers to re-render
  * with highlighting. An unknown or absent language falls back to plain text (no
@@ -265,6 +265,28 @@ export function highlightToHtml(code: string, lang: string | undefined): string 
   if (resolved === undefined) return undefined
   if (!ensureGrammar(resolved)) return undefined
   return highlighter().codeToHtml(code, { lang: resolved, theme: 'css-variables' })
+}
+
+/**
+ * Recognize common unlabeled fenced code without coloring prose or diagrams.
+ * @param code - the authored fence body.
+ * @returns a registered language id, or undefined for ambiguous text.
+ */
+export function inferCodeLanguage(code: string): string | undefined {
+  const sample = code.slice(0, 8_192).trim()
+  if (sample.length === 0) return undefined
+  if ((sample.startsWith('{') || sample.startsWith('[')) && sample.length < 8_192) {
+    try {
+      JSON.parse(sample)
+      return 'json'
+    } catch { /* A brace can start source code rather than JSON. */ }
+  }
+  if (/^(?:package\s+\w+|func\s+(?:\([^\n)]*\)\s*)?\w+\s*\()/mu.test(sample)
+    || /\bfunc\s+\w+\s*\([^\n)]*\)\s*(?:\([^\n)]*\)|[\w*\[\]]+)?\s*\{/u.test(sample)) return 'go'
+  if (/^(?:import\s.+\sfrom\s|export\s|(?:const|let|var)\s+\w+\s*(?::|=)|(?:async\s+)?function\s+\w+\s*\()/mu.test(sample)) return 'typescript'
+  if (/^(?:#!.*(?:bash|sh)\b|\$\s|(?:git|pnpm|npm|curl|docker|ssh)\s+\S+)/mu.test(sample)) return 'shellscript'
+  if (/^(?:def\s+\w+\s*\(|from\s+\w+\s+import\s|import\s+\w+\s*$)/mu.test(sample)) return 'python'
+  return undefined
 }
 
 /**

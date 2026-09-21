@@ -29,7 +29,7 @@ import type { SubagentIdentityProjection } from './projection-types.ts'
  * read-only scan of local media, not deployment behavior. Should a networked
  * persistence backend appear, promote it to a validated `Config` field.
  */
-const COLD_READ_CONCURRENCY = 4
+const COLD_READ_CONCURRENCY = 16
 
 /**
  * One entry of a {@link listChildren} result, ordered by header `createdAt`

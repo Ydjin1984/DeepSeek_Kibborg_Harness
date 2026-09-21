@@ -21,6 +21,7 @@ import type { createChatStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type { CallId, SelectionTarget, ViewTab } from './views.ts'
+import type { ViewScrollBookmark } from './bottom-follow.ts'
 
 /** Browser-owned attachment that has not crossed the durable host boundary. */
 export interface ComposerAttachment {
@@ -347,6 +348,10 @@ export type RenderChatNode = (
  * conversation nodes simply never call them.
  */
 export interface ConvViewOwnerProps {
+  /** Read this Session's last position for one view tab. */
+  viewBookmark?: (viewId: string) => ViewScrollBookmark | undefined
+  /** Keep a view's reading position while another tab is mounted. */
+  saveViewBookmark?: (viewId: string, bookmark: ViewScrollBookmark) => void
   /** One-shot inspect request from another view (chat's Inspect button); null when idle. */
   inspect?: { callId: CallId } | null
   /** Acknowledge the inspect request once applied (clears the store field). */

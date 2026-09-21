@@ -54,6 +54,25 @@ describe('API Remote Agent resolver races', () => {
     await ctx.fiber.dispose()
   })
 
+  it('maps a persistence inspect miss to session-not-found without listing the catalog', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('missing-on-inspect')
+    const list = vi.fn(() => Promise.resolve([]))
+    const inspect = vi.fn(() => Promise.reject(new Error(`session "${sessionId}" not found`)))
+    ctx.provide('sessionPersistence', {
+      list,
+      inspect,
+      locate: () => undefined,
+    } as never)
+
+    const result = await createApiRemoteAgentResolver(ctx, {})(sessionId)
+
+    expect(result).toMatchObject({ error: { code: 'session-not-found', details: { sessionId } } })
+    expect(inspect).toHaveBeenCalledTimes(1)
+    expect(list).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
+  })
+
   it('resumes through a concurrently attached ordinary Session without optional defaults', async () => {
     const ctx = await createContext()
     const sessionId = sid('ordinary-attach-race')

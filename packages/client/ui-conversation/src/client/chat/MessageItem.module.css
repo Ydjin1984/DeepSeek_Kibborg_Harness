@@ -28,6 +28,17 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.userText {
+  display: block;
+}
+
+.userCode {
+  max-width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .referenceSummary {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;

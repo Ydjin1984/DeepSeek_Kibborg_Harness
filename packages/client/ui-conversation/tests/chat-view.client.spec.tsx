@@ -816,6 +816,40 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('h1')).toHaveLength(2)
   })
 
+  it('shows request ticks and marks the chosen prompt as active', () => {
+    const h = makeHarness({ nodes: [user(1, 'First'), user(3, 'Second'), user(5, 'Third')] })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.container.querySelectorAll('[data-prompt-tick]')).toHaveLength(3)
+    fireEvent.click(view.getByRole('button', { name: '请求 1：First' }))
+    expect(view.getByRole('button', { name: '请求 1：First' }).getAttribute('aria-current')).toBe('location')
+  })
+
+  it('renders user fences as code cards while surrounding references and literal code remain distinct', () => {
+    const text = 'See @src/ then\n```ts\nconst value = "@secret <script>"\n```\nand\n```unknown\n/goal literal\n```'
+    const h = makeHarness({ nodes: [user(1, text)] })
+    const view = render(<h.ChatView {...h.props} />)
+    const blocks = [...view.container.querySelectorAll('.md-code-block')]
+    expect(blocks).toHaveLength(2)
+    expect(blocks.map(block => block.querySelector('pre')?.textContent)).toEqual([
+      'const value = "@secret <script>"', '/goal literal',
+    ])
+    expect(blocks.map(block => block.textContent)).toEqual(expect.arrayContaining([
+      expect.stringContaining('ts'), expect.stringContaining('unknown'),
+    ]))
+    expect(view.container.querySelectorAll('[data-ref-chip]')).toHaveLength(1)
+    expect(view.container.querySelector('script')).toBeNull()
+    expect(view.getByText('and')).toBeTruthy()
+  })
+
+  it('highlights an unlabeled Go fence in a user message', async () => {
+    const h = makeHarness({ nodes: [user(1, '```\nfunc Open(path string) error { return nil }\n```')] })
+    const view = render(<h.ChatView {...h.props} />)
+    await waitFor(() => { expect(view.container.querySelector('pre.shiki .line')).not.toBeNull() })
+    const block = view.container.querySelector('.md-code-block')!
+    expect(block.children[0]?.querySelector('button')).not.toBeNull()
+    expect(block.textContent).toContain('go')
+  })
+
   it('streaming partial frames update the tail without replacing a sibling Tool row', () => {
     const h = makeHarness({
       nodes: [user(1, 'q'), assistant(2, 'old answer'), toolResult(3, 'a')],
@@ -1069,7 +1103,7 @@ describe('ChatView', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('prepend preserves a semantic row; a trailing user node force-scrolls', () => {
+  it('prepend preserves a semantic row and a trailing user node leaves reading position intact', () => {
     const h = makeHarness({ nodes: [user(5, 'later'), assistant(6, 'a')], hasMore: true })
     const view = render(<h.ChatView {...h.props} />)
     const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
@@ -1088,9 +1122,9 @@ describe('ChatView', () => {
     anchoredTop = 700
     act(() => { h.set({ nodes: [user(1, 'old'), assistant(2, 'b'), user(5, 'later'), assistant(6, 'a')] }) })
     expect(scroller.scrollTop).toBe(680) // reader offset 80 + the anchored row's 600px shift
-    // A new trailing user bubble (own words) force-scrolls to the bottom.
+    // An arriving user bubble cannot steal the reader's position.
     act(() => { h.set({ nodes: [user(1, 'old'), assistant(2, 'b'), user(5, 'later'), assistant(6, 'a'), user(9, 'mine')] }) })
-    expect(scroller.scrollTop).toBe(1600)
+    expect(scroller.scrollTop).toBe(680)
   })
 
   it('back-to-bottom cancels an in-flight paging anchor', () => {
@@ -1122,6 +1156,22 @@ describe('ChatView', () => {
     fireEvent.click(backButton)
     expect(scroller.scrollTop).toBe(1000)
     // At the bottom again: follow re-arms and the button unmounts.
+    expect(view.queryByLabelText('回到底部')).toBeNull()
+  })
+
+  it('uses a smooth return gesture and follows only after reaching the floor', () => {
+    const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 1_000, writable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, writable: true })
+    readerScroll(scroller, 100)
+    const scrollTo = vi.fn()
+    scroller.scrollTo = scrollTo
+    fireEvent.click(view.getByLabelText('回到底部'))
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1_000, behavior: 'smooth' })
+    expect(view.getByLabelText('回到底部')).toBeTruthy()
+    act(() => { scroller.scrollTop = 700; fireEvent.scroll(scroller) })
     expect(view.queryByLabelText('回到底部')).toBeNull()
   })
 
@@ -1191,17 +1241,15 @@ describe('ChatView', () => {
     expect(observe).toHaveBeenCalledTimes(1)
   })
 
-  it('entering the at-bottom threshold does not snap the remaining scroll distance', () => {
+  it('leaving the floor by only a few pixels pauses follow and exposes the return button', () => {
     const h = makeHarness({ nodes: [user(1, 'q'), assistant(2, 'a')] })
     const view = render(<h.ChatView {...h.props} />)
     const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
     Object.defineProperty(scroller, 'scrollHeight', { value: 1000, writable: true })
     Object.defineProperty(scroller, 'clientHeight', { value: 300, writable: true })
-    // Inside FOLLOW_THRESHOLD (24) but not flush with the floor — the chrome
-    // re-render from setAtBottom must not force scrollTop to scrollHeight.
-    readerScroll(scroller, 690) // distance-to-bottom = 10
-    expect(view.queryByLabelText('回到底部')).toBeNull()
-    expect(scroller.scrollTop).toBe(690)
+    readerScroll(scroller, 695) // distance-to-bottom = 5
+    expect(view.getByLabelText('回到底部')).toBeTruthy()
+    expect(scroller.scrollTop).toBe(695)
   })
 
   it('under data-conversation-scroll, bottom-follow targets the host scrollport', () => {

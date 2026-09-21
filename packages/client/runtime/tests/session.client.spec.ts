@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-commands/types'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import { Session } from '../src/client/sessions/session.ts'
+import { PAGE_MESSAGES, Session } from '../src/client/sessions/session.ts'
 import type {
   ChatConversationViewNode, ChatLocationNodeIndex, ChatNodeStore, ChatSnapshot,
   ConversationEventInput, ConversationNode, ConversationNodeDefinition,
@@ -176,6 +176,93 @@ function histResponse(events: SessionEvent[], hasMore = false) {
 }
 
 describe('open', () => {
+  it('opens 500 messages and loads 100 more per request across capped RPC pages', async () => {
+    const { api, session } = makeSession()
+    const log = Array.from({ length: 800 }, (_, index) => ev.user(index + 1, `message ${index + 1}`))
+    api.onHistory = (payload) => {
+      const eligible = log.filter(event => payload.beforeSeq === undefined || event.seq < payload.beforeSeq)
+      const count = Math.min(payload.maxMessages ?? 50, 400)
+      const page = eligible.slice(-count)
+      return histResponse(page, eligible.length > page.length)
+    }
+    await session.open()
+    expect(session.getSnapshot().nodes.filter(node => node.kind === 'user')).toHaveLength(500)
+    expect(api.callsOf('session.history')).toMatchObject([{ maxMessages: 500 }, { maxMessages: 100 }])
+
+    await session.loadOlder()
+    expect(session.getSnapshot().nodes.filter(node => node.kind === 'user')).toHaveLength(600)
+    expect(api.callsOf('session.history').at(-1)).toMatchObject({ maxMessages: 100 })
+
+    session.handleMuxEnvelope('live' as never, {
+      type: 'session/event', sessionId: SID, event: ev.user(801, 'new live message'),
+    })
+    expect(session.getSnapshot().nodes.filter(node => node.kind === 'user')).toHaveLength(601)
+  })
+
+  it('loads the full requested message count when raw-event caps split both batches', async () => {
+    const { api, session } = makeSession()
+    const log = Array.from({ length: 700 }, (_, index) => [
+      ev.user(index * 6 + 1, `message ${index + 1}`),
+      ...Array.from({ length: 5 }, (_, chunk) => ev.chunkText(index * 6 + chunk + 2, index + 1, 'x')),
+    ]).flat()
+    api.onHistory = (payload) => {
+      const eligible = log.filter(event => payload.beforeSeq === undefined || event.seq < payload.beforeSeq)
+      const maxMessages = payload.maxMessages ?? 50
+      let start = eligible.length
+      let messages = 0
+      for (let index = eligible.length - 1; index >= 0; index--) {
+        if (eligible.length - index >= 400) { start = index; break }
+        if (eligible[index]?.type === 'user/message') messages++
+        if (messages >= maxMessages) { start = index; break }
+        start = index
+      }
+      const page = eligible.slice(start)
+      return histResponse(page, start > 0)
+    }
+    await session.open()
+    expect(session.getSnapshot().nodes.filter(node => node.kind === 'user')).toHaveLength(500)
+    expect(api.callsOf('session.history').length).toBeGreaterThan(2)
+
+    const callsBefore = api.callsOf('session.history').length
+    await session.loadOlder()
+    expect(session.getSnapshot().nodes.filter(node => node.kind === 'user')).toHaveLength(600)
+    expect(api.callsOf('session.history').length - callsBefore).toBeGreaterThan(1)
+  })
+
+  it('restarts initial paging after gap repair replaces an in-flight page', async () => {
+    const { api, session } = makeSession()
+    const log = Array.from({ length: 800 }, (_, index) => ev.user(index + 1, `message ${index + 1}`))
+    const stalePage = deferred<Awaited<ReturnType<FakeApiClient['onHistory']>>>()
+    let held = false
+    api.onHistory = (payload) => {
+      if (payload.beforeSeq === 751 && !held) {
+        held = true
+        return stalePage.promise
+      }
+      const eligible = log.filter(event => payload.beforeSeq === undefined || event.seq < payload.beforeSeq)
+      const page = eligible.slice(-Math.min(payload.maxMessages ?? 50, 50))
+      return histResponse(page, eligible.length > page.length)
+    }
+
+    const opening = session.open()
+    await vi.waitFor(() => { expect(held).toBe(true) })
+    log.push(ev.user(801, 'missed'), ev.user(802, 'gap'))
+    session.handleMuxEnvelope('gap' as never, {
+      type: 'session/event', sessionId: SID, event: log.at(-1)!,
+    })
+    await vi.waitFor(() => {
+      expect(api.callsOf('session.history')).toHaveLength(3)
+    })
+    stalePage.resolve(await histResponse(log.slice(700, 750), true))
+    await opening
+
+    const users = session.getSnapshot().nodes.filter(node => node.kind === 'user')
+    expect(users).toHaveLength(500)
+    expect(users[0]?.seq).toBe(303)
+    expect(users.at(-1)?.seq).toBe(802)
+    expect(session.getSnapshot().hasMore).toBe(true)
+  })
+
   it('keeps a bare Session blank until an authoritative lifecycle signal arrives', () => {
     const { session } = makeSession()
     expect(session.getSnapshot()).toMatchObject({ blank: true, composerPhase: 'blank' })
@@ -187,20 +274,62 @@ describe('open', () => {
   it('installs the tail page: cold → loading → open with window and nodes in place', async () => {
     const { api, session } = makeSession()
     const page = plainTurn(10, 3, '问', '答')
-    api.onHistory = () => histResponse(page, true)
+    api.onHistory = () => histResponse(page)
     expect(session.getSnapshot().openState).toBe('cold')
     const opening = session.open()
     expect(session.getSnapshot().openState).toBe('loading')
     await opening
     const snapshot = session.getSnapshot()
     expect(snapshot.openState).toBe('open')
-    expect(snapshot.hasMore).toBe(true)
+    expect(snapshot.hasMore).toBe(false)
     expect(snapshot.nodes.map(n => n.kind)).toEqual(['user', 'assistant'])
     expect(snapshot.turnTimings.get(3)).toEqual({
       startTime: 1_700_000_000_010,
       endTime: 1_700_000_000_015,
     })
     expect(snapshot.turnEnds.get(3)).toBe(15)
+  })
+
+  it('restores earlier actions when a refresh lands inside a chunk-heavy tail page', async () => {
+    const { api, session } = makeSession()
+    const older = plainTurn(0, 1, 'earlier request', 'earlier answer')
+    const tail = Array.from({ length: 400 }, (_, index) => ev.chunkText(6 + index, 2, 'x', 0, index))
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(tail, true)
+      : histResponse(older, false)
+    await session.open()
+    expect(api.callsOf('session.history')).toHaveLength(2)
+    expect(session.getSnapshot().nodes.some(node => node.seq === 1)).toBe(true)
+    expect(session.getSnapshot().hasMore).toBe(false)
+  })
+
+  it('restores consecutive capped pages until the earlier action group is reached', async () => {
+    const { api, session } = makeSession()
+    const older = plainTurn(0, 1, 'earlier request', 'earlier answer')
+    const middle = Array.from({ length: 400 }, (_, index) => ev.chunkText(6 + index, 2, 'm', 0, index))
+    const tail = Array.from({ length: 400 }, (_, index) => ev.chunkText(406 + index, 2, 't', 0, index))
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(tail, true)
+      : payload.beforeSeq === 406 ? histResponse(middle, true) : histResponse(older, false)
+    await session.open()
+    expect(api.callsOf('session.history')).toHaveLength(3)
+    expect(session.getSnapshot().nodes.some(node => node.seq === 1)).toBe(true)
+    expect(session.getSnapshot().hasMore).toBe(false)
+  })
+
+  it('restores a short tail page split from a chunk-heavy message group', async () => {
+    const { api, session } = makeSession()
+    const older = Array.from({ length: 400 }, (_, index) => ev.chunkText(6 + index, 1, 'x', 0, index))
+    const tail = plainTurn(406, 2, 'latest request', 'latest answer')
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(tail, true)
+      : payload.beforeSeq === 406
+        ? histResponse(older, true)
+        : histResponse(plainTurn(0, 1, 'earlier request', 'earlier answer'), false)
+    await session.open()
+    expect(api.callsOf('session.history')).toHaveLength(3)
+    expect(session.getSnapshot().nodes.some(node => node.seq === 1)).toBe(true)
+    expect(session.getSnapshot().hasMore).toBe(false)
   })
 
   it('is idempotent: concurrent opens share one history call, reopening when open is a no-op', async () => {
@@ -225,6 +354,96 @@ describe('open', () => {
     await session.open()
     expect(session.getSnapshot().openState).toBe('error')
     expect(session.getSnapshot().openError).toMatchObject({ code: 'internal', message: 'socket died' })
+  })
+
+  it('keeps earlier rendered activity while an unfinished response streams past one history page', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse([ev.user(1, 'q'), ev.assistant(2, 1, 'a')], false)
+    await session.open()
+    expect(session.getSnapshot().hasMore).toBe(false)
+    for (let index = 0; index < 420; index++) {
+      session.handleMuxEnvelope(`c${index}` as never, {
+        type: 'session/event',
+        sessionId: SID,
+        event: ev.chunkText(3 + index, 1, 'x', 0, index),
+      })
+    }
+    const snapshot = session.getSnapshot()
+    expect(snapshot.hasMore).toBe(false)
+    expect(snapshot.nodes.map(node => node.seq)).toContain(1)
+    expect(snapshot.nodes.map(node => node.seq)).toContain(2)
+  })
+
+  it('keeps the preceding request when a streamed response finalizes', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse([ev.user(1, 'q')], false)
+    await session.open()
+    const sources: number[] = []
+    for (let index = 0; index < 420; index++) {
+      const seq = 2 + index
+      sources.push(seq)
+      session.handleMuxEnvelope(`c${index}` as never, {
+        type: 'session/event',
+        sessionId: SID,
+        event: ev.chunkText(seq, 1, 'x', 0, index),
+      })
+    }
+    const messageSeq = 2 + 420
+    const finalized = ev.assistant(messageSeq, 1, 'done')
+    session.handleMuxEnvelope('msg' as never, {
+      type: 'session/event',
+      sessionId: SID,
+      event: finalized.type === 'assistant/message'
+        ? { ...finalized, sourceEventSeqs: sources }
+        : finalized,
+    })
+    const snapshot = session.getSnapshot()
+    expect(snapshot.hasMore).toBe(false)
+    expect(snapshot.nodes.some(node => node.seq === 1)).toBe(true)
+    expect(snapshot.nodes.some(node => node.seq === messageSeq)).toBe(true)
+    expect(snapshot.nodes.some(node => node.kind === 'assistant')).toBe(true)
+  })
+
+  it('archives completed message groups after the bounded live transcript fills', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse([ev.user(1, 'q')], false)
+    await session.open()
+    for (let index = 0; index < PAGE_MESSAGES * 8 + 1; index++) {
+      session.handleMuxEnvelope(`m${index}` as never, {
+        type: 'session/event', sessionId: SID, event: ev.assistant(index + 2, 1, `answer ${index}`),
+      })
+    }
+    expect(session.getSnapshot().hasMore).toBe(true)
+    expect(session.getSnapshot().nodes.some(node => node.seq === PAGE_MESSAGES * 8 + 2)).toBe(true)
+  })
+
+  it('retains a short chunk-heavy transcript without losing earlier answers', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse([ev.user(1, 'q')], false)
+    await session.open()
+    let seq = 2
+    const answers: number[] = []
+    for (let step = 0; step < 5; step++) {
+      const sources: number[] = []
+      for (let index = 0; index < 900; index++) {
+        const chunk = ev.chunkText(seq++, 1, 'x', step, index)
+        sources.push(chunk.seq)
+        session.handleMuxEnvelope(`c${step}-${index}` as never, {
+          type: 'session/event', sessionId: SID, event: chunk,
+        })
+      }
+      const answer = ev.assistant(seq++, 1, `answer ${step}`, step)
+      answers.push(answer.seq)
+      session.handleMuxEnvelope(`a${step}` as never, {
+        type: 'session/event', sessionId: SID,
+        event: answer.type === 'assistant/message' ? { ...answer, sourceEventSeqs: sources } : answer,
+      })
+    }
+    const snapshot = session.getSnapshot()
+    expect(snapshot.hasMore).toBe(false)
+    expect(snapshot.nodes.some(node => node.seq === answers[0])).toBe(true)
+    expect(snapshot.nodes.some(node => node.seq === answers[3])).toBe(true)
+    expect(snapshot.nodes.some(node => node.seq === answers[4])).toBe(true)
   })
 
   it('stitches live frames arriving while history is pending, dropping the page overlap', async () => {
@@ -372,6 +591,28 @@ describe('live event path', () => {
     const seqs = session.getSnapshot().nodes.map(n => n.seq)
     expect(seqs).toEqual([1, 3, 7, 9]) // both turns' user/assistant, no hole, no duplicate 9
   })
+
+  it('restores 500 messages after a gap repair repulls a capped tail', async () => {
+    const { api, session } = makeSession()
+    const log = Array.from({ length: 600 }, (_, index) => ev.user(index + 1, `message ${index + 1}`))
+    api.onHistory = (payload) => {
+      const eligible = log.filter(event => payload.beforeSeq === undefined || event.seq < payload.beforeSeq)
+      const page = eligible.slice(-Math.min(payload.maxMessages ?? 50, 400))
+      return histResponse(page, eligible.length > page.length)
+    }
+    await session.open()
+    log.push(ev.user(601, 'missed'), ev.user(602, 'gap'))
+    session.handleMuxEnvelope('gap' as never, {
+      type: 'session/event', sessionId: SID, event: log[601]!,
+    })
+    await vi.waitFor(() => {
+      const users = session.getSnapshot().nodes.filter(node => node.kind === 'user')
+      expect(users).toHaveLength(500)
+      expect(users[0]?.seq).toBe(103)
+      expect(users.at(-1)?.seq).toBe(602)
+    })
+    expect(api.callsOf('session.history')).toHaveLength(4)
+  })
 })
 
 describe('paging', () => {
@@ -396,7 +637,7 @@ describe('paging', () => {
       ev.compactSummary(80, '窗外范围的摘要', 3, 40),
       ev.compactCheckpoint(81, 80, 3, 40),
       ev.user(82, '压缩后的新问题'),
-    ], true)
+    ])
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     try {
       await session.open()
@@ -429,7 +670,9 @@ describe('paging', () => {
 
   it('ignores loadOlder while one is in flight (single request)', async () => {
     const { api, session } = makeSession()
-    api.onHistory = () => histResponse(plainTurn(6, 1, 'x', 'y'), true)
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(plainTurn(6, 1, 'x', 'y'), true)
+      : histResponse([], true)
     await session.open()
     const gate = deferred<Awaited<ReturnType<FakeApiClient['onHistory']>>>()
     api.onHistory = () => gate.promise
@@ -441,7 +684,23 @@ describe('paging', () => {
       modelSelection: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     }))
     await Promise.all([first, second])
-    expect(api.callsOf('session.history')).toHaveLength(2) // open + one page, not two
+    expect(api.callsOf('session.history')).toHaveLength(3) // open, bounded restore attempt, one explicit page
+  })
+
+  it('drops an older page from a previous connection after resync', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse(plainTurn(6, 1, 'initial', 'answer'), true)
+    await session.open()
+    const gate = deferred<Awaited<ReturnType<FakeApiClient['onHistory']>>>()
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(plainTurn(12, 2, 'fresh', 'answer'), false)
+      : gate.promise
+    const stale = session.loadOlder()
+    await session.resync()
+    gate.resolve(await histResponse(plainTurn(0, 0, 'stale', 'answer'), false))
+    await stale
+    expect(session.getSnapshot().nodes.map(node => node.seq)).toEqual([13, 15])
+    expect(session.getSnapshot().loadingOlder).toBe(false)
   })
 })
 
@@ -459,7 +718,7 @@ describe('prompt and cancel errors', () => {
     expect(prompted).toEqual({ ok: true, value: { accepted: true } })
     expect(cancelled).toEqual({ ok: true, value: { accepted: true } })
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable', maxMessages: 50 },
+      { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable', maxMessages: 500 },
     ])
     expect(api.callsOf('subagent.prompt')).toEqual([
       {
@@ -511,7 +770,7 @@ describe('prompt and cancel errors', () => {
     expect(prompted).toMatchObject({ ok: false, error: { code: 'subagent-not-resumable' } })
     expect(cancelled).toMatchObject({ ok: false, error: { code: 'subagent-delivery-unavailable' } })
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: PARENT, childSessionId: SID, mode: 'one-shot', maxMessages: 50 },
+      { parentSessionId: PARENT, childSessionId: SID, mode: 'one-shot', maxMessages: 500 },
     ])
     expect(api.callsOf('subagent.prompt')).toEqual([])
     expect(api.callsOf('subagent.interrupt')).toEqual([])
@@ -666,7 +925,9 @@ describe('remaining branches', () => {
     const { api, session } = makeSession()
     await session.loadOlder() // cold: no-op, zero calls
     expect(api.calls).toEqual([])
-    api.onHistory = () => histResponse(plainTurn(6, 1, 'x', 'y'), true)
+    api.onHistory = payload => payload.beforeSeq === undefined
+      ? histResponse(plainTurn(6, 1, 'x', 'y'), true)
+      : histResponse([], true)
     await session.open()
     // err result: window unchanged
     api.onHistory = () => Promise.resolve(err({ code: 'internal', message: 'x', details: {} }))
@@ -685,7 +946,9 @@ describe('remaining branches', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     try {
       await session.resync()
-      api.onHistory = () => histResponse(plainTurn(6, 1, 'x', 'y'), true)
+      api.onHistory = payload => payload.beforeSeq === undefined
+        ? histResponse(plainTurn(6, 1, 'x', 'y'), true)
+        : histResponse([], true)
       await session.resync()
       api.onHistory = () => Promise.reject(new Error('page wire down'))
       await session.loadOlder()
