@@ -531,23 +531,31 @@ async function waitForPersistedTurnStart(
   minimumTurn?: number,
 ): Promise<void> {
   let invalidRecord: { error: unknown } | undefined
-  await vi.waitFor(async () => {
-    const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
-    let openTurn: number | undefined
-    try {
-      openTurn = log === undefined ? undefined : latestOpenTurn(log.content)
-    } catch (error) {
-      // A malformed persisted record is a scenario bug, not a not-yet state:
-      // vi.waitFor retries every callback throw, so capture the validation
-      // failure, resolve the wait, and rethrow immediately below.
-      invalidRecord = { error }
-      return
-    }
-    if (openTurn === undefined || (minimumTurn !== undefined && openTurn < minimumTurn)) {
-      const detail = minimumTurn === undefined ? 'turn/start' : `turn/start at or beyond turn ${minimumTurn}`
-      throw new Error(`snapshot-harness: session "${sessionId}" did not persist ${detail} within ${timeoutMs}ms`)
-    }
-  }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  const detail = minimumTurn === undefined ? 'turn/start' : `turn/start at or beyond turn ${minimumTurn}`
+  const absentTurn = (): Error =>
+    new Error(`snapshot-harness: session "${sessionId}" did not persist ${detail} within ${timeoutMs}ms`)
+  try {
+    await vi.waitFor(async () => {
+      const log = (await harvestSessionLogs(root)).find(candidate => candidate.id === sessionId)
+      let openTurn: number | undefined
+      try {
+        openTurn = log === undefined ? undefined : latestOpenTurn(log.content)
+      } catch (error) {
+        // A malformed persisted record is a scenario bug, not a not-yet state:
+        // vi.waitFor retries every callback throw, so capture the validation
+        // failure, resolve the wait, and rethrow immediately below.
+        invalidRecord = { error }
+        return
+      }
+      if (openTurn === undefined || (minimumTurn !== undefined && openTurn < minimumTurn)) throw absentTurn()
+    }, { interval: WAIT_POLL_INTERVAL_MS, timeout: timeoutMs })
+  } catch {
+    // On a slow runner the deadline can elapse before the first poll runs, and
+    // vi.waitFor then reports only a generic timeout; the missing-turn contract
+    // is the actionable message, so it wins on every platform.
+    if (invalidRecord !== undefined) throw invalidRecord.error
+    throw absentTurn()
+  }
   if (invalidRecord !== undefined) throw invalidRecord.error
 }
 
