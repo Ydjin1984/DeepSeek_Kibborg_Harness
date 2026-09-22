@@ -91,11 +91,11 @@ function canonicalizeConfigPath(absolutePath: string): string {
 export function resolveConfigPath(
   configPath: string, snapshotMode: string | undefined, cwd: string = process.cwd(),
 ): string {
-  const absolute = resolve(cwd, configPath)
-  if (snapshotMode !== 'replay') return canonicalizeConfigPath(absolute)
-  const dir = dirname(absolute)
-  const replayName = basename(absolute).replace(/cordis\.ya?ml$/, 'cordis.snapshot.yml')
-  const replayPath = resolve(dir, replayName)
+  // Canonicalize first: replay swaps the basename of the real config, so a
+  // symlinked `cordis.yml` gets its snapshot beside the target, not the link.
+  const canonical = canonicalizeConfigPath(resolve(cwd, configPath))
+  if (snapshotMode !== 'replay') return canonical
+  const replayPath = resolve(dirname(canonical), basename(canonical).replace(/cordis\.ya?ml$/, 'cordis.snapshot.yml'))
   return canonicalizeConfigPath(replayPath)
 }
 
