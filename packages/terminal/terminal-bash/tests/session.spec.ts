@@ -1293,3 +1293,26 @@ describe('LocalPtySession bounds, signals, and teardown', () => {
   })
 
 })
+
+describe('LocalPtySession cursor-position probe', () => {
+  it('answers CSI 6n with the tracked cursor position', async () => {
+    const terminal = new FakeTerminal()
+    makeSession(terminal, new FakeInspector(), config())
+    terminal.emitData('first line\nsecond')
+    terminal.emitData('\u001b[6n')
+    await Promise.resolve()
+
+    // An interactive pwsh blocks until this reply lands; without it the shell
+    // only echoes a submitted line instead of running it.
+    expect(terminal.writes).toContain('\u001b[2;7R')
+  })
+
+  it('stays silent when the shell prints no probe', async () => {
+    const terminal = new FakeTerminal()
+    makeSession(terminal, new FakeInspector(), config())
+    terminal.emitData('no probe here\n')
+    await Promise.resolve()
+
+    expect(terminal.writes).toEqual([])
+  })
+})

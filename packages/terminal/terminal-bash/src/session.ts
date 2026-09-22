@@ -24,15 +24,10 @@ import type { ResolvedConfig } from './config.ts'
 import { CONTROLLED_PROMPT, TerminalSanitizer } from './sanitize.ts'
 
 /**
- * The byte that submits one interactive line. A Unix pwsh reads its line
- * through `Console.ReadLine`, which completes on LF; bash and Windows pwsh
- * consume CR, which is also what PSReadLine renders as Enter.
- * @param dialect - the resolved shell dialect of this session.
- * @returns the line terminator to append to a submitted send.
+ * Cursor-position request (`CSI 6n`) an interactive shell sends while it
+ * prepares a line; it blocks until the terminal reports where the cursor is.
  */
-function submitTerminator(dialect: ResolvedConfig['shellDialect']): string {
-  return dialect === 'pwsh' && process.platform !== 'win32' ? '\n' : '\r'
-}
+const CURSOR_PROBE = '\u001b[6n'
 
 function utf8Tail(text: string, maxBytes: number): { text: string; truncated: boolean } {
   if (Buffer.byteLength(text) <= maxBytes) return { text, truncated: false }
@@ -189,6 +184,9 @@ export class LocalPtySession implements TerminalBackendSession {
   private promptSeen = false
   private promptTextSeen = false
   private promptTail = ''
+  /** Tracked cursor position (1-based) reported to a `CSI 6n` request. */
+  private cursorRow = 1
+  private cursorColumn = 1
   private shellPgid: number | undefined
   private initializing = false
   private lastOutputAt = Date.now()
@@ -287,7 +285,7 @@ export class LocalPtySession implements TerminalBackendSession {
     try {
       if (this.active !== operation || this.closing || this.interrupting === operation) return
       operation.setInitialForeground(foreground)
-      const input = `${request.text}${request.submit ? submitTerminator(this.config.shellDialect) : ''}`
+      const input = `${request.text}${request.submit ? '\r' : ''}`
       if (input.length > 0 && !operation.cancelRequested) {
         this.resetReadinessEvidence()
         const write = this.terminal.write(input)
@@ -388,7 +386,35 @@ export class LocalPtySession implements TerminalBackendSession {
     this.outputEnded.resolve()
   }
 
+  /**
+   * Answer a cursor-position request from the shell. Interactive pwsh asks its
+   * terminal where the cursor is while it prepares a line and blocks until a
+   * reply arrives; a raw pty never answers, so submitted text only appears as
+   * terminal echo and is never run. The reply reports the position tracked from
+   * the output chunks themselves — printed characters and line breaks, not
+   * escape-driven cursor movement, which matches what the retained scrollback
+   * shows and is enough for the shell to resume.
+   * @param data - one decoded output chunk, before sanitization.
+   */
+  private answerCursorProbe(data: string): void {
+    for (const character of data) {
+      if (character === '\n') {
+        this.cursorRow += 1
+        this.cursorColumn = 1
+      } else if (character === '\r') {
+        this.cursorColumn = 1
+      } else if ((character.codePointAt(0) ?? 0) >= 0x20) {
+        this.cursorColumn += 1
+      }
+    }
+    if (!data.includes(CURSOR_PROBE)) return
+    // A closed transport is already reported through the failure path, so a
+    // rejected probe reply needs no second diagnostic here.
+    void this.terminal.write(`\u001b[${String(this.cursorRow)};${String(this.cursorColumn)}R`).catch(() => undefined)
+  }
+
   private onData(data: string): void {
+    this.answerCursorProbe(data)
     const sanitized = this.sanitizer.push(data)
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
