@@ -32,12 +32,19 @@ env:
 
 jobs:
   build:
+    # GitHub Pages is configured in the upstream repository, so elsewhere the
+    # configure-pages step fails with 404 and the run reports red; a manual
+    # dispatch stays available as the deliberate probe for a repository that
+    # enables Pages. The deploy job inherits the skip through `needs: build`.
+    if: github.repository == 'deepseek-ai/deepseek-harness' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: pnpm/action-setup@v4
 

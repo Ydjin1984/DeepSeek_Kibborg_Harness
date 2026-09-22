@@ -77,6 +77,7 @@ jobs:
       # Fetch complete history so the archive gate can read the trusted PR base from a reused shallow checkout.
       - uses: actions/checkout@v6
         with:
+          submodules: true
           fetch-depth: 0
           persist-credentials: false
 
@@ -132,6 +133,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          submodules: true
           persist-credentials: false
 
       - uses: pnpm/action-setup@v4
@@ -196,6 +198,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          submodules: true
           persist-credentials: false
 
       - uses: pnpm/action-setup@v4
@@ -285,6 +288,8 @@ jobs:
             gate_concurrency: '1'
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -309,6 +314,8 @@ jobs:
     name: python 3.10 / keyless SDK
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: actions/setup-python@v6.3.0
         with:
@@ -351,6 +358,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          submodules: true
           persist-credentials: false
 
       - uses: pnpm/action-setup@v4
@@ -482,6 +490,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          submodules: true
           persist-credentials: false
 
       - name: Enable Developer Mode (symlink support)
@@ -524,7 +533,12 @@ jobs:
   # tool caches make them redundant (and saving here would poison the hosted
   # cache namespace with self-hosted paths).
   serial-linux-selfhosted:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # The standby pool is registered in the upstream organization, so a
+    # repository without it leaves this job queued until GitHub cancels the run
+    # at 24 hours — a red run and a notification instead of a signal.
+    if: >-
+      github.repository == 'deepseek-ai/deepseek-harness'
+      && github.event_name == 'push' && github.ref == 'refs/heads/master'
     name: serial / linux (self-hosted standby)
     runs-on: [self-hosted, linux, x64, vm-backup]
     steps:
@@ -534,6 +548,7 @@ jobs:
       # checkout resolves against the VM's local mirror.
       - uses: actions/checkout@v6
         with:
+          submodules: true
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
@@ -577,6 +592,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -610,12 +627,19 @@ jobs:
   # and tool caches make them redundant (and saving here would poison the
   # hosted cache namespace with self-hosted paths).
   serial-windows:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # The standby pool is registered in the upstream organization, so a
+    # repository without it leaves this job queued until GitHub cancels the run
+    # at 24 hours — a red run and a notification instead of a signal.
+    if: >-
+      github.repository == 'deepseek-ai/deepseek-harness'
+      && github.event_name == 'push' && github.ref == 'refs/heads/master'
     name: serial / windows (self-hosted standby)
     runs-on: [self-hosted, dsh-win-ci, windows]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Enable Developer Mode (symlink support)
         shell: pwsh
@@ -710,6 +734,8 @@ jobs:
             workload: production-site
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -801,6 +827,8 @@ jobs:
             workers: '2'
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - uses: pnpm/action-setup@v4
         with:
