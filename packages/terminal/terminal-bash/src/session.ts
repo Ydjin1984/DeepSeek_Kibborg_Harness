@@ -23,17 +23,6 @@ import type {
 import type { ResolvedConfig } from './config.ts'
 import { CONTROLLED_PROMPT, TerminalSanitizer } from './sanitize.ts'
 
-/**
- * The byte that submits one interactive line. A Unix pwsh reads its line
- * through `Console.ReadLine`, which completes on LF; bash and Windows pwsh
- * consume CR, which is also what PSReadLine renders as Enter.
- * @param dialect - the resolved shell dialect of this session.
- * @returns the line terminator to append to a submitted send.
- */
-function submitTerminator(dialect: ResolvedConfig['shellDialect']): string {
-  return dialect === 'pwsh' && process.platform !== 'win32' ? '\n' : '\r'
-}
-
 function utf8Tail(text: string, maxBytes: number): { text: string; truncated: boolean } {
   if (Buffer.byteLength(text) <= maxBytes) return { text, truncated: false }
   const chars = Array.from(text)
@@ -287,10 +276,17 @@ export class LocalPtySession implements TerminalBackendSession {
     try {
       if (this.active !== operation || this.closing || this.interrupting === operation) return
       operation.setInitialForeground(foreground)
-      const input = `${request.text}${request.submit ? submitTerminator(this.config.shellDialect) : ''}`
-      if (input.length > 0 && !operation.cancelRequested) {
+      const terminator = request.submit ? '\r' : ''
+      if (request.text.length + terminator.length > 0 && !operation.cancelRequested) {
         this.resetReadinessEvidence()
-        const write = this.terminal.write(input)
+        const write = request.text.length === 0
+          ? this.terminal.write(terminator)
+          : this.terminal.write(request.text).then(async () => {
+            if (terminator.length === 0) return
+            // DIAG: submit as its own write, after the echoed line settles.
+            await new Promise((resolve) => { setTimeout(resolve, 80) })
+            await this.terminal.write(terminator)
+          })
         this.activeWrite = write.then(() => true, () => false)
         try {
           await write
