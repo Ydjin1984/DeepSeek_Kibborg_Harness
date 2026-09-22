@@ -10,6 +10,9 @@ name: Sandbox
 on:
   push:
     branches: [master]
+  # The darwin leg is the slowest signal here, so a manual dispatch keeps
+  # cross-platform diagnosis possible without a master push.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
