@@ -357,3 +357,29 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
     await ctx.terminals.kill(agent, created.sessionId)
   }, 30_000)
 })
+
+describe('diag raw pty matrix', () => {
+  it('reports which terminator pwsh accepts through a bare node-pty session', async () => {
+    const pty = await import('node-pty')
+    const sleep = (ms: number) => new Promise((resolve) => { setTimeout(resolve, ms) })
+    for (const [label, terminator] of [['cr', '\r'], ['lf', '\n'], ['crlf', '\r\n']] as const) {
+      const proc = pty.spawn(resolvePwshPath(), ['-NoLogo', '-NoProfile'], {
+        name: 'xterm-256color',
+        cols: 120,
+        rows: 40,
+        cwd: process.cwd(),
+        env: process.env as Record<string, string>,
+      })
+      let buffer = ''
+      proc.onData((chunk) => { buffer += chunk })
+      await sleep(2500)
+      proc.write('Write-Output ("R" + "ESULT")' + terminator)
+      await sleep(2500)
+      console.log('[diag-pty] terminator=' + label + ' executed=' + buffer.includes('RESULT')
+        + ' sample=' + JSON.stringify(buffer.slice(0, 400)))
+      proc.kill()
+      await sleep(500)
+    }
+    expect(true).toBe(true)
+  }, 60_000)
+})
