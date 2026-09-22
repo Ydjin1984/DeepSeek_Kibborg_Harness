@@ -36,6 +36,6 @@ Status: implemented
 
 ## 测试
 
-客户端定向测试覆盖分组、代码围栏、引用识别、文件展开、请求导航、执行行挂载上限、跟随状态转换、向上移动一个像素、流式内容增高和虚拟行书签恢复。无密钥组装态 fixture [conversation-feed.snapshot.ts](../../../../apps/web/tests/conversation-feed.snapshot.ts) 和 [user-code-fences.snapshot.ts](../../../../apps/web/tests/user-code-fences.snapshot.ts) 通过已构建的插件包固定分组动作、已记录的读取卡片，以及实际发送的代码草稿。浏览器几何、导航和现有性能证据记录在 [conversation-activity.baseline.md](../../../../apps/web/tests/conversation-activity.baseline.md)。
+客户端定向测试覆盖分组、代码围栏、引用识别、文件展开、请求导航、执行行挂载上限、跟随状态转换、向上移动一个像素、流式内容增高和虚拟行书签恢复。无密钥组装态 fixture [conversation-feed.snapshot.ts](../../../../apps/web/tests/conversation-feed.snapshot.ts) 和 [user-code-fences.snapshot.ts](../../../../apps/web/tests/user-code-fences.snapshot.ts) 通过已构建的插件包固定分组动作、已记录的读取卡片，以及实际发送的代码草稿。
 
 现有的长历史浏览器基准测试依赖会话数量标签和全部挂载的侧边栏。面对当前虚拟化侧边栏时，它在记录执行日志耗时之前停止；执行视图的 DOM 数量上限测试仅证明挂载数量，不证明帧耗时或内存目标。

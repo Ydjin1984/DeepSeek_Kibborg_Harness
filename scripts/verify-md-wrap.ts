@@ -69,7 +69,12 @@ function findViolations(absPath: string): Violation[] {
   return out
 }
 
-const files = uniqueRepoFiles(root, PATTERNS, isArchivedAgentNotePath)
+// The knowledge graph under packages/graphify-out is a gitignored local
+// tool artifact, not repository prose.
+const isLocalToolArtifactPath = (path: string): boolean =>
+  path.replaceAll('\\', '/').startsWith('packages/graphify-out/')
+
+const files = uniqueRepoFiles(root, PATTERNS, path => isArchivedAgentNotePath(path) || isLocalToolArtifactPath(path))
 const all = files.flatMap(file => findViolations(file.abs))
 const checked = files.length
 

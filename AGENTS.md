@@ -158,7 +158,7 @@ This project keeps a knowledge graph at `packages/graphify-out/` (scan root: `pa
 "D:\Deepseec_DaVinchi\.venv-graphify\Scripts\graphify.exe" <command>
 ```
 
-The global `graphify` on PATH (uv tool, v0.9.50) is outdated — do not use it for this repo; the local venv holds the current version and rebuilds `packages/graphify-out/`.
+The global `graphify` on PATH is outdated — use only the local venv.
 
 - For codebase questions, first run `graphify query "<question>" --graph packages/graphify-out/graph.json` when that file exists; use `graphify path "<A>" "<B>" --graph packages/graphify-out/graph.json` for relationships and `graphify explain "<concept>" --graph packages/graphify-out/graph.json` for focused concepts. These return a scoped subgraph, usually much smaller than raw grep output — prefer them over grepping or reading files when the graph can answer the question.
 - **Graph before shipping:** before committing, pushing, or making any code change that touches packages/, consult the graph first (query/path/explain on the affected area). The graph encodes structure that grep cannot show cheaply; using it first saves tokens and avoids redundant archaeology. Do not skip it because graph files are dirty — dirty graphify-out/ files are expected after updates and are not a reason to avoid the graph.
