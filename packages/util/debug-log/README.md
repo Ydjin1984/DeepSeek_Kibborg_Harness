@@ -36,7 +36,7 @@ uiDebugTick('mux', 'downlink', { type: 'assistant/chunk' })
 
 ## Model Experience
 
-None. Records go to the operator console; nothing here reaches a model request.
+None, as records go to the operator console and nothing here reaches a model request.
 
 #### KV Cache effect
 

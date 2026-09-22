@@ -16,8 +16,8 @@ export const inject = ['invariants']
 
 /** Install function — v1 registers manifest name only. */
 const install: InvariantInstaller = Object.assign((_ctx: Context, _fail: InvariantFailure) => {
-  // v1: No runtime invariant to check (projection-only layer).
-  // v2: Will verify SM consistency against source adapters.
+  // No runtime invariant: v1 is the projection-only layer, so the state-machine
+  // consistency check arrives with the concrete source adapters in v2.
 }, { inject: ['executions'] })
 
 /**

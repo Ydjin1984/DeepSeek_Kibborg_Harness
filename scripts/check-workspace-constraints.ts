@@ -55,7 +55,7 @@ const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
 
-const localArtifactDirs = new Set(['node_modules'])
+const localArtifactDirs = new Set(['node_modules', 'graphify-out'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js', 'config'],
   // The Web build emits sourcemaps for browser debugging; publishing them is
@@ -161,6 +161,11 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // SQLite loads every statement from immutable package resources at runtime.
   '@deepseek-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
   '@deepseek-ai/dsh-skill-badge': ['assets'],
+  // Orchestrator and skill-manager load their operator skill bodies from the
+  // package at runtime (`new URL('../assets/…/SKILL.md', import.meta.url)`), so
+  // the assets tree is a published artifact under its directory entry.
+  '@deepseek-ai/dsh-orchestrator': ['assets'],
+  '@deepseek-ai/dsh-skill-manager': ['assets'],
   '@deepseek-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
 }
 
@@ -390,6 +395,7 @@ function checkHierarchyShape(): string[] {
   const packagesRoot = join(root, 'packages')
   for (const group of readdirSync(packagesRoot, { withFileTypes: true })) {
     if (!group.isDirectory()) continue
+    if (localArtifactDirs.has(group.name)) continue
     const groupRel = join('packages', group.name)
     if (existsSync(join(packagesRoot, group.name, 'package.json'))) {
       errors.push(`${groupRel}: a group dir must not contain a package.json — packages live at packages/<group>/<pkg>, not directly under packages/`)

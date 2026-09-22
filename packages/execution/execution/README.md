@@ -98,6 +98,14 @@ Tracks external resource leases (chrome, pty, ida, workspace, subprocess) with:
 
 `ctx.emit('executions/resource', { event })` for every resource lease event (acquire, heartbeat, release, orphan).
 
+## Model Experience
+
+None, as the registry only records execution lifecycle state in process; consumers own every model-visible projection of its records.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
 ## Known Limitations and Deferred Work
 
 - **Durability** — `ExecutionEvent` is in-memory only; persistence planned for v2.

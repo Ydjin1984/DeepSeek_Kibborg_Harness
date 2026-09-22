@@ -15,11 +15,10 @@ export const name = 'telegram-bridge-invariant'
 export const inject = ['invariants']
 
 /**
- * No runtime invariant to assert: the bridge only mirrors events already
- * emitted by the session seam and relays answers through the userQuestions
- * channel, and the settings namespace it registers is validated by the
- * settings provider; the bridge itself owns no independent event/durable
- * relationship a companion could check.
+ * No runtime invariant: the bridge only mirrors events already emitted by the
+ * session seam and relays answers through the userQuestions channel, and the
+ * settings namespace it registers is validated by the settings provider; the
+ * bridge itself owns no independent event/durable relationship to check.
  */
 const install: InvariantInstaller = () => {}
 

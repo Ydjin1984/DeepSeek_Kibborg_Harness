@@ -2,7 +2,9 @@
   "name": "@deepseek-ai/dsh-llm-openrouter-free",
   "description": "OpenRouter free-model pool: scans zero-price models, publishes them as a pi-ai route, and rotates across them under per-model request and token budgets",
   "version": "0.1.0-rc.8",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",

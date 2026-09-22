@@ -169,6 +169,13 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/workflow/workflow': { kind: 'indirect', reason: 'The service delegates parent and child model rendering to its consumer and engine.' },
+  'packages/client/ui-settings-claude-code': { kind: 'none', reason: 'Browser-side settings surface; the skill-manager service owns every model-visible effect.' },
+  'packages/client/ui-settings-telegram': { kind: 'none', reason: 'Browser-side settings surface; the telegram bridge owns every model-visible effect.' },
+  'packages/client/ui-telegram-mirror': { kind: 'none', reason: 'Browser-side toggle; the telegram bridge owns every model-visible effect.' },
+  'packages/execution/execution': { kind: 'none', reason: 'Local execution lifecycle registry; consumers own every model-visible projection of its records.' },
+  'packages/guard/engagement-stub': { kind: 'none', reason: 'Deny-only audit stub that emits one event for a refused tool call and registers no model context.' },
+  'packages/telegram/bridge': { kind: 'indirect', reason: 'the session user-message path: chat replies are delivered as ordinary user messages and the session owns request assembly.' },
+  'packages/util/debug-log': { kind: 'none', reason: 'Diagnostic sink that records host-local debug events and registers nothing model-facing.' },
 }
 
 interface Failure {

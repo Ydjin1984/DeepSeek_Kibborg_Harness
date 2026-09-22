@@ -2,11 +2,7 @@
 
 Model-facing `typesafe_evaluate` tool over the TypeSafe.ai System One API.
 
-TypeSafe.ai is not an OpenAI-compatible chat provider. It serves one
-`POST /v1/systemone` endpoint that answers typed, probability-backed questions
-about a single piece of state and returns no free text. This package exposes
-that endpoint to the model as a tool for classification, routing, sentiment,
-and scoring.
+TypeSafe.ai is not an OpenAI-compatible chat provider. It serves one `POST /v1/systemone` endpoint that answers typed, probability-backed questions about a single piece of state and returns no free text. This package exposes that endpoint to the model as a tool for classification, routing, sentiment, and scoring.
 
 ## Configuration
 
@@ -18,21 +14,25 @@ and scoring.
 | `defaultModel` | `jev-latest` | Model id used when a call omits `model`. |
 | `timeoutMs` | `60000` | Cooperative timeout budget per call in milliseconds. |
 
-The key resolves per call from the credential store, then the launch
-environment, so a key stored through the Models/credentials surface takes
-effect without a restart.
+The key resolves per call from the credential store, then the launch environment, so a key stored through the Models/credentials surface takes effect without a restart.
 
-## Tool
+## Model Experience
 
-`typesafe_evaluate(state, questions, model?)` posts the questions to
-`/v1/systemone` and returns the raw JSON answer body (`model`, `answers`,
-`usage`), rendered as pretty JSON. Each question is `{ id, type, instructions }`
-with `type` one of `noul` (yes/no), `choice` (pick one option, `criteria` maps
-option id → description), or `score` (rate on an ordered scale, `levels` lists
-the ordered level descriptions).
+### typesafe_evaluate tool
+
+#### What the model sees
+
+One tool named `typesafe_evaluate` with a fixed description and input: a `state` string plus `questions`, each `{ id, type, instructions }` with `type` one of `noul` (yes/no), `choice` (pick one option, `criteria` maps option id → description), or `score` (rate on an ordered scale, `levels` lists the ordered level descriptions). The result is the System One answer body as pretty JSON (`model`, `answers`, `usage`), returned verbatim.
+
+#### Token effect
+
+The description and input schema are static per build, so enabling the tool adds a bounded block to every request that mounts it. Each call charges the `state` argument plus the returned `answers` to context, so question batches should stay as small as the decision needs.
+
+#### KV Cache effect
+
+None beyond that static tool block: the description and schema never vary between turns, and the package contributes no system-prompt rows.
 
 ## Known Limitations and Deferred Work
 
 - The answer body is returned verbatim; the caller owns interpretation.
-- No client-side projection or specialized presentation is provided; calls use
-  the generic card.
+- No client-side projection or specialized presentation is provided; calls use the generic card.
