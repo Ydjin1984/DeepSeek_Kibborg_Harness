@@ -282,6 +282,11 @@ const hasPwsh = spawnSync(
   { encoding: 'utf8' },
 ).status === 0
 
+console.log('[diag] pwsh=' + resolvePwshPath() + ' version=' + JSON.stringify(spawnSync(
+  resolvePwshPath(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'],
+  { encoding: 'utf8' },
+).stdout?.trim()))
+
 describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
   it('bootstraps a persistent pwsh, persists state, and scrubs secrets', async () => {
     const previous = process.env.DSH_TEST_SECRET
@@ -293,13 +298,17 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
         timeoutMs: 8_000,
       }, 'pwsh')
       const created = await ctx.terminals.spawn(agent, { type: 'shell', name: 'main', cwd: root })
+      console.log('[diag] motd=' + JSON.stringify(created.motd))
       expect(created.motd).toContain('dsh> ')
 
       const first = ctx.terminals.startSend(agent, created.sessionId, {
         text: '$env:KEEP = "ok"; Set-Location /',
         submit: true,
       })
-      expect((await first.done).waitReason).toBe('stdin_read')
+      const firstResult = await first.done
+      console.log('[diag] first reason=' + firstResult.waitReason + ' viewport=' + JSON.stringify(firstResult.viewport.slice(0, 1500)))
+      console.log('[diag] scrollback=' + JSON.stringify(ctx.terminals.read(agent, created.sessionId, { offset: 0, count: 60 }).text.slice(0, 2500)))
+      expect(firstResult.waitReason).toBe('stdin_read')
       const second = ctx.terminals.startSend(agent, created.sessionId, {
         text: 'Write-Output "keep=$env:KEEP secret=$env:DSH_TEST_SECRET"',
         submit: true,
@@ -333,6 +342,9 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
       submit: true,
     })
     const pinnedResult = await pinned.done
+    console.log('[diag] utf8 motd=' + JSON.stringify(created.motd) + ' reason=' + pinnedResult.waitReason
+      + ' viewport=' + JSON.stringify(pinnedResult.viewport.slice(0, 1500)))
+    console.log('[diag] utf8 scrollback=' + JSON.stringify(ctx.terminals.read(agent, created.sessionId, { offset: 0, count: 60 }).text.slice(0, 2500)))
     expect(pinnedResult.viewport).toContain('console=utf-8 out=utf-8')
     // Char codes keep the submitted line ASCII-only, so the assertion is a
     // pure output-decode check.
