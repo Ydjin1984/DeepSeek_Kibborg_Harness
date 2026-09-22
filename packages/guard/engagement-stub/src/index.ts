@@ -47,6 +47,7 @@ declare module '@deepseek-ai/cordis' {
     /**
      * Emitted when the engagement contour denies a tool call before dispatch.
      * @param event - the denial audit record.
+     * @mode emit
      */
     'engagement/denied': (event: EngagementDeniedEvent) => void
   }

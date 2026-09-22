@@ -602,6 +602,16 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   WorkflowAgentEndInfo: 'event-local snapshot is owned by packages/workflow/workflow/src/index.ts',
   WorkflowAgentInfo: 'event-local snapshot is owned by packages/workflow/workflow/src/index.ts',
   WorkflowResultInfo: 'event-local snapshot is owned by packages/workflow/workflow/src/index.ts',
+  EngagementDeniedEvent: 'event payload contract is owned by packages/guard/engagement-stub/src/index.ts',
+  ExecutionEventPayload: 'event payload contract is owned by packages/execution/execution/src/registry.ts',
+  ResourceEvent: 'event payload contract is owned by packages/execution/execution/src/resources.ts',
+  ExecutionEvent: 'execution state-machine event record is owned by packages/execution/execution/src/types.ts',
+  ExecutionEventTypeCode: 'state-machine event code is owned by packages/execution/execution/src/state-machine.ts',
+  ExecutionKind: 'execution kind union is owned by packages/execution/execution/src/types.ts',
+  ExecutionState: 'execution state record is owned by packages/execution/execution/src/types.ts',
+  ExecutionStatus: 'execution status union is owned by packages/execution/execution/src/types.ts',
+  FreeModelLease: 'free-model lease record is owned by packages/llm/llm-openrouter-free/src/service.ts',
+  FreePoolSnapshot: 'free-pool snapshot record is owned by packages/llm/llm-openrouter-free/src/service.ts',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

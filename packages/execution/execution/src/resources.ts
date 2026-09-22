@@ -311,7 +311,7 @@ export class ResourceLeaseRegistry {
    * @param now — optional epoch ms timestamp (defaults to `Date.now()`).
    * @returns the status string.
    */
-  status(resourceId: string, now = Date.now()): ResourceStatus {
+  status(resourceId: string, now: number = Date.now()): ResourceStatus {
     const lease = this.leases.get(resourceId)
 
     if (!lease) return 'unknown'
@@ -332,7 +332,7 @@ export class ResourceLeaseRegistry {
    * @param now — optional epoch ms timestamp (defaults to `Date.now()`).
    * @returns deep copies of the orphaned leases.
    */
-  sweep(now = Date.now()): ResourceLease[] {
+  sweep(now: number = Date.now()): ResourceLease[] {
     const orphaned: ResourceLease[] = []
 
     for (const lease of this.leases.values()) {
@@ -367,7 +367,7 @@ export class ResourceLeaseRegistry {
    * @param now — optional epoch ms timestamp (defaults to `Date.now()`).
    * @returns `true` if live, `false` otherwise.
    */
-  isLive(resourceId: string, now = Date.now()): boolean {
+  isLive(resourceId: string, now: number = Date.now()): boolean {
     const lease = this.leases.get(resourceId)
     if (!lease) return false
     if (lease.lifecycle !== 'leased') return false

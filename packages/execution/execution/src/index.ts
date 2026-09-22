@@ -23,12 +23,14 @@ declare module '@deepseek-ai/cordis' {
     /**
      * Emitted whenever an execution event is appended to the registry.
      * @param payload - the appended event wrapped in a payload.
+     * @mode emit
      */
     'execution/event': (payload: ExecutionEventPayload) => void
     /**
      * Emitted whenever a resource lease event occurs (acquire, heartbeat,
      * release, orphan).
      * @param payload - the resource event wrapped in a payload.
+     * @mode emit
      */
     'executions/resource': (payload: { event: ResourceEvent }) => void
   }
