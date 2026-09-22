@@ -1300,7 +1300,7 @@ describe('LocalPtySession cursor-position probe', () => {
     makeSession(terminal, new FakeInspector(), config())
     terminal.emitData('first line\nsecond')
     terminal.emitData('\u001b[6n')
-    await Promise.resolve()
+    await new Promise((resolve) => { setTimeout(resolve, 5) })
 
     // An interactive pwsh blocks until this reply lands; without it the shell
     // only echoes a submitted line instead of running it.

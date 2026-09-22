@@ -387,17 +387,12 @@ export class LocalPtySession implements TerminalBackendSession {
   }
 
   /**
-   * Answer a cursor-position request from the shell. Interactive pwsh asks its
-   * terminal where the cursor is while it prepares a line and blocks until a
-   * reply arrives; a raw pty never answers, so submitted text only appears as
-   * terminal echo and is never run. The reply reports the position tracked from
-   * the output chunks themselves — printed characters and line breaks, not
-   * escape-driven cursor movement, which matches what the retained scrollback
-   * shows and is enough for the shell to resume.
-   * @param data - one decoded output chunk, before sanitization.
+   * Track the terminal cursor over printable output, which is what a `CSI 6n`
+   * reply has to report; escape-driven cursor movement stays unmodeled.
+   * @param text - sanitized printable text of one output chunk.
    */
-  private answerCursorProbe(data: string): void {
-    for (const character of data) {
+  private advanceCursor(text: string): void {
+    for (const character of text) {
       if (character === '\n') {
         this.cursorRow += 1
         this.cursorColumn = 1
@@ -407,15 +402,24 @@ export class LocalPtySession implements TerminalBackendSession {
         this.cursorColumn += 1
       }
     }
-    if (!data.includes(CURSOR_PROBE)) return
+  }
+
+  /**
+   * Answer the shell's cursor-position request. Interactive pwsh asks its
+   * terminal where the cursor is while it prepares a line and blocks until a
+   * reply arrives; a raw pty never answers, so submitted text only appears as
+   * terminal echo and is never run.
+   */
+  private replyCursorPosition(): void {
     // A closed transport is already reported through the failure path, so a
     // rejected probe reply needs no second diagnostic here.
     void this.terminal.write(`\u001b[${String(this.cursorRow)};${String(this.cursorColumn)}R`).catch(() => undefined)
   }
 
   private onData(data: string): void {
-    this.answerCursorProbe(data)
     const sanitized = this.sanitizer.push(data)
+    this.advanceCursor(sanitized.text)
+    if (data.includes(CURSOR_PROBE)) this.replyCursorPosition()
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
       // TODO(pty-delayed-signal-prompt): With a reproducer, define a marker-generation boundary
