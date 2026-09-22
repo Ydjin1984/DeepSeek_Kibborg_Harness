@@ -13,6 +13,11 @@ permissions:
 
 jobs:
   policy:
+    # policy.mjs addresses the repository and project board named in
+    # .github/issue-management/config.json, both of which live in the upstream
+    # organization, so anywhere else the validator answers 404 and reports red
+    # on every pull request.
+    if: github.repository == 'deepseek-ai/deepseek-harness'
     name: Issue policy
     runs-on: ubuntu-latest
     steps:

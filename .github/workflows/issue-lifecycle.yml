@@ -36,7 +36,13 @@ concurrency:
 jobs:
   lifecycle:
     name: Issue lifecycle
-    if: ${{ github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested') }}
+    # The lifecycle mirrors states onto the upstream project board through a
+    # GitHub App installed in the upstream organization (client id, private key,
+    # and the repository named in config.json), so it is inert elsewhere.
+    if: >-
+      github.repository == 'deepseek-ai/deepseek-harness'
+      && (github.event_name != 'pull_request_review'
+      || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested'))
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
