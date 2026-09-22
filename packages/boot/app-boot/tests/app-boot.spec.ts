@@ -32,7 +32,9 @@ describe('resolveConfigPath', () => {
   })
 
   it.skipIf(process.platform === 'win32')('canonicalizes symlinked config paths through realpath', () => {
-    const realDir = mkdtempSync(join(tmpdir(), 'dsh-real-config-'))
+    // Canonical target directory: the resolver realpaths, so on macOS the
+    // `/var/...` tmpdir must be compared through its `/private/var/...` form.
+    const realDir = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-real-config-')))
     const linkDir = mkdtempSync(join(tmpdir(), 'dsh-link-config-'))
     const realConfig = join(realDir, 'cordis.yml')
     writeFileSync(realConfig, '# placeholder\n')

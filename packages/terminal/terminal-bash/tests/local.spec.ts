@@ -53,7 +53,10 @@ async function harness(
   timing: { idleSilenceMs?: number; handoffGraceMs?: number; timeoutMs?: number } = {},
   dialect: 'bash' | 'pwsh' = 'bash',
 ) {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-pty-local-'))
+  // Canonical scratch root: on macOS `tmpdir()` is `/var/...` while the
+  // terminal's real cwd is `/private/var/...`, and the sandbox policy compares
+  // the reported cwd against this root textually.
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'dsh-pty-local-')))
   roots.push(root)
   const ctx = new Context()
   contexts.push(ctx)

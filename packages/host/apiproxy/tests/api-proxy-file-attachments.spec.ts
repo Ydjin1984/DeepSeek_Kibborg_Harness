@@ -7,7 +7,7 @@
  * image+file ordering contract.
  */
 
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -93,7 +93,9 @@ async function harness(): Promise<{
     inbox: { nextTurn: [], nextStep: [] },
   } as unknown as Agent
   ctx.agents.register(agent)
-  const cwd = await mkdtemp(join(tmpdir(), 'dsh-file-attach-'))
+  // Canonical scratch project: the host realpaths the session cwd, so on macOS
+  // the `/var/...` tmpdir must be compared through its `/private/var/...` form.
+  const cwd = await realpath(await mkdtemp(join(tmpdir(), 'dsh-file-attach-')))
   return { ctx, agent, sessionId: session.id, cwd }
 }
 

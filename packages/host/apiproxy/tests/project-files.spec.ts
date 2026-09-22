@@ -3,7 +3,7 @@
  * read/write round-trips, caps, and directory/file projection.
  */
 
-import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, writeFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -18,7 +18,9 @@ import {
 let roots: string[] = []
 
 async function makeRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'dsh-project-files-'))
+  // Canonical root: on macOS `tmpdir()` is `/var/...`, whose realpath is
+  // `/private/var/...`, while the operations contracts take a canonical root.
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'dsh-project-files-')))
   roots.push(root)
   return root
 }
