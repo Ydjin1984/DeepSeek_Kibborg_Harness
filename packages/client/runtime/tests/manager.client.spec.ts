@@ -372,7 +372,7 @@ describe('subagent catalogs', () => {
     await manager.get(S2).open()
     await manager.get(S2).prompt([{ type: 'text', text: 'continue' }], 'queue')
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 500 },
     ])
     expect(api.callsOf('subagent.prompt')).toEqual([
       {
@@ -427,7 +427,7 @@ describe('subagent catalogs', () => {
     // The running child's window opened eagerly, routed through the addressed
     // subagent transport without any user selection.
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 500 },
     ])
     expect(api.callsOf('session.history')).toEqual([])
     expect(manager.get(S2).getSnapshot().subagent).toEqual({
@@ -459,7 +459,7 @@ describe('subagent catalogs', () => {
     })
     await manager.refreshSubagents(S1)
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 500 },
     ])
   })
 
@@ -482,7 +482,7 @@ describe('subagent catalogs', () => {
       payload: { type: 'host/session-status', sessionId: S2, running: true },
     })
     expect(api.callsOf('subagent.history')).toEqual([
-      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 50 },
+      { parentSessionId: S1, childSessionId: S2, mode: 'continuable', maxMessages: 500 },
     ])
     expect(api.callsOf('subagent.list')).toHaveLength(listCalls)
   })
