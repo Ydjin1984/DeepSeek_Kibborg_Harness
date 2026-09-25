@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { uiDebug, uiDebugSpan, uiDebugSpanSync } from '@deepseek-ai/dsh-debug-log'
+import { uiDebug, uiDebugSpan, uiDebugSpanSync, uiDebugTick } from '@deepseek-ai/dsh-debug-log'
 import { access, mkdir, realpath, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -17,7 +17,10 @@ import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { contentHasImage, createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
-import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
+import {
+  DEFAULT_MAX_MESSAGES, MESSAGE_TYPES, paginate as paginateEvents,
+} from '@deepseek-ai/dsh-session/pagination'
+import { isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { SessionQueryError, type SessionSearchCursor } from '@deepseek-ai/dsh-session-query'
@@ -150,14 +153,17 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Page size when history is called without maxMessages. */
-const DEFAULT_MAX_MESSAGES = 50
-/**
- * Hard cap on events in one history page. Message counting alone can keep
- * tens of thousands of chunks in a "50-message" window. The live client
- * retains completed message groups separately from this RPC page limit.
+/** Frames one mux or host stream may hold before its oldest recoverable frame is
+ * discarded.
+ *
+ * The producer is the session event bus, which never waits, and the consumer is
+ * a network stream, which may stall for as long as the browser is busy. Without
+ * a bound, a stalled consumer turns every produced frame into permanent heap
+ * growth in the host process. A `session/event` frame is recoverable — the
+ * client detects the seq gap and repulls the tail page — so those are dropped
+ * oldest-first; a frame the client must answer is never dropped for a later one.
  */
-const MAX_PAGE_EVENTS = 400
+const MAX_QUEUED_STREAM_FRAMES = 4096
 
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */
 const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
@@ -168,9 +174,6 @@ const COLD_SUMMARY_BATCH_SIZE = 64
 const SUBAGENT_CATALOG_TTL_MS = 3_000
 /** Default maximum artifact size eligible for one cold blankness read. */
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
-
-/** Conversation message event types (the pagination counting unit). */
-const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
 /** Per-message bound on attached files (the user asked for unrestricted formats, not unbounded counts). */
 const MAX_FILES_PER_MESSAGE = 20
@@ -426,17 +429,9 @@ function isAborted(signal: AbortSignal): boolean {
 }
 
 /**
- * Message-boundary pagination: count maxMessages append-origin messages
- * backwards from the window tail. Replacement copies never entered the
- * conversation a reader sees — they restate a shadowed range for the model
- * alone — so they consume no quota; the page stays one contiguous raw range,
- * which keeps a compaction's log-only `compaction/summary` record on the same page as its
- * replacement. The cut is the starting seq of the oldest message group (chunks
- * group via sourceEventSeqs — never cut mid-message) or, when the window already
- * holds 400 events, a message-aligned seq: an incomplete oldest group is dropped
- * when a later complete turn still fits, otherwise the page starts at that
- * group's finalized message so the assembler does not see orphan chunks. The
- * tail page naturally includes the in-progress partial.
+ * One transcript cut through the shared pagination module, kept here as a span:
+ * the rules live in `@deepseek-ai/dsh-session` so a stored log's window reader
+ * and this in-memory reader answer identically.
  */
 function paginate(
   events: readonly SessionEvent[],
@@ -447,80 +442,9 @@ function paginate(
     'history',
     'paginate',
     { total: events.length, beforeSeq, maxMessages },
-    () => paginateWindow(events, beforeSeq, maxMessages),
+    () => paginateEvents(events, beforeSeq, maxMessages),
     page => ({ page: page.events.length, hasMore: page.hasMore }),
   )
-}
-
-function isCountedPageMessage(event: SessionEvent): boolean {
-  return MESSAGE_TYPES.has(event.type) && isAppendSurfaceEvent(event)
-}
-
-function messageGroupStart(event: SessionEvent): number {
-  let groupStart = event.seq
-  const sources = (event as { sourceEventSeqs?: number[] }).sourceEventSeqs
-  if (sources !== undefined) {
-    for (const source of sources) {
-      if (source < groupStart) groupStart = source
-    }
-  }
-  return groupStart
-}
-
-/**
- * Event-cap cut that does not start a page inside a message group.
- * @param events - the log being paged.
- * @param capIndex - oldest index that still fits in the 400-event cap.
- * @param end - exclusive end of the page window.
- * @returns starting seq of the page.
- */
-function eventCapCut(events: readonly SessionEvent[], capIndex: number, end: number): number {
-  const capSeq = events[capIndex]?.seq ?? 0
-  let messageIndex = -1
-  for (let j = capIndex; j < end; j++) {
-    const candidate = events[j] as SessionEvent
-    if (!isCountedPageMessage(candidate)) continue
-    messageIndex = j
-    break
-  }
-  if (messageIndex === -1) return capSeq
-  const message = events[messageIndex] as SessionEvent
-  if (messageGroupStart(message) >= capSeq) return capSeq
-  for (let k = messageIndex + 1; k < end; k++) {
-    const candidate = events[k] as SessionEvent
-    if (candidate.type === 'turn/start') return candidate.seq
-    if (isCountedPageMessage(candidate)) return messageGroupStart(candidate)
-  }
-  return message.seq
-}
-
-function paginateWindow(
-  events: readonly SessionEvent[],
-  beforeSeq: number | undefined,
-  maxMessages: number,
-): { events: SessionEvent[]; hasMore: boolean } {
-  let end = events.length
-  if (beforeSeq !== undefined) {
-    while (end > 0 && (events[end - 1]?.seq ?? 0) >= beforeSeq) end -= 1
-  }
-  let count = 0
-  let cut = 0
-  for (let i = end - 1; i >= 0; i--) {
-    const event = events[i] as SessionEvent
-    if (end - i >= MAX_PAGE_EVENTS) {
-      cut = eventCapCut(events, i, end)
-      break
-    }
-    if (!isCountedPageMessage(event)) continue
-    count++
-    if (count >= maxMessages) {
-      cut = messageGroupStart(event)
-      break
-    }
-  }
-  let start = 0
-  while (start < end && (events[start]?.seq ?? 0) < cut) start += 1
-  return { events: events.slice(start, end), hasMore: cut > 0 }
 }
 
 /** Wrap an ok result echoing the request's rpcId. */
@@ -642,14 +566,38 @@ function presetFailure(request: RpcRequest<unknown>, error: unknown): RpcRespons
   return undefined
 }
 
-/** Simple async queue: core callbacks push, the AsyncIterable pulls; abort/return cleans up. */
+/**
+ * Simple async queue: core callbacks push, the AsyncIterable pulls; abort/return
+ * cleans up.
+ *
+ * Bounded, because the two ends have unrelated speeds: the producer is the
+ * session event bus and never waits, the consumer is a network stream that
+ * stalls whenever the browser is busy. Past {@link limit} the oldest recoverable
+ * frame is dropped; when nothing in the queue is recoverable the stream ends, so
+ * the consumer rebuilds its state from a fresh subscription instead of letting
+ * the host accumulate frames forever.
+ */
 class FrameQueue<F> {
   private buffer: F[] = []
   private waiter: (() => void) | undefined
   private done = false
+  private dropped = 0
+
+  /**
+   * @param limit - most frames to hold before dropping the oldest recoverable one.
+   * @param recoverable - whether a frame may be dropped because the consumer can
+   * rebuild the state it carried (a `session/event` frame's seq gap is repairable).
+   * @param onDrop - called with the number of frames dropped so far, once per drop.
+   */
+  constructor(
+    private readonly limit: number,
+    private readonly recoverable: (item: F) => boolean,
+    private readonly onDrop: (dropped: number) => void = () => {},
+  ) {}
 
   push(item: F): void {
     if (this.done) return
+    if (!this.makeRoom()) return
     this.buffer.push(item)
     this.waiter?.()
   }
@@ -657,6 +605,7 @@ class FrameQueue<F> {
   /** Insert at the head so interactive frames skip a backlog of session/event. */
   prepend(item: F): void {
     if (this.done) return
+    if (!this.makeRoom()) return
     this.buffer.unshift(item)
     this.waiter?.()
   }
@@ -664,6 +613,26 @@ class FrameQueue<F> {
   end(): void {
     this.done = true
     this.waiter?.()
+  }
+
+  /**
+   * Free one slot for an incoming frame.
+   * @returns whether the queue can still accept the frame.
+   */
+  private makeRoom(): boolean {
+    if (this.buffer.length < this.limit) return true
+    const index = this.buffer.findIndex(candidate => this.recoverable(candidate))
+    if (index === -1) {
+      // Nothing queued can be rebuilt by the consumer while it is this far
+      // behind: end the stream so it resubscribes and refetches, rather than
+      // retaining a backlog the host cannot bound.
+      this.end()
+      return false
+    }
+    this.buffer.splice(index, 1)
+    this.dropped += 1
+    this.onDrop(this.dropped)
+    return true
   }
 
   async *iterate(signal: AbortSignal, cleanup: () => void): AsyncGenerator<F> {
@@ -1839,10 +1808,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   async function readSessionState(sessionId: SessionId): Promise<SessionReadState> {
     const attached = ctx.sessions.get(sessionId)
     if (attached !== undefined) {
+      // `Session.events` is already a frozen snapshot, so the read needs no
+      // copy of its own: copying a few hundred thousand events per call is
+      // pure allocation pressure on a session this size.
       return {
         id: attached.id,
         header: attached.header,
-        events: [...attached.events],
+        events: attached.events,
       }
     }
     const inspected = await inspectServable(sessionId)
@@ -3029,7 +3001,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const attached = ctx.sessions.get(childSessionId)
         if (attached !== undefined) {
           header = attached.header
-          events = [...attached.events]
+          // Already a frozen snapshot: the page renderer only reads it.
+          events = attached.events
           projections = beforeSeq === undefined
             ? subagentHistoryProjections(ctx, childSessionId, () => projectionsFor(ctx, attached))
             : undefined
@@ -4204,7 +4177,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
     events: {
       mux(_request, signal) {
-        const queue = new FrameQueue<RpcRequest<MuxFrame>>()
+        const queue = new FrameQueue<RpcRequest<MuxFrame>>(
+          MAX_QUEUED_STREAM_FRAMES,
+          // Only a session/event frame is rebuilt by the client: it notices the
+          // seq gap and repulls the tail page. Everything else here changes a
+          // client-held state the consumer has no other way to relearn.
+          envelope => envelope.payload.type === 'session/event',
+          (dropped) => { uiDebugTick('mux', 'drop', { dropped }) },
+        )
         muxQueues.add(queue)
         for (const session of ctx.sessions.list()) {
           subscribeSession(queue, session)
@@ -4308,7 +4288,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       host(_request, signal) {
-        const queue = new FrameQueue<RpcRequest<HostFrame>>()
+        // A host frame carries list state the consumer has no independent way to
+        // relearn while this stream stays open, so a full queue ends the stream:
+        // the reconnect refetches the lists instead of retaining a backlog.
+        const queue = new FrameQueue<RpcRequest<HostFrame>>(MAX_QUEUED_STREAM_FRAMES, () => false)
         const committedWorkspaces = ctx.workspaceRegistry.list()
         const committedWorkspaceIds = new Set(
           committedWorkspaces.map(workspace => String(workspace.id)),

@@ -5,7 +5,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import {
-  contentBlockSchema, historyEntrySchema, sessionIdSchema, sessionProjectionsBlockSchema,
+  MAX_HISTORY_MESSAGES, contentBlockSchema, historyEntrySchema, sessionIdSchema, sessionProjectionsBlockSchema,
 } from './sessions.schema.ts'
 import type { SubagentListEntry } from './subagents.ts'
 
@@ -51,7 +51,7 @@ export const subagentHistoryRequestSchema = z.object({
   childSessionId: sessionIdSchema,
   mode: z.union([z.literal('one-shot'), z.literal('continuable')]),
   beforeSeq: z.number().int().nonnegative().optional(),
-  maxMessages: z.number().int().positive().optional(),
+  maxMessages: z.number().int().positive().max(MAX_HISTORY_MESSAGES).optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'subagent.history'>>>
 
 /** subagent.history response value. */

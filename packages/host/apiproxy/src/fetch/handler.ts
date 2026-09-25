@@ -286,28 +286,47 @@ function isConsumerGone(error: unknown): boolean {
   return code === 'ERR_INVALID_STATE' || error.message.includes('Controller is already closed')
 }
 
+/** Close a stream the consumer may already have cancelled. */
+function closeQuietly(controller: ReadableStreamDefaultController<Uint8Array>): void {
+  try {
+    controller.close()
+  } catch {
+    // Already cancelled by the consumer: a double close is the only reachable error.
+  }
+}
+
 /**
  * Wrap a frame stream as an SSE Response; stops when req.signal aborts. An
  * impl throw mid-stream emits one stream/error frame and then closes.
+ *
+ * Frames are pulled one per consumer read rather than pumped in a loop: the
+ * frame source pushes from the session event bus, which never waits, so a busy
+ * browser must be able to stop the read instead of letting this process buffer
+ * everything produced meanwhile. What the source retains while the consumer is
+ * behind is bounded by its own queue.
  */
 function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): Response {
   const encoder = new TextEncoder()
+  const iterator = frames[Symbol.asyncIterator]()
   /** Set by the stream's cancel path: the consumer left and nothing can be written. */
   let consumerGone = false
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
+      // Send an SSE comment line on open so clients/proxies see a live channel (the host
+      // stream has no baseline frames and would otherwise emit zero bytes while idle;
+      // a comment line is not a frame, so client frame parsing skips it naturally).
+      controller.enqueue(encoder.encode(': connected\n\n'))
+    },
+    async pull(controller) {
+      if (consumerGone) return
+      let next: IteratorResult<RpcRequest<MuxFrame | HostFrame>>
       try {
-        // Send an SSE comment line on open so clients/proxies see a live channel (the host
-        // stream has no baseline frames and would otherwise emit zero bytes while idle;
-        // a comment line is not a frame, so client frame parsing skips it naturally).
-        controller.enqueue(encoder.encode(': connected\n\n'))
-        for await (const narrow of frames) {
-          if (consumerGone) break
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame(narrow))}\n\n`))
-        }
+        next = await iterator.next()
       } catch (error: unknown) {
         // A consumer that closed the channel is a disconnect, not a failure: it gets
-        // no error frame and no log line.
+        // no error frame and no log line. `cancel()` sets the flag while the awaited
+        // read above is pending, a mutation the checker cannot observe.
+        // oxlint-disable-next-line typescript/no-unnecessary-condition
         if (consumerGone || isConsumerGone(error)) return
         // Mid-stream impl failure → one stream/error frame, then close: the client must see
         // the failure instead of a silent end (which reads as a normal disconnect). A fresh
@@ -320,14 +339,22 @@ function sseResponse(frames: AsyncIterable<RpcRequest<MuxFrame | HostFrame>>): R
           // Consumer already cancelled the stream: enqueue-after-cancel is the
           // only reachable error, and there is no one left to tell.
         }
-      } finally {
-        try {
-          controller.close()
-        } catch { /* already cancelled by the consumer: a double close is the only reachable error */ }
+        closeQuietly(controller)
+        return
+      }
+      if (next.done === true) {
+        closeQuietly(controller)
+        return
+      }
+      try {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(fullFrame(next.value))}\n\n`))
+      } catch {
+        // The consumer cancelled between the read and this write: nothing is left to send.
       }
     },
-    cancel() {
+    async cancel() {
       consumerGone = true
+      await iterator.return?.()
     },
   })
   return new Response(stream, {

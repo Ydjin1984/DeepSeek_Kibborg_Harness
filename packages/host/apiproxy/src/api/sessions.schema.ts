@@ -138,11 +138,20 @@ export const sessionForkValueSchema = z.object({
   sessionId: sessionIdSchema,
 }) satisfies z.ZodType<Wire<ResponseValue<'session.fork'>>>
 
+/**
+ * Largest `maxMessages` one history request may ask for.
+ *
+ * The page itself is already capped by event count (`MAX_PAGE_EVENTS`), and the
+ * client asks for far fewer; this bound keeps a hand-written request from asking
+ * the host to assemble an enormous message window in a single call.
+ */
+export const MAX_HISTORY_MESSAGES = 1_000
+
 /** session.history request payload (beforeSeq/maxMessages page backwards from the window tail). */
 export const sessionHistoryRequestSchema = z.object({
   sessionId: sessionIdSchema,
   beforeSeq: z.number().int().nonnegative().optional(),
-  maxMessages: z.number().int().positive().optional(),
+  maxMessages: z.number().int().positive().max(MAX_HISTORY_MESSAGES).optional(),
 }) satisfies z.ZodType<Wire<RequestPayload<'session.history'>>>
 
 /** Complete provider/model selection. */

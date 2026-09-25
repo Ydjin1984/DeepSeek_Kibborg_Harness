@@ -26,7 +26,13 @@ export function promptEntries(chat: Pick<ChatSnapshot, 'order' | 'nodes'>): read
   return entries
 }
 
-/** Last prompt at or before a visible event sequence. */
+/**
+ * Last prompt at or before a visible event sequence.
+ * @param entries - Loaded requests, ordered by ascending `seq`.
+ * @param seq - The visible event sequence to look up.
+ * @returns The key of the newest request whose `seq` is at most `seq`, or `null`
+ *   when every request sits past it.
+ */
 export function activePromptAtSeq(entries: readonly PromptEntry[], seq: number): string | null {
   let low = 0
   let high = entries.length

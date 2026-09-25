@@ -32,6 +32,11 @@ export type { ChunkRow, StorageRecord } from './chunk-rows.ts'
 export type { SessionSurface, SurfaceFoldReplacement, SurfaceFoldResult } from './surface.ts'
 export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
 export { canonicalHeader, foldRequestHeader, headerEquals } from './request-header.ts'
+export {
+  DEFAULT_MAX_MESSAGES, MAX_PAGE_EVENTS, MESSAGE_TYPES,
+  isCountedPageMessage, messageGroupStart, paginate,
+} from './pagination.ts'
+export type { HistoryPage } from './pagination.ts'
 export { KNOWN_SESSION_EVENT_TYPES } from './known-event-types.ts'
 
 declare module '@deepseek-ai/cordis' {

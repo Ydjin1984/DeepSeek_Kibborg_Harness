@@ -31,6 +31,10 @@
     "./surface": {
       "types": "./lib/types/surface.d.ts",
       "default": "./lib/types/surface.js"
+    },
+    "./pagination": {
+      "types": "./lib/types/pagination.d.ts",
+      "default": "./lib/types/pagination.js"
     }
   },
   "files": [
