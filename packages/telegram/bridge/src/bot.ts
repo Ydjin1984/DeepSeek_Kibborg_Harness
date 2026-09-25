@@ -87,7 +87,12 @@ export class BotClient {
     return { ok: true, result: payload.result as T }
   }
 
-  /** Fetch updates, long-polling up to {@link GET_UPDATES_LONG_POLL_SECONDS}. */
+  /**
+   * Fetch updates, long-polling up to {@link GET_UPDATES_LONG_POLL_SECONDS}.
+   * @param offset - id of the first update to return: one past the highest id already processed.
+   * @param signal - cancellation; aborting ends the pending long poll.
+   * @returns the fetched updates, or the API description when Telegram refuses the call.
+   */
   async getUpdates(offset: number, signal?: AbortSignal): Promise<TelegramCallResult<TelegramUpdate[]>> {
     return this.call<TelegramUpdate[]>('getUpdates', {
       offset,
@@ -97,7 +102,14 @@ export class BotClient {
     }, signal)
   }
 
-  /** Send one text message, optionally with an inline keyboard. */
+  /**
+   * Send one text message, optionally with an inline keyboard.
+   * @param chatId - target chat id, as configured in the Telegram settings.
+   * @param text - message body; the caller keeps it under Telegram's message length cap.
+   * @param options - optional inline keyboard; omitted `replyMarkup` sends a message without buttons.
+   * @param signal - cancellation for the request.
+   * @returns the sent message, or the API description when Telegram refuses the call.
+   */
   async sendMessage(
     chatId: string,
     text: string,
@@ -113,7 +125,15 @@ export class BotClient {
     }, signal)
   }
 
-  /** Upload one file as a document, with `caption` shown under it. */
+  /**
+   * Upload one file as a document, with `caption` shown under it.
+   * @param chatId - target chat id.
+   * @param filename - name the document is uploaded under and shown with in the chat.
+   * @param content - the document's UTF-8 text, uploaded with the `text/markdown` media type.
+   * @param caption - caption shown under the document; Telegram truncates it at its own caption cap.
+   * @param signal - cancellation for the request.
+   * @returns the sent message carrying the document, or the API description when Telegram refuses the call.
+   */
   async sendDocument(
     chatId: string,
     filename: string,
@@ -128,7 +148,16 @@ export class BotClient {
     return this.send<TelegramMessage>('sendDocument', form, {}, signal)
   }
 
-  /** Replace the text of an earlier bridge message. */
+  /**
+   * Replace the text of an earlier bridge message. An edit that leaves the text
+   * unchanged comes back as a refusal (Telegram rejects a no-op edit), not as the
+   * message.
+   * @param chatId - chat owning the message.
+   * @param messageId - Telegram id of the bridge message to edit.
+   * @param text - replacement text, kept under the message length cap by the caller.
+   * @param signal - cancellation for the request.
+   * @returns the edited message, or the API description when Telegram refuses the call.
+   */
   async editMessageText(
     chatId: string,
     messageId: number,
@@ -142,7 +171,13 @@ export class BotClient {
     }, signal)
   }
 
-  /** Remove the inline keyboard of an earlier bridge message, keeping its text. */
+  /**
+   * Remove the inline keyboard of an earlier bridge message, keeping its text.
+   * @param chatId - chat owning the message.
+   * @param messageId - Telegram id of the bridge message whose keyboard is dropped.
+   * @param signal - cancellation for the request.
+   * @returns the edited message, or the API description when Telegram refuses the call.
+   */
   async editMessageReplyMarkup(
     chatId: string,
     messageId: number,
@@ -155,7 +190,14 @@ export class BotClient {
     }, signal)
   }
 
-  /** Delete one of the bridge's own messages. */
+  /**
+   * Delete one of the bridge's own messages. Telegram refuses to delete messages
+   * the bot did not send, and its own beyond the service's deletion window.
+   * @param chatId - chat owning the message.
+   * @param messageId - Telegram id of the message to delete.
+   * @param signal - cancellation for the request.
+   * @returns whether Telegram deleted the message, or the API description when it refuses.
+   */
   async deleteMessage(chatId: string, messageId: number, signal?: AbortSignal): Promise<TelegramCallResult<boolean>> {
     return this.call<boolean>('deleteMessage', {
       chat_id: chatId,
@@ -163,7 +205,13 @@ export class BotClient {
     }, signal)
   }
 
-  /** Acknowledge an inline-button press (dismisses the client's loading state). */
+  /**
+   * Acknowledge an inline-button press (dismisses the client's loading state).
+   * @param callbackQueryId - id carried by the pressed button's callback query.
+   * @param options - optional reply text; `alert: true` shows it as a modal alert instead of a transient toast.
+   * @param signal - cancellation for the request.
+   * @returns whether Telegram accepted the acknowledgement, or the API description when it refuses.
+   */
   async answerCallbackQuery(
     callbackQueryId: string,
     options: { text?: string; alert?: boolean } = {},

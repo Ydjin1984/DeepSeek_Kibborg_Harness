@@ -49,7 +49,7 @@ export interface ExecutionSurface {
  * no side-effects beyond the execution registry.
  *
  * @param executions - lazy execution-service handle.
- * @param session - the session the event belongs to (unused but available).
+ * @param _session - the session the event belongs to (unused but available).
  * @param event - the committed session event.
  */
 export function projectGoalChange(

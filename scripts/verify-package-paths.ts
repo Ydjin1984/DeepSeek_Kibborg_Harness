@@ -29,9 +29,19 @@ const PATTERNS = [
   'examples/**/*.ts',
 ]
 
-/** Paths excluded from the scan: built output and vendored upstream source. */
+// The knowledge graph under packages/graphify-out is a gitignored local tool
+// artifact, not repository prose: its generated reports cite whatever files a
+// scan observed, so a file deleted afterwards is not documentation drift.
+const isLocalToolArtifactPath = (path: string): boolean =>
+  path.replaceAll('\\', '/').startsWith('packages/graphify-out/')
+
+/** Paths excluded from the scan: built output, the local knowledge graph, and vendored upstream source. */
 const isExcluded = (p: string): boolean =>
-  isArchivedAgentNotePath(p) || p.includes('/lib/') || p.endsWith('.d.ts') || p.startsWith('vendor/')
+  isArchivedAgentNotePath(p)
+  || p.includes('/lib/')
+  || p.endsWith('.d.ts')
+  || p.startsWith('vendor/')
+  || isLocalToolArtifactPath(p)
 
 /**
  * Directory names of every real package, `packages/<group>/<pkg>`. A broken

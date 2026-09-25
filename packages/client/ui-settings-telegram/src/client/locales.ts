@@ -66,4 +66,5 @@ export const zh: Record<keyof typeof en, string> = {
   clearToken: '清除令牌',
 }
 
+/** Dictionary key type for the `settings.telegram` section's copy. */
 export type TelegramSettingsKey = keyof typeof en

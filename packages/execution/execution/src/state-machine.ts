@@ -67,9 +67,13 @@ const TERMINAL_STATUSES = new Set<ExecutionStatus>([
  */
 export class ExecutionTransitionError extends Error {
   override name = 'ExecutionTransitionError'
+  /** Stable machine-readable code for this error class (`INVALID_TRANSITION`). */
   readonly code = 'INVALID_TRANSITION' as const
+  /** Status the transition started from, or `undefined` for a pre-CREATED execution. */
   readonly fromStatus?: ExecutionStatus | undefined
+  /** The event code whose transition was rejected. */
   readonly eventCode: ExecutionEventTypeCode
+  /** Source statuses the table allows for {@link eventCode}, with `undefined` filtered out. */
   readonly allowed: readonly ExecutionStatus[]
 
   constructor(eventCode: ExecutionEventTypeCode, fromStatus: ExecutionStatus | undefined, allowed: readonly ExecutionStatus[]) {

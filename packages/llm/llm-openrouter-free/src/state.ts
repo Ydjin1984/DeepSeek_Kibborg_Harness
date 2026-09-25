@@ -19,7 +19,11 @@ import type { ModelUsage } from './limits.ts'
 /** On-disk format version; a mismatch discards the ledger rather than guessing. */
 const LEDGER_VERSION = 1
 
-/** Absolute path of the pool ledger under the harness home. */
+/**
+ * Absolute path of the pool ledger under the harness home. The file need not
+ * exist yet: it is created on the first write.
+ * @returns the ledger's absolute path.
+ */
 export function ledgerPath(): string {
   return dshHomePath('storages', 'openrouter-free', 'ledger.json')
 }

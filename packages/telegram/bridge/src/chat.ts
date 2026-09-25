@@ -40,7 +40,11 @@ export class TelegramChatTransport implements ChatTransport {
     private chatId: string,
   ) {}
 
-  /** Point the transport at a fresh client/chat (settings changed). */
+  /**
+   * Point the transport at a fresh client/chat (settings changed).
+   * @param bot - the replacement Bot API client.
+   * @param chatId - the chat the mirror talks to from now on.
+   */
   rebind(bot: BotClient, chatId: string): void {
     this.bot = bot
     this.chatId = chatId

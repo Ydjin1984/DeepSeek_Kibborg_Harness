@@ -69,7 +69,10 @@ export class MirrorEngine {
     private readonly logger: MirrorLogger,
   ) {}
 
-  /** Begin mirroring `sessionId`; drops any earlier mirror state. */
+  /**
+   * Begin mirroring `sessionId`; drops any earlier mirror state.
+   * @param sessionId - id of the session whose events are mirrored from now on.
+   */
   attach(sessionId: string): void {
     this.reset()
     this.sessionId = sessionId
@@ -80,7 +83,12 @@ export class MirrorEngine {
     this.reset()
   }
 
-  /** Forward one session event; ignored unless it belongs to the attached session. */
+  /**
+   * Forward one session event; ignored unless it belongs to the attached session.
+   * Event kinds the mirror does not render are ignored as well.
+   * @param session - the session that committed the event, checked by id.
+   * @param event - the committed session event.
+   */
   onSessionEvent(session: Session, event: SessionEvent): void {
     if (this.sessionId === null || session.id !== this.sessionId) return
     switch (event.type) {

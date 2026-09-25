@@ -73,13 +73,21 @@ export class TelegramBridgeService extends Service {
 
   // ── public service surface (consumed by the web UI via the api gateway) ────
 
-  /** Whether the bridge has a usable bot token + chat binding. */
+  /**
+   * Whether the bridge has a usable bot token + chat binding.
+   * @returns true when both the bot token and the chat id are set.
+   */
   configured(): boolean {
     const settings = this.currentSettings()
     return settings.botToken !== '' && settings.chatId !== ''
   }
 
-  /** Mirror state for one session (or configuration state only when none is given). */
+  /**
+   * Mirror state for one session (or configuration state only when none is given).
+   * @param sessionId - the session to report on, or `undefined` for settings alone.
+   * @returns whether the bridge is configured, and whether the mirror is attached to
+   *   exactly that session.
+   */
   status(sessionId: SessionId | undefined): { configured: boolean; attached: boolean } {
     return {
       configured: this.configured(),
@@ -87,7 +95,13 @@ export class TelegramBridgeService extends Service {
     }
   }
 
-  /** Attach the mirror to `sessionId`, replacing any earlier attachment. */
+  /**
+   * Attach the mirror to `sessionId`, replacing any earlier attachment. A failed
+   * attach leaves the current runtime and attachment untouched.
+   * @param sessionId - the session whose event stream is mirrored into the chat.
+   * @returns `ok: true` on success, otherwise `reason: 'not-configured'` when the
+   *   settings do not carry a token and chat id.
+   */
   attach(sessionId: SessionId): { ok: boolean; reason?: string } {
     if (!this.configured()) return { ok: false, reason: 'not-configured' }
     if (this.runtime === null) {
@@ -101,13 +115,23 @@ export class TelegramBridgeService extends Service {
     return { ok: true }
   }
 
-  /** Detach the mirror when `sessionId` is the attached one. */
+  /**
+   * Detach the mirror when `sessionId` is the attached one.
+   * @param sessionId - the session requesting the detach; a different session's
+   *   request is ignored so it cannot tear down another session's mirror.
+   */
   detach(sessionId: SessionId): void {
     if (this.activeSessionId !== sessionId) return
     this.teardownRuntime()
   }
 
-  /** Send one test message to prove the token + chat binding. */
+  /**
+   * Send one test message to prove the token + chat binding. The message goes to
+   * the chat named by the current settings; a transport failure is reported in the
+   * result rather than thrown.
+   * @returns `ok: true` when Telegram accepted the message, otherwise a `description`
+   *   naming the refusal (or `'Telegram не настроен'` while unconfigured).
+   */
   async test(): Promise<{ ok: boolean; description?: string }> {
     const settings = this.currentSettings()
     if (!this.configured()) return { ok: false, description: 'Telegram не настроен' }

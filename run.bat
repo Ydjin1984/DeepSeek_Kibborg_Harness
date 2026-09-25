@@ -174,6 +174,7 @@ for /f "usebackq delims=" %%i in (`powershell -NoProfile -ExecutionPolicy Bypass
 exit /b 0
 
 :kill_all
+call :kill_supervisor
 call :detect
 if "%dsh_pids%"=="" (
     echo  Проект не запущен - останавливать нечего.
@@ -187,8 +188,40 @@ if "%dsh_pids%"=="" (
 ping -n 2 127.0.0.1 >nul
 exit /b 0
 
+:kill_supervisor
+rem Супервизор (server-supervisor.ps1) держит сервер живым и перезапустил бы его
+rem сразу после остановки, поэтому его останавливаем ПЕРВЫМ. Порядок важен:
+rem сперва просим выйти файлом-стопом (супервизор сам убивает своё дерево
+rem процессов через taskkill /T /F), и только если он не вышел за 3 секунды -
+rem убиваем процесс супервизора. Текст сообщений на латинице не случаен:
+rem powershell -Command из bat-файла портит кириллицу в аргументе.
+set "sup_pids="
+rem Из результата исключаем сам вспомогательный powershell и его родителя: строка
+rem детектора содержит "server-supervisor" и иначе совпадает сама с собой.
+rem Хост супервизора бывает любым: powershell 5.1 при штатном запуске из меню и
+rem pwsh 7 при запуске из другого терминала, поэтому перебираем оба имени - иначе
+rem запущенный на pwsh супервизор не находится и перезапускает остановленный сервер.
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$me = $PID; $parent = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $me) -ErrorAction SilentlyContinue).ParentProcessId; $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'powershell.exe' -or $_.Name -eq 'pwsh.exe' }); $p = @($all | Where-Object { $_.CommandLine -match 'server-supervisor' -and $_.ProcessId -ne $me -and $_.ProcessId -ne $parent }); if ($p) { ($p | ForEach-Object { $_.ProcessId }) -join ',' }"`) do set "sup_pids=%%p"
+if "%sup_pids%"=="" (
+    exit /b 0
+)
+echo  Stopping server supervisor: PID %sup_pids% ...
+echo. > "%~dp0.dsh-build\supervisor.stop"
+ping -n 4 127.0.0.1 >nul
+for %%p in (%sup_pids%) do (
+    taskkill /PID %%p /T /F >nul 2>&1
+)
+rem Файл-стоп мог остаться после убийства супервизора: свежей сессии он не помешает
+rem (супервизор снимает его при старте), но чистим за собой сразу.
+del /q "%~dp0.dsh-build\supervisor.stop" >nul 2>&1
+ping -n 2 127.0.0.1 >nul
+exit /b 0
+
 :ensure_utf8_sources
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$changed = @(); foreach ($f in @('%~dp0progress.ps1','%~dp0watch-logs.ps1')) { if (-not (Test-Path -LiteralPath $f)) { continue }; $b = [IO.File]::ReadAllBytes($f); if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { continue }; [IO.File]::WriteAllBytes($f, [byte[]](@(0xEF,0xBB,0xBF) + $b)); $changed += (Split-Path -Leaf $f) }; if ($changed.Count -gt 0) { Write-Host ('Восстановлена кодировка UTF-8 BOM: ' + ($changed -join ', ')) -ForegroundColor Yellow }"
+rem Список не перечисляем поимённо: новый .ps1 в корне (например server-supervisor.ps1)
+rem иначе остался бы без BOM, а кириллица ВНУТРИ строковых литералов в этом случае
+rem рассыпается и скрипт не парсится.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$changed = @(); foreach ($f in @(Get-ChildItem -LiteralPath '%~dp0' -Filter '*.ps1' -File -ErrorAction SilentlyContinue)) { $b = [IO.File]::ReadAllBytes($f.FullName); if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { continue }; [IO.File]::WriteAllBytes($f.FullName, [byte[]](@(0xEF,0xBB,0xBF) + $b)); $changed += $f.Name }; if ($changed.Count -gt 0) { Write-Host ('Восстановлена кодировка UTF-8 BOM: ' + ($changed -join ', ')) -ForegroundColor Yellow }"
 exit /b 0
 
 :msg_green

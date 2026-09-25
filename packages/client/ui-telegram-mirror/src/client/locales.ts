@@ -24,4 +24,5 @@ export const zh: Record<keyof typeof en, string> = {
   notConfiguredTitle: '请先在 设置 → Telegram 中完成配置',
 }
 
+/** Dictionary key type for the `telegram.mirror` namespace's copy. */
 export type TelegramMirrorKey = keyof typeof en

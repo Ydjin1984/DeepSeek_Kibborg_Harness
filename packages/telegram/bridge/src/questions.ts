@@ -50,7 +50,15 @@ export class TelegramQuestionProvider {
     return this.active !== null
   }
 
-  /** Ask the user and wait for the batch answer. */
+  /**
+   * Ask the user and wait for the batch answer. Questions are sent one at a time,
+   * so the settled answer must arrive before the next question is rendered.
+   * @param request - the question batch and the signal that cancels it.
+   * @returns the answers collected in the order the questions were asked.
+   * @throws {@link UserQuestionError} with code `TELEGRAM_BUSY` when this chat already
+   *   waits on an earlier batch (parallel asks are unsupported), and with
+   *   `ASK_ABORTED` when `request.signal` fires before the batch is complete.
+   */
   ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer> {
     if (this.active !== null) {
       return Promise.reject(new UserQuestionError(
@@ -75,7 +83,12 @@ export class TelegramQuestionProvider {
     })
   }
 
-  /** Handle one inbound button press; returns whether the provider consumed it. */
+  /**
+   * Handle one inbound button press; returns whether the provider consumed it.
+   * @param data - the callback payload of the pressed button; anything without the
+   *   option prefix belongs to another consumer.
+   * @returns true when the press settled a question, false when it was left for another handler.
+   */
   async handleCallbackQuery(data: string | undefined): Promise<boolean> {
     const active = this.active
     if (active === null) return false
@@ -91,7 +104,14 @@ export class TelegramQuestionProvider {
     return true
   }
 
-  /** Handle one inbound text message; returns whether the provider consumed it. */
+  /**
+   * Handle one inbound text message; returns whether the provider consumed it. A
+   * multi-select question takes comma-separated option numbers, any other question
+   * takes the text as a custom answer.
+   * @param text - the raw message text from the configured chat.
+   * @returns true when the text settled a question, false when it was left for the
+   *   session relay (blank text, unparsable numbers, or no active question).
+   */
   async handleText(text: string): Promise<boolean> {
     const active = this.active
     if (active === null) return false
