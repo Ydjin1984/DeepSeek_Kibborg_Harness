@@ -26,6 +26,23 @@ import { SessionWriteBehind } from './write-behind.ts'
 /** Default number of detached session preparations retained by a coordinator. */
 export const DEFAULT_PREPARED_SESSION_CACHE_SIZE = 5
 
+/**
+ * Default ceiling on the total stored-event count a coordinator's prepared pool
+ * may retain, summed over its ready entries.
+ *
+ * A ready entry holds a WHOLE decoded session log, and packed chunk rows expand
+ * roughly thirtyfold when decoded, so counting entries alone bounds nothing:
+ * five entries of multi-hundred-thousand-event logs reach gigabytes of heap.
+ * The budget still has to cover a working session: a log heavier than it is
+ * never retained, and every read of that log re-decodes the whole artifact —
+ * a detached transcript read costs seconds per page while a client pages back
+ * through the same log. Half a million stored events is roughly 150 MB decoded,
+ * which leaves ordinary working sessions cached and still refuses the
+ * multi-gigabyte log the budget exists to keep out of the heap.
+ * See {@link PersistenceCoordinatorOptions.preparedSessionCacheMaxEvents}.
+ */
+export const DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS = 500_000
+
 /** Default maximum intentional wait before a live session batch starts writing. */
 export const DEFAULT_WRITE_BATCH_MAX_DELAY_MS = 200
 
@@ -84,6 +101,16 @@ export function sessionFormatVersionRefusal(id: string, version: number): string
 export interface PersistenceCoordinatorOptions {
   /** Maximum completed unpublished preparations retained for reuse. */
   readonly preparedSessionCacheSize: number
+  /**
+   * Maximum stored-event count the ready preparations may retain in total.
+   *
+   * The pool exists to make a repeated cold read cheap, and each ready entry
+   * costs one whole decoded log. A session with millions of decoded events
+   * costs hundreds of megabytes, so a deployment that only bounds the entry
+   * COUNT still lets a few large logs fill the process heap; an entry heavier
+   * than this budget is never retained at all.
+   */
+  readonly preparedSessionCacheMaxEvents: number
   /** Maximum intentional batching wait after an idle live queue receives work. */
   readonly writeBatchMaxDelayMs: number
 }
@@ -607,6 +634,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     private backend: PersistenceBackend<TornMarker>,
     options: PersistenceCoordinatorOptions = {
       preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+      preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
       writeBatchMaxDelayMs: DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
     },
   ) {
@@ -614,13 +642,21 @@ export class PersistenceCoordinator<TornMarker = unknown> {
       || options.preparedSessionCacheSize < 1) {
       throw new TypeError('preparedSessionCacheSize must be a positive safe integer')
     }
+    if (!Number.isSafeInteger(options.preparedSessionCacheMaxEvents)
+      || options.preparedSessionCacheMaxEvents < 1) {
+      throw new TypeError('preparedSessionCacheMaxEvents must be a positive safe integer')
+    }
     if (!Number.isSafeInteger(options.writeBatchMaxDelayMs)
       || options.writeBatchMaxDelayMs < 1
       || options.writeBatchMaxDelayMs > MAX_WRITE_BATCH_DELAY_MS) {
       throw new TypeError(`writeBatchMaxDelayMs must be an integer between 1 and ${MAX_WRITE_BATCH_DELAY_MS}`)
     }
     this.writeBatchMaxDelayMs = options.writeBatchMaxDelayMs
-    this.preparations = new SessionPreparations(options.preparedSessionCacheSize)
+    this.preparations = new SessionPreparations(
+      options.preparedSessionCacheSize,
+      options.preparedSessionCacheMaxEvents,
+      source => source.inspection.events.length,
+    )
     this.installWritePath()
   }
 

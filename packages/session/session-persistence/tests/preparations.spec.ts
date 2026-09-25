@@ -17,9 +17,21 @@ function committed(source: PreparedSource): Promise<{ source: PreparedSource; st
   return Promise.resolve({ source, state: source.label })
 }
 
+/**
+ * Preparations whose weight budget does not bind, so a case describes
+ * entry-count eviction alone; the weight budget has its own cases below.
+ */
+function preparationsOf(
+  capacity: number,
+  maxReadyWeight: number = Number.MAX_SAFE_INTEGER,
+  weightOf: (source: PreparedSource) => number = () => 1,
+): SessionPreparations<PreparedSource, string> {
+  return new SessionPreparations<PreparedSource, string>(capacity, maxReadyWeight, weightOf)
+}
+
 describe('SessionPreparations inspection', () => {
   it('shares in-flight and ready sources, then invalidates them', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(2)
+    const preparations = preparationsOf(2)
     const id = SessionId('shared-inspection')
     const gate = Promise.withResolvers<PreparedSource>()
     const load = vi.fn(() => gate.promise)
@@ -40,7 +52,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('keeps a shared load alive when its first observer cancels', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('cancelled-first-observer')
     const gate = Promise.withResolvers<PreparedSource>()
     const load = vi.fn(() => gate.promise)
@@ -59,7 +71,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('evicts completed loads whose observers cancelled before readiness', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const firstId = SessionId('cancelled-ready-first')
     const secondId = SessionId('cancelled-ready-second')
     const firstGate = Promise.withResolvers<PreparedSource>()
@@ -85,7 +97,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('removes failed and invalidated in-flight loads without changing their observers', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const failedId = SessionId('failed-inspection')
     const failure = new Error('load failed')
     await expect(preparations.inspect(failedId, () => Promise.reject(failure))).rejects.toBe(failure)
@@ -109,7 +121,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('removes a load that throws before returning its promise', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('synchronous-load-failure')
     const failure = new Error('synchronous load failure')
 
@@ -118,7 +130,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('evicts ready entries while leaving reserved entries alone', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const reservedA = await preparations.reserve(
       SessionId('reserved-a'),
       () => Promise.resolve(prepared('reserved-a')),
@@ -143,7 +155,7 @@ describe('SessionPreparations inspection', () => {
   })
 
   it('discards only the exact ready source and retains exclusive reservations', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const ready = prepared('discard-ready')
     expect(preparations.discardReady(ready.session.id, ready)).toBe('missing')
     await preparations.inspect(ready.session.id, () => Promise.resolve(ready))
@@ -162,7 +174,7 @@ describe('SessionPreparations inspection', () => {
 
 describe('SessionPreparations reservation', () => {
   it('waits for an existing reservation, republishes the exact Session, and attaches once', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(2)
+    const preparations = preparationsOf(2)
     const id = SessionId('reservation-wait')
     const source = prepared(id)
     const first = await preparations.reserve(id, () => Promise.resolve(source), committed)
@@ -194,7 +206,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('supports abortable reservation waits without cancelling the held reservation', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('abortable-reservation-wait')
     const first = await preparations.reserve(id, () => Promise.resolve(prepared(id)), committed)
     const controller = new AbortController()
@@ -212,7 +224,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('removes a failed commit and wakes another waiter as invalidated', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('failed-commit')
     const commitStarted = Promise.withResolvers<undefined>()
     const commitGate = Promise.withResolvers<{ source: PreparedSource; state: string }>()
@@ -233,7 +245,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('returns a post-commit cancellation to the ready pool', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('post-commit-cancel')
     const source = prepared(id)
     const controller = new AbortController()
@@ -249,7 +261,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('does not revive an invalidated commit after post-commit cancellation', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('invalidated-commit-cancel')
     const source = prepared(id)
     const commitStarted = Promise.withResolvers<undefined>()
@@ -271,7 +283,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('does not reserve an entry invalidated while its commit succeeds', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('invalidated-successful-commit')
     const source = prepared(id)
     const commitStarted = Promise.withResolvers<undefined>()
@@ -291,7 +303,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('returns undefined when a load is invalidated before reservation', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('invalidated-reservation')
     const gate = Promise.withResolvers<PreparedSource>()
     const reservation = preparations.reserve(id, () => gate.promise, committed)
@@ -301,7 +313,7 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('skips pending adoption and accepts a ready source exactly once', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const id = SessionId('take-ready')
     const gate = Promise.withResolvers<PreparedSource>()
     const inspection = preparations.inspect(id, () => gate.promise)
@@ -314,10 +326,35 @@ describe('SessionPreparations reservation', () => {
   })
 
   it('rejects publication while only an inspection exists', async () => {
-    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const preparations = preparationsOf(1)
     const source = prepared('inspection-publication')
     await preparations.inspect(source.session.id, () => Promise.resolve(source))
     expect(() => preparations.reservationFor(source.session)).toThrow(/cannot publish/)
+  })
+
+  // Retention is bounded by the weight of what is retained, not only by a
+  // count: one ready entry is a whole decoded session log, so a handful of
+  // huge logs must not be able to fill the process heap.
+  it('evicts the oldest ready source once the retained weight exceeds the budget', async () => {
+    const preparations = preparationsOf(5, 10, source => source.label.length)
+    const firstId = SessionId('aaaaaa')
+    const secondId = SessionId('bbbbbb')
+    await preparations.inspect(firstId, () => Promise.resolve(prepared(firstId)))
+    expect(preparations.has(firstId)).toBe(true)
+
+    await preparations.inspect(secondId, () => Promise.resolve(prepared(secondId)))
+
+    expect(preparations.has(firstId)).toBe(false)
+    expect(preparations.has(secondId)).toBe(true)
+  })
+
+  it('never retains a single ready source heavier than the whole budget', async () => {
+    const preparations = preparationsOf(5, 4, source => source.label.length)
+    const id = SessionId('oversized-source')
+
+    await preparations.inspect(id, () => Promise.resolve(prepared(id)))
+
+    expect(preparations.has(id)).toBe(false)
   })
 })
 

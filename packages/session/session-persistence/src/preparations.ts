@@ -32,7 +32,19 @@ export interface SessionPreparationReservation<Source, CommitState> {
 export class SessionPreparations<Source extends PreparedSource, CommitState> {
   private readonly entries = new Map<SessionId, PreparationEntry<Source, CommitState>>()
 
-  constructor(private readonly capacity: number) {}
+  /**
+   * @param capacity - most ready entries to keep, oldest evicted first.
+   * @param maxReadyWeight - most total weight the ready entries may hold; a
+   * single entry above it is evicted immediately, so one oversized session log
+   * can never occupy the pool.
+   * @param weightOf - the entry's retention cost in that unit (an event count
+   * for a session log), read only while evicting.
+   */
+  constructor(
+    private readonly capacity: number,
+    private readonly maxReadyWeight: number,
+    private readonly weightOf: (source: Source) => number,
+  ) {}
 
   /**
    * Whether this pool currently knows about an unpublished identity.
@@ -285,16 +297,39 @@ export class SessionPreparations<Source extends PreparedSource, CommitState> {
   private touch(entry: PreparationEntry<Source, CommitState>): void {
     this.entries.delete(entry.id)
     this.entries.set(entry.id, entry)
+    this.evictReady()
+  }
+
+  /**
+   * Keep the ready set inside both budgets, oldest first.
+   *
+   * The count budget alone let a handful of very large session logs fill the
+   * heap: one entry is one whole decoded log, so five entries could hold
+   * millions of events while the count still read as "five". The weight budget
+   * bounds what the pool may retain, and an entry heavier than the whole budget
+   * is dropped even when it is the only ready one.
+   */
+  private evictReady(): void {
     let readyCount = 0
+    let readyWeight = 0
     for (const candidate of this.entries.values()) {
-      if (candidate.phase === 'ready') readyCount += 1
+      if (candidate.phase !== 'ready') continue
+      readyCount += 1
+      readyWeight += this.weighted(candidate)
     }
-    if (readyCount <= this.capacity) return
+    if (readyCount <= this.capacity && readyWeight <= this.maxReadyWeight) return
     for (const [id, candidate] of this.entries) {
       if (candidate.phase !== 'ready') continue
+      if (readyCount <= this.capacity && readyWeight <= this.maxReadyWeight) return
       this.entries.delete(id)
-      return
+      readyCount -= 1
+      readyWeight -= this.weighted(candidate)
     }
+  }
+
+  /** One entry's retention weight; an entry without a source has been removed already. */
+  private weighted(entry: PreparationEntry<Source, CommitState>): number {
+    return entry.source === undefined ? 0 : this.weightOf(entry.source)
   }
 }
 

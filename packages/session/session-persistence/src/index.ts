@@ -42,6 +42,7 @@ export interface SessionRawArtifact {
 
 // The backend-agnostic write-path orchestration first-party backends compose.
 export {
+  DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
   DEFAULT_PREPARED_SESSION_CACHE_SIZE,
   DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
   MAX_WRITE_BATCH_DELAY_MS,

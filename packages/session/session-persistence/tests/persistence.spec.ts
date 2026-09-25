@@ -3,7 +3,8 @@ import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { Session, SessionId, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import {
-  DEFAULT_PREPARED_SESSION_CACHE_SIZE, DEFAULT_WRITE_BATCH_MAX_DELAY_MS, MAX_WRITE_BATCH_DELAY_MS,
+  DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS, DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+  DEFAULT_WRITE_BATCH_MAX_DELAY_MS, MAX_WRITE_BATCH_DELAY_MS,
   SessionPersistence, SessionPersistenceRevision, PersistenceCoordinator,
   type PersistenceBackend, type SessionPersistenceSnapshot, type StoredPrefix, type StoredSuffix,
 } from '../src/index.ts'
@@ -314,6 +315,7 @@ describe('PersistenceCoordinator bounded writes', () => {
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       new PersistenceCoordinator(inner, backend, {
         preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+        preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
         writeBatchMaxDelayMs: MAX_WRITE_BATCH_DELAY_MS,
       })
     }, { inject: ['sessions'] }))
@@ -357,6 +359,7 @@ describe('PersistenceCoordinator bounded writes', () => {
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       new PersistenceCoordinator(inner, backend, {
         preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+        preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
         writeBatchMaxDelayMs: 1,
       })
     }, { inject: ['sessions'] }))
@@ -395,6 +398,7 @@ describe('PersistenceCoordinator bounded writes', () => {
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       new PersistenceCoordinator(inner, backend, {
         preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+        preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
         writeBatchMaxDelayMs: 1,
       })
     }, { inject: ['sessions'] }))
@@ -499,6 +503,18 @@ describe('PersistenceCoordinator session preparations', () => {
 
     expect(() => new PersistenceCoordinator(ctx, backend, {
       preparedSessionCacheSize: capacity,
+      preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
+      writeBatchMaxDelayMs: DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
+    })).toThrow(/positive safe integer/)
+  })
+
+  it.each([0, 1.5])('rejects invalid preparation cache weight budget %s', (weight) => {
+    const ctx = new Context()
+    const backend = new ControlledBackend()
+
+    expect(() => new PersistenceCoordinator(ctx, backend, {
+      preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+      preparedSessionCacheMaxEvents: weight,
       writeBatchMaxDelayMs: DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
     })).toThrow(/positive safe integer/)
   })
@@ -509,6 +525,7 @@ describe('PersistenceCoordinator session preparations', () => {
 
     expect(() => new PersistenceCoordinator(ctx, backend, {
       preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+      preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
       writeBatchMaxDelayMs: delay,
     })).toThrow(/writeBatchMaxDelayMs must be an integer between/)
   })
@@ -1148,6 +1165,7 @@ describe('PersistenceCoordinator session preparations', () => {
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       coordinator = new PersistenceCoordinator(inner, backend, {
         preparedSessionCacheSize: 1,
+        preparedSessionCacheMaxEvents: DEFAULT_PREPARED_SESSION_CACHE_MAX_EVENTS,
         writeBatchMaxDelayMs: DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
       })
     }, { inject: ['sessions'] }))
@@ -1157,6 +1175,36 @@ describe('PersistenceCoordinator session preparations', () => {
       await coordinator.inspect(secondId)
       await coordinator.inspect(firstId)
       expect(backend.loadAttempts).toBe(3)
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  // The incident this guards: a log of hundreds of thousands of decoded events
+  // stayed resident in the prepared pool, and five such entries exhausted the
+  // process heap. A log heavier than the whole budget must not be retained at
+  // all, so the next read reloads instead of reusing it.
+  it('never retains a prepared log heavier than the cache weight budget', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('preparation-weight-budget')
+    backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend, {
+        preparedSessionCacheSize: DEFAULT_PREPARED_SESSION_CACHE_SIZE,
+        // Smaller than the stored log, so its weight can never fit the pool.
+        preparedSessionCacheMaxEvents: 1,
+        writeBatchMaxDelayMs: DEFAULT_WRITE_BATCH_MAX_DELAY_MS,
+      })
+    }, { inject: ['sessions'] }))
+
+    try {
+      await coordinator.inspect(id)
+      await coordinator.inspect(id)
+      expect(backend.loadAttempts).toBe(2)
     } finally {
       await fiber.dispose()
       await ctx.fiber.dispose()
