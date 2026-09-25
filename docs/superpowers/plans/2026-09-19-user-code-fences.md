@@ -1,5 +1,7 @@
 # User Code Fences Implementation Plan
 
+English | [中文](2026-09-19-user-code-fences.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Сделать тройные обратные кавычки понятным визуальным способом выделить код в черновике и отправленном пользовательском сообщении, сохранив точный исходный текст для модели.

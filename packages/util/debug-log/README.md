@@ -16,6 +16,8 @@ import {
   uiDebug, uiDebugSpan, uiDebugSpanSync, uiDebugTick,
 } from '@deepseek-ai/dsh-debug-log'
 
+declare const load: () => Promise<unknown>
+
 setUiDebugEnabled(true)
 uiDebug('session', 'open', { sessionId: 'ses_1' })
 const page = await uiDebugSpan('rpc', 'session.history', { sessionId: 'ses_1' }, load)

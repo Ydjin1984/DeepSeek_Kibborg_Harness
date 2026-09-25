@@ -520,7 +520,7 @@ async saveUserServer(name: string, entry: RegistryServerEntry): Promise<McpServe
 async removeUserServer(name: string): Promise<void>
 ```
 
-Source: [`packages/mcp/mcp-servers/src/index.ts:138`](../../packages/mcp/mcp-servers/src/index.ts)
+Source: [`packages/mcp/mcp-servers/src/index.ts:152`](../../packages/mcp/mcp-servers/src/index.ts)
 
 <a id="ctxtools--toolruntime"></a>
 
@@ -619,6 +619,27 @@ async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>
 Types: [ScopeKey](scope.md)
 
 Source: [`packages/core/tools/src/index.ts:787`](../../packages/core/tools/src/index.ts)
+
+<a id="engagement-events"></a>
+
+### `engagement/*` events
+
+<a id="engagementdenied--emit"></a>
+
+#### `engagement/denied` — emit
+
+Emitted when the engagement contour denies a tool call before dispatch.
+
+```ts cordis-catalog
+/**
+ * Emitted when the engagement contour denies a tool call before dispatch.
+ * @param event - the denial audit record.
+ * @mode emit
+ */
+'engagement/denied': (event: EngagementDeniedEvent) => void
+```
+
+Source: [`packages/guard/engagement-stub/src/index.ts:52`](../../packages/guard/engagement-stub/src/index.ts)
 
 <a id="tools-events"></a>
 

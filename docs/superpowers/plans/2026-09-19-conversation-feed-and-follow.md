@@ -1,5 +1,7 @@
 # Conversation Feed and Bottom Follow Implementation Plan
 
+English | [中文](2026-09-19-conversation-feed-and-follow.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Создать спокойную, информативную и быструю ленту действий в «Исполнении», навигацию по запросам в «Чате» и «Исполнении», согласовать три вкладки и обеспечить управляемое пользователем живое следование за последним действием.

@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-llm-openrouter-free
 
+English | [中文](README.zh.md)
+
 OpenRouter free-model pool for the harness. One plugin instance scans the public OpenRouter model directory for zero-price models, publishes the survivors as one `pi-ai` provider route, and leases them to callers that rotate across the pool under a per-model request and token budget.
 
 The package root exposes the Cordis plugin contract (its default export is the `ctx.openrouterFree` service class), the settings schema, and the pure readers a configuration surface or a consumer needs. Model-directory parsing, the budget ledger, and the persistence format stay package-internal.

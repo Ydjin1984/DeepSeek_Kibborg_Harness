@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-execution
 
+English | [中文](README.zh.md)
+
 Unified execution lifecycle state machine for DeepSeek Harness.
 
 ## Purpose
@@ -66,6 +68,21 @@ Terminal (COMPLETED/FAILED/CANCELLED/TIMEOUT/ABORTED) — no outgoing transition
 ### `ExecutionService` (`ctx.executions`)
 
 ```ts
+import type { Context } from '@deepseek-ai/cordis'
+import type { ExecutionEventTypeCode } from '@deepseek-ai/dsh-execution'
+import type { ExecutionKind, ExecutionStatus } from '@deepseek-ai/dsh-execution/types'
+
+declare const ctx: Context
+declare const kind: ExecutionKind
+declare const executionId: string
+declare const options: Parameters<typeof ctx.executions.register>[2]
+declare const eventCode: ExecutionEventTypeCode
+declare const terminalStatus: ExecutionStatus
+declare const listener: Parameters<typeof ctx.executions.on>[0]
+declare const opts: Parameters<typeof ctx.executions.resources.acquire>[0]
+declare const resourceId: string
+declare const now: number
+
 ctx.executions.register(kind, executionId, options)  // → CREATED state
 ctx.executions.transition(executionId, eventCode)     // → new state (SM enforced)
 ctx.executions.end(executionId, terminalStatus)       // → force terminal
@@ -78,9 +95,9 @@ ctx.executions.resources.heartbeat(resourceId)        // → extend TTL
 ctx.executions.resources.release(resourceId)          // → released
 ctx.executions.resources.get(resourceId)              // → lease copy | undefined
 ctx.executions.resources.list()                       // → all lease copies
-ctx.executions.resources.status(resourceId, now?)     // → fail-closed status
-ctx.executions.resources.sweep(now?)                  // → orphaned leases
-ctx.executions.resources.isLive(resourceId, now?)     // → boolean health check
+ctx.executions.resources.status(resourceId, now)      // now?: number → fail-closed status
+ctx.executions.resources.sweep(now)                   // now?: number → orphaned leases
+ctx.executions.resources.isLive(resourceId, now)      // now?: number → boolean health check
 ```
 
 ### Resource Lease Registry

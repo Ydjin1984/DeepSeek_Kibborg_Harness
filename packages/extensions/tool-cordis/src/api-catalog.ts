@@ -388,6 +388,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
+        signature: 'telegram: TelegramApi',
+        description: 'Telegram mirror bridge state (attach/detach/status/test).',
+        parameters: [],
+      },
+      {
         signature: 'downloads: DownloadsApi',
         description: 'Host-only download surfaces (GET, no wire envelope); absent from IApiClient.',
         parameters: [],
@@ -643,6 +648,56 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
         returns: 'the created sandbox after the configured cwd exists.',
         throws: ['when E2B rejects creation or the service is disposing.'],
+      },
+    ],
+  },
+  {
+    key: 'executions',
+    summary: 'Unified execution lifecycle service.',
+    description: 'Unified execution lifecycle service. Orchestrates the execution state machine (registration, transitions, events) and the resource lease registry (external resource lifecycle: chrome, pty, ida, workspace, subprocess).\n\nDoes not inject `invariants`: that inject belongs to the `./invariant` companion. Shipping profiles never mount the invariants registry as a plugin row, so injecting it here would leave this service pending and abort boot.',
+    methods: [
+      {
+        signature: 'register(kind: ExecutionKind, executionId: string, options?: { parentExecutionId?: string attempt?: number operationId?: string }): ExecutionState',
+        description: 'Register a new execution. Creates a CREATED state.',
+        parameters: [{ name: 'kind', description: 'kind of execution.' }, { name: 'executionId', description: 'unique execution identifier.' }, { name: 'options', description: 'additional registration options.' }],
+        returns: 'the created state.',
+      },
+      {
+        signature: 'transition(executionId: string, eventCode: ExecutionEventTypeCode): ExecutionState',
+        description: 'Transition an execution through the state machine.',
+        parameters: [{ name: 'executionId', description: 'id of the execution to transition.' }, { name: 'eventCode', description: 'the transition event code (e.g. \'start\', \'complete\').' }],
+        returns: 'the new state.',
+        throws: ['{@link ExecutionTransitionError} on invalid transition.'],
+      },
+      {
+        signature: 'end(executionId: string, status: ExecutionStatus): ExecutionState',
+        description: 'Force-set a terminal status (bypasses SM validation).',
+        parameters: [{ name: 'executionId', description: 'id of the execution.' }, { name: 'status', description: 'terminal status.' }],
+        returns: 'the updated state.',
+      },
+      {
+        signature: 'get(executionId: string): ExecutionState | undefined',
+        description: 'Get the current state of an execution.',
+        parameters: [{ name: 'executionId', description: 'id of the execution.' }],
+        returns: 'a deep copy of the state, or `undefined`.',
+      },
+      {
+        signature: 'list(): ExecutionState[]',
+        description: 'List all registered executions.',
+        parameters: [],
+        returns: 'deep copies of all states.',
+      },
+      {
+        signature: 'listByKind(kind: ExecutionKind): ExecutionState[]',
+        description: 'List executions filtered by kind.',
+        parameters: [{ name: 'kind', description: 'kind to filter by.' }],
+        returns: 'deep copies of matching states.',
+      },
+      {
+        signature: 'on(listener: (event: ExecutionEvent) => void): () => void',
+        description: 'Subscribe to execution events.',
+        parameters: [{ name: 'listener', description: 'callback for each new event.' }],
+        returns: 'disposer that unregisters the listener.',
       },
     ],
   },
@@ -1065,6 +1120,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Delete one feedback item. Absence is successful regardless of the supplied version; an existing item requires an exact version match.',
         parameters: [{ name: 'request', description: 'Session, message, and observed item version.' }],
         returns: 'the stable absent postcondition, or an explicit failure.',
+      },
+    ],
+  },
+  {
+    key: 'openrouterFree',
+    summary: 'The pool service.',
+    description: 'The pool service. Enabled through its own settings namespace; while enabled it scans on an interval, republishes the `pi-ai` route after every scan, and serves leases.',
+    methods: [
+      {
+        signature: 'snapshot(): FreePoolSnapshot',
+        description: 'Current pool status. Cheap: it reads the last scan and the ledger, never the network, so a caller may consult it before every delegation.',
+        parameters: [],
+        returns: 'the snapshot a caller needs to decide whether to start work.',
+      },
+      {
+        signature: 'available(): boolean',
+        description: 'Whether the pool can hand out a lease right now.',
+        parameters: [],
+        returns: 'whether at least one pooled model has budget left.',
+      },
+      {
+        signature: 'acquire(): FreeModelLease | undefined',
+        description: 'Reserve the next model to run on: the least-used selectable one.',
+        parameters: [],
+        returns: 'a lease to release when the attempt settles, or `undefined` when the pool is disabled, empty, or fully spent — never a wait.',
+      },
+      {
+        signature: 'refresh(): Promise<void>',
+        description: 'Scan the directory, publish the route, and report the pool. Concurrent callers share one scan.',
+        parameters: [],
+        returns: 'after the scan settled, whether it succeeded or not.',
       },
     ],
   },
@@ -2180,18 +2266,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'userQuestions',
-    summary: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
-    description: '`ctx.userQuestions`: one active UI provider plus an `ask()` API.',
+    summary: '`ctx.userQuestions`: registered UI providers plus an `ask()` API.',
+    description: '`ctx.userQuestions`: registered UI providers plus an `ask()` API.',
     methods: [
       {
         signature: 'registerProvider(provider: UserQuestionProvider): () => void',
-        description: 'Register the UI provider. Only one provider may be active in a context.',
-        parameters: [{ name: 'provider', description: 'UI-side implementation that collects answers.' }],
+        description: 'Register a UI provider. Any number of providers may be active in a context: each one is an independent answer channel for the same questions.',
+        parameters: [{ name: 'provider', description: 'Channel implementation that collects answers.' }],
         returns: 'Disposer that unregisters this provider.',
       },
       {
         signature: 'async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>',
-        description: 'Ask the active UI provider and wait for the user\'s answer.\n\nWhen a caller supplies an agent, human interaction is valid only for the exact live runtime root. Runtime ownership, not durable session lineage, decides this boundary: an owned child has no human answerer and would block forever, while a lineage-bearing session resumed as a new runtime root may ask normally.',
+        description: 'Ask the registered UI providers and wait for the first user answer.\n\nWhen a caller supplies an agent, human interaction is valid only for the exact live runtime root. Runtime ownership, not durable session lineage, decides this boundary: an owned child has no human answerer and would block forever, while a lineage-bearing session resumed as a new runtime root may ask normally.',
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
@@ -2523,6 +2609,30 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A domain record or the global singleton changed, emitted once per write strictly after the backend acknowledged durability.',
     description: 'A domain record or the global singleton changed, emitted once per write strictly after the backend acknowledged durability. Events of one domain arrive in its write-chain order.',
     parameters: [{ name: 'change', description: 'domain, table (`\'\'` for global), key (`\'\'` for global), operation discriminant, and on `put` the new snapshot.' }],
+  },
+  {
+    name: 'engagement/denied',
+    mode: 'emit',
+    signature: '\'engagement/denied\': (event: EngagementDeniedEvent) => void',
+    summary: 'Emitted when the engagement contour denies a tool call before dispatch.',
+    description: 'Emitted when the engagement contour denies a tool call before dispatch.',
+    parameters: [{ name: 'event', description: 'the denial audit record.' }],
+  },
+  {
+    name: 'execution/event',
+    mode: 'emit',
+    signature: '\'execution/event\': (payload: ExecutionEventPayload) => void',
+    summary: 'Emitted whenever an execution event is appended to the registry.',
+    description: 'Emitted whenever an execution event is appended to the registry.',
+    parameters: [{ name: 'payload', description: 'the appended event wrapped in a payload.' }],
+  },
+  {
+    name: 'executions/resource',
+    mode: 'emit',
+    signature: '\'executions/resource\': (payload: { event: ResourceEvent }) => void',
+    summary: 'Emitted whenever a resource lease event occurs (acquire, heartbeat, release, orphan).',
+    description: 'Emitted whenever a resource lease event occurs (acquire, heartbeat, release, orphan).',
+    parameters: [{ name: 'payload', description: 'the resource event wrapped in a payload.' }],
   },
   {
     name: 'fs/edit-intent',
@@ -3209,8 +3319,32 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EncodedImageAttachment {\n    mediaType: ImageMediaType;\n    data: string;\n    name?: string;\n}',
   },
   {
+    name: 'EngagementDeniedEvent',
+    declaration: 'export interface EngagementDeniedEvent {\n    toolName: string;\n    host?: string | undefined;\n    reason: string;\n    time: string;\n}',
+  },
+  {
     name: 'EpochHeader',
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
+  },
+  {
+    name: 'ExecutionEventPayload',
+    declaration: 'export interface ExecutionEventPayload {\n    event: ExecutionEvent;\n}',
+  },
+  {
+    name: 'ExecutionEventTypeCode',
+    declaration: 'export type ExecutionEventTypeCode = \'start\' | \'queue\' | \'wait-tool\' | \'wait-subagent\' | \'wait-user\' | \'complete\' | \'fail\' | \'cancel\' | \'timeout\' | \'abort\' | \'interrupt\' | \'recover\' | \'resume\';',
+  },
+  {
+    name: 'ExecutionKind',
+    declaration: 'export type ExecutionKind = \'job\' | \'goal\' | \'workflow\' | \'subagent\' | \'operation\';',
+  },
+  {
+    name: 'ExecutionState',
+    declaration: 'export interface ExecutionState {\n    executionId: string;\n    kind: ExecutionKind;\n    status: ExecutionStatus;\n    sourceStatus?: string | undefined;\n    reason?: string | undefined;\n    parentExecutionId?: string | undefined;\n    attempt: number;\n    operationId?: string | undefined;\n    resourceRef?: string | undefined;\n    startedAt?: number | undefined;\n    updatedAt: number;\n    endedAt?: number | undefined;\n}',
+  },
+  {
+    name: 'ExecutionStatus',
+    declaration: 'export type ExecutionStatus = \'CREATED\' | \'QUEUED\' | \'RUNNING\' | \'WAITING_TOOL\' | \'WAITING_SUBAGENT\' | \'WAITING_USER\' | \'INTERRUPTED\' | \'RECOVERING\' | \'COMPLETED\' | \'FAILED\' | \'CANCELLED\' | \'TIMEOUT\' | \'ABORTED\';',
   },
   {
     name: 'FileDiff',
@@ -3231,6 +3365,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'FinishReasonMap',
     declaration: 'export interface FinishReasonMap {\n    \'stop\': {\n        kind: \'stop\';\n    };\n    \'tool-calls\': {\n        kind: \'tool-calls\';\n    };\n    \'max-tokens\': {\n        kind: \'max-tokens\';\n    };\n    \'aborted\': {\n        kind: \'aborted\';\n        failure: LlmFailure;\n    };\n    \'error\': {\n        kind: \'error\';\n        failure: LlmFailure;\n    };\n}',
+  },
+  {
+    name: 'FreeModelLease',
+    declaration: 'export interface FreeModelLease {\n    readonly provider: string;\n    readonly model: string;\n    release(outcome: LeaseOutcome): Promise<void>;\n}',
+  },
+  {
+    name: 'FreePoolSnapshot',
+    declaration: 'export interface FreePoolSnapshot {\n    readonly enabled: boolean;\n    readonly scannedAt: number;\n    readonly models: readonly OpenRouterFreeStatusRow[];\n    readonly hasCapacity: boolean;\n    readonly nextRecoveryAt: number;\n}',
   },
   {
     name: 'FsDirEntry',
@@ -3447,6 +3589,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KvUnitDescriptor',
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
+  },
+  {
+    name: 'LeaseOutcome',
+    declaration: 'export type LeaseOutcome = {\n    kind: \'success\';\n    tokens?: number;\n} | {\n    kind: \'rate-limited\';\n    retryAfterMs?: number;\n} | {\n    kind: \'failure\';\n    message: string;\n};',
   },
   {
     name: 'LlmAdapter',
@@ -3697,6 +3843,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
   },
   {
+    name: 'OpenRouterFreeStatusRow',
+    declaration: 'export interface OpenRouterFreeStatusRow {\n    id: string;\n    name: string;\n    contextLength: number;\n    requestsUsedToday: number;\n    requestsRemainingToday: number;\n    tokensUsedToday: number;\n    tokensRemainingToday: number;\n    cooldownUntil: number;\n    state: \'ready\' | \'cooling\' | \'exhausted\' | \'error\';\n    lastError?: string;\n}',
+  },
+  {
     name: 'PermissionSelect',
     declaration: 'export interface PermissionSelect {\n    options: PresetOption[];\n    currentValue: string;\n}',
   },
@@ -3797,6 +3947,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
   },
   {
+    name: 'RecoveryStrategy',
+    declaration: 'export type RecoveryStrategy = \'reconnect\' | \'recreate\' | \'reconnect_or_recreate\';',
+  },
+  {
     name: 'RedactedSecret',
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
   },
@@ -3851,6 +4005,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResolvedSubagentStartRequest',
     declaration: 'export interface ResolvedSubagentStartRequest extends SubagentStartRequest {\n    readonly descriptor: SubagentDescriptorData;\n}',
+  },
+  {
+    name: 'ResourceEvent',
+    declaration: 'export interface ResourceEvent {\n    seq: number;\n    type: ResourceEventType;\n    resourceId: string;\n    lease: ResourceLease;\n    time: number;\n}',
+  },
+  {
+    name: 'ResourceEventType',
+    declaration: 'export type ResourceEventType = \'resource.acquired\' | \'resource.heartbeat\' | \'resource.released\' | \'resource.orphaned\';',
+  },
+  {
+    name: 'ResourceLease',
+    declaration: 'export interface ResourceLease {\n    resourceId: string;\n    type: ResourceType;\n    provider?: string | undefined;\n    ownerExecutionId?: string | undefined;\n    lifecycle: ResourceLifecycle;\n    ttlMs: number;\n    acquiredAt: number;\n    heartbeatAt: number;\n    expiresAt: number;\n    recoveryStrategy?: RecoveryStrategy | undefined;\n    updatedAt: number;\n}',
+  },
+  {
+    name: 'ResourceLifecycle',
+    declaration: 'export type ResourceLifecycle = \'leased\' | \'released\' | \'orphaned\';',
+  },
+  {
+    name: 'ResourceType',
+    declaration: 'export type ResourceType = string;',
   },
   {
     name: 'RestoredSessionOptions',
@@ -4539,6 +4713,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TeamWaitResult',
     declaration: 'export interface TeamWaitResult {\n    readonly timedOut: boolean;\n}',
+  },
+  {
+    name: 'TelegramApi',
+    declaration: 'export interface TelegramApi {\n    status(request: RpcRequest<{\n        sessionId?: SessionId;\n    }>): Promise<RpcResponse<TelegramStatusView>>;\n    attach(request: RpcRequest<{\n        sessionId: SessionId;\n    }>): Promise<RpcResponse<{}>>;\n    detach(request: RpcRequest<{\n        sessionId: SessionId;\n    }>): Promise<RpcResponse<{}>>;\n    test(request: RpcRequest<{}>): Promise<RpcResponse<TelegramTestView>>;\n}',
+  },
+  {
+    name: 'TelegramStatusView',
+    declaration: 'export interface TelegramStatusView {\n    readonly configured: boolean;\n    readonly attached: boolean;\n}',
+  },
+  {
+    name: 'TelegramTestView',
+    declaration: 'export interface TelegramTestView {\n    readonly ok: boolean;\n    readonly description?: string;\n}',
   },
   {
     name: 'TerminalBackend',

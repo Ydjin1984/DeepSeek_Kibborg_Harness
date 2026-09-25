@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-telegram-bridge
 
+English | [中文](README.zh.md)
+
 Telegram mirror bridge for the web GUI (`dsh web`). While a session mirror is attached, the bridge mirrors the session's live event stream into a configured Telegram chat through Bot API long polling, relays the user's messages and answers back into the session, and answers `ctx.userQuestions` from the chat (option buttons or free text).
 
 ## Architecture

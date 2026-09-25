@@ -113,7 +113,12 @@ interface AskUserQuestionAnswer {
 Only one provider may be active in a context. Provider registration is effect-bound so HMR/disposal removes the active UI.
 
 ```ts type-equiv
-/** UI-side provider for user questions. */
+/**
+ * A provider that shows questions on one answer channel and resolves when the
+ * human answers there. Providers must listen to `request.signal`: the service
+ * aborts competing providers once another channel answered, and the owning
+ * tool/step aborts the whole ask through the same signal.
+ */
 interface UserQuestionProvider {
   ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
 }
@@ -145,19 +150,20 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.userQuestions` — `UserQuestionService`
 
-`ctx.userQuestions`: one active UI provider plus an `ask()` API.
+`ctx.userQuestions`: registered UI providers plus an `ask()` API.
 
 ```ts cordis-catalog
 /**
- * Register the UI provider. Only one provider may be active in a context.
+ * Register a UI provider. Any number of providers may be active in a context:
+ * each one is an independent answer channel for the same questions.
  *
- * @param provider UI-side implementation that collects answers.
+ * @param provider Channel implementation that collects answers.
  * @returns Disposer that unregisters this provider.
  */
 registerProvider(provider: UserQuestionProvider): () => void
 
 /**
- * Ask the active UI provider and wait for the user's answer.
+ * Ask the registered UI providers and wait for the first user answer.
  *
  * When a caller supplies an agent, human interaction is valid only for the
  * exact live runtime root. Runtime ownership, not durable session lineage,
@@ -174,5 +180,5 @@ registerProvider(provider: UserQuestionProvider): () => void
 async ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>
 ```
 
-Source: [`packages/interaction/user-questions/src/index.ts:51`](../../packages/interaction/user-questions/src/index.ts)
+Source: [`packages/interaction/user-questions/src/index.ts:58`](../../packages/interaction/user-questions/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state.
+go-runtime-migration.md: 6803761bd5b0cb6b169b3ba3f79971af3fc7b692
+go-runtime-migration.zh.md: a0dafff2949c1aa9da798a0d25cd14f9e4e26c8a

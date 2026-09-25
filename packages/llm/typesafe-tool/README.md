@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-typesafe-tool
 
+English | [中文](README.zh.md)
+
 Model-facing `typesafe_evaluate` tool over the TypeSafe.ai System One API.
 
 TypeSafe.ai is not an OpenAI-compatible chat provider. It serves one `POST /v1/systemone` endpoint that answers typed, probability-backed questions about a single piece of state and returns no free text. This package exposes that endpoint to the model as a tool for classification, routing, sentiment, and scoring.

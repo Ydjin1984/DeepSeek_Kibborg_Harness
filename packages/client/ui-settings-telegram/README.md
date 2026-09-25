@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-client-ui-settings-telegram
 
+English | [中文](README.zh.md)
+
 Telegram settings section (`settings.section` entry `telegram`): edits the `telegram` settings namespace (`botToken`, `chatId`) and drives the bridge connectivity test through the wire `telegram` API (`api.telegram.test`).
 
 ## Settings section

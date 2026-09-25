@@ -164,6 +164,71 @@ The abstract [`JobRegistry`](../../packages/jobs/jobs/src/index.ts) Service Defi
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxexecutions--executionservice"></a>
+
+### `ctx.executions` — `ExecutionService`
+
+Unified execution lifecycle service. Orchestrates the execution state machine (registration, transitions, events) and the resource lease registry (external resource lifecycle: chrome, pty, ida, workspace, subprocess).
+
+Does not inject `invariants`: that inject belongs to the `./invariant` companion. Shipping profiles never mount the invariants registry as a plugin row, so injecting it here would leave this service pending and abort boot.
+
+```ts cordis-catalog
+/**
+ * Register a new execution. Creates a CREATED state.
+ * @param kind — kind of execution.
+ * @param executionId — unique execution identifier.
+ * @param options — additional registration options.
+ * @returns the created state.
+ */
+register(kind: ExecutionKind, executionId: string, options?: { parentExecutionId?: string attempt?: number operationId?: string }): ExecutionState
+
+/**
+ * Transition an execution through the state machine.
+ * @param executionId — id of the execution to transition.
+ * @param eventCode — the transition event code (e.g. 'start', 'complete').
+ * @returns the new state.
+ * @throws {@link ExecutionTransitionError} on invalid transition.
+ */
+transition(executionId: string, eventCode: ExecutionEventTypeCode): ExecutionState
+
+/**
+ * Force-set a terminal status (bypasses SM validation).
+ * @param executionId — id of the execution.
+ * @param status — terminal status.
+ * @returns the updated state.
+ */
+end(executionId: string, status: ExecutionStatus): ExecutionState
+
+/**
+ * Get the current state of an execution.
+ * @param executionId — id of the execution.
+ * @returns a deep copy of the state, or `undefined`.
+ */
+get(executionId: string): ExecutionState | undefined
+
+/**
+ * List all registered executions.
+ * @returns deep copies of all states.
+ */
+list(): ExecutionState[]
+
+/**
+ * List executions filtered by kind.
+ * @param kind — kind to filter by.
+ * @returns deep copies of matching states.
+ */
+listByKind(kind: ExecutionKind): ExecutionState[]
+
+/**
+ * Subscribe to execution events.
+ * @param listener — callback for each new event.
+ * @returns disposer that unregisters the listener.
+ */
+on(listener: (event: ExecutionEvent) => void): () => void
+```
+
+Source: [`packages/execution/execution/src/index.ts:52`](../../packages/execution/execution/src/index.ts)
+
 <a id="ctxjobs--jobregistry-abstract-seam"></a>
 
 ### `ctx.jobs` — `JobRegistry` (abstract seam)
@@ -286,5 +351,48 @@ abstract attachController(name: string): () => void
 
 Types: [Agent](core.md)
 
-Source: [`packages/jobs/jobs/src/index.ts:62`](../../packages/jobs/jobs/src/index.ts)
+Source: [`packages/jobs/jobs/src/index.ts:64`](../../packages/jobs/jobs/src/index.ts)
+
+<a id="execution-events"></a>
+
+### `execution/*` events
+
+<a id="executionevent--emit"></a>
+
+#### `execution/event` — emit
+
+Emitted whenever an execution event is appended to the registry.
+
+```ts cordis-catalog
+/**
+ * Emitted whenever an execution event is appended to the registry.
+ * @param payload - the appended event wrapped in a payload.
+ * @mode emit
+ */
+'execution/event': (payload: ExecutionEventPayload) => void
+```
+
+Source: [`packages/execution/execution/src/index.ts:28`](../../packages/execution/execution/src/index.ts)
+
+<a id="executions-events"></a>
+
+### `executions/*` events
+
+<a id="executionsresource--emit"></a>
+
+#### `executions/resource` — emit
+
+Emitted whenever a resource lease event occurs (acquire, heartbeat, release, orphan).
+
+```ts cordis-catalog
+/**
+ * Emitted whenever a resource lease event occurs (acquire, heartbeat,
+ * release, orphan).
+ * @param payload - the resource event wrapped in a payload.
+ * @mode emit
+ */
+'executions/resource': (payload: { event: ResourceEvent }) => void
+```
+
+Source: [`packages/execution/execution/src/index.ts:35`](../../packages/execution/execution/src/index.ts)
 <!-- END GENERATED cordis-surface -->

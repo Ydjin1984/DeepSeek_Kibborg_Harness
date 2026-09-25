@@ -21,6 +21,9 @@ flowchart LR
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
   pkg_compaction_basic["compaction-basic"]
+  pkg_llm_openrouter_free["llm-openrouter-free"]
+  svc_openrouterFree["ctx.openrouterFree<br/>OpenRouter free-model pool"]
+  pkg_orchestrator["orchestrator"]
   pkg_token_meter["token-meter"]
   svc_tokenMeter["ctx.tokenMeter<br/>Replay token measurement"]
   pkg_compaction_tool_result_pruner["compaction-tool-result-pruner"]
@@ -169,6 +172,10 @@ flowchart LR
   svc_jobs["ctx.jobs<br/>Background job registry"]
   pkg_jobs_local["jobs-local"]
   pkg_tool_jobs["tool-jobs"]
+  pkg_execution["execution"]
+  svc_executions["ctx.executions<br/>Unified execution lifecycle registry"]
+  pkg_workflow["workflow"]
+  pkg_execution_persistence["execution-persistence"]
   pkg_web["web"]
   svc_web["ctx.web<br/>Web access provider registry"]
   pkg_web_search_exa["web-search-exa"]
@@ -189,7 +196,6 @@ flowchart LR
   pkg_modules["modules"]
   pkg_hmr["hmr"]
   svc_clientModules["ctx.clientModules<br/>Client plugin graph host"]
-  pkg_workflow["workflow"]
   svc_workflowEngine["ctx.workflowEngine<br/>Workflow script engine"]
   pkg_workflow_worker_thread["workflow-worker-thread"]
   pkg_tool_workflow["tool-workflow"]
@@ -228,6 +234,7 @@ flowchart LR
   pkg_directory_picker_browse --> svc_directoryPicker
   pkg_directory_picker_native --> svc_directoryPicker
   pkg_e2b --> svc_e2b
+  pkg_execution --> svc_executions
   pkg_file_reference --> svc_fileReferences
   pkg_file_reference_local --> svc_fileReferences
   pkg_fs --> svc_fs
@@ -240,6 +247,7 @@ flowchart LR
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
   pkg_llm_deepseek --> svc_llm
+  pkg_llm_openrouter_free --> svc_openrouterFree
   pkg_llm_pi_ai --> svc_llm
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
@@ -329,6 +337,10 @@ flowchart LR
   svc_dynamicCordisRunner --> pkg_tool_cordis
   svc_e2b --> pkg_fs_e2b
   svc_e2b --> pkg_subprocess_e2b
+  svc_executions --> pkg_goal
+  svc_executions --> pkg_jobs
+  svc_executions --> pkg_subagent
+  svc_executions --> pkg_workflow
   svc_fs --> pkg_tool_fs
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
@@ -342,6 +354,7 @@ flowchart LR
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
   svc_mcpServers --> pkg_tools
+  svc_openrouterFree --> pkg_orchestrator
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -420,6 +433,7 @@ flowchart LR
   svc_workflowEngine --> pkg_tool_ralph
   svc_workflowEngine --> pkg_tool_workflow
   svc_workspaceRegistry --> pkg_apiproxy
+  svc_executions -. event gate .-> pkg_execution_persistence
   svc_fs -. event gate .-> pkg_fs_observation_policy
 ```
 
@@ -428,6 +442,7 @@ flowchart LR
 | `ctx.mcpServers` | `core` | [`mcp-servers`](../packages/mcp/mcp-servers) | - | [`tools`](../packages/core/tools) | - | Reads the user and project `mcpServers` registries and deploys one `mcp-client` instance per declared server; tools land on the global tool layer as `mcp__<server>__<tool>`. |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content. |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | Adapters register provider implementations; the loop and compaction call the provider-neutral stream service. |
+| `ctx.openrouterFree` | `core` | [`llm-openrouter-free`](../packages/llm/llm-openrouter-free) | - | [`orchestrator`](../packages/context/orchestrator) | - | Scans OpenRouter public model directory for zero-price models, publishes the survivors as a `llm-pi-ai` route profile through that namespace, and leases one reserved request at a time; the orchestrator swarm reads the pool through `ctx.get` and reports a spent pool rather than waiting on it. |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements. |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | Rewrites oversized current tool results through replayable single-node surface replacements before summary compaction. |
 | `ctx.sessions` | `core` | [`session`](../packages/core/session) | - | [`agent-loop`](../packages/core/agent-loop), [`agent`](../packages/core/agent), [`session-persistence`](../packages/session/session-persistence), [`session-query`](../packages/session-query/session-query), [`session-query-sqlite`](../packages/session-query/session-query-sqlite), `subagent-inprocess`, [`invariants`](../packages/runtime-diagnostics/invariants), [`message-feedback`](../packages/feedback/message-feedback) | - | Owns append-only Session instances and emits the durable session event feed. |
@@ -474,6 +489,7 @@ flowchart LR
 | `ctx.subagents` | `seam` | [`subagent`](../packages/subagent/subagent) | [`subagent-spawn-in-process`](../packages/subagent/subagent-spawn-in-process), [`subagent-fork-in-process`](../packages/subagent/subagent-fork-in-process), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code), [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-subagent-control`](../packages/subagent/tool-subagent-control), [`tool-ralph`](../packages/workflow/tool-ralph) | - | Providers implement transports; the service also owns optional Activation-based continuation orchestration, tool-subagent selects one-shot or continuable delegation, tool-subagent-control delivers follow-ups, and tool-ralph requires one fresh structured-output route. |
 | `ctx.agentTeams` | `core` | `agent-team` | - | `tool-agent-team` | - | Owns the implicit-root roster, durable peer mailbox, shared task DAG, and continuable-child lifecycle; tool-agent-team contributes the scoped model policy and controls. |
 | `ctx.jobs` | `seam` | [`jobs`](../packages/jobs/jobs) | [`jobs-local`](../packages/jobs/jobs-local) | [`tool-bash`](../packages/shell/tool-bash), [`tool-terminal`](../packages/terminal/tool-terminal), [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-jobs`](../packages/jobs/tool-jobs) | - | Producers (background bash, PTY sends, and subagent delegations) register running work; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry. |
+| `ctx.executions` | `core` | [`execution`](../packages/execution/execution) | - | [`jobs`](../packages/jobs/jobs), [`goal`](../packages/goal/goal), [`workflow`](../packages/workflow/workflow), [`subagent`](../packages/subagent/subagent) | [`execution-persistence`](../packages/execution/execution-persistence) | Observation only: jobs, goals, workflows, and subagents project their live status into one state machine through the optional `ctx.executions` handle without giving up their own lifecycle, and the execution-persistence companion journals the `execution/*` and `executions/*` feed to `$DSH_HOME/executions/events.jsonl`. |
 | `ctx.web` | `seam` | [`web`](../packages/web/web) | [`web-search-exa`](../packages/web/web-search-exa), [`web-search-perplexity`](../packages/web/web-search-perplexity), [`web-search-deepseek`](../packages/web/web-search-deepseek), [`web-fetch-http`](../packages/web/web-fetch-http) | [`tool-web`](../packages/web/tool-web) | - | Search and fetch providers register into one ctx.web seam; tool-web owns the stable model-facing names. |
 | `ctx.spillStore` | `seam` | [`spill`](../packages/spill/spill) | [`spill-local`](../packages/spill/spill-local) | [`spill-policy`](../packages/spill/spill-policy) | - | The backend saves oversized tool text and returns a model-facing locator plus retrieval hint; spill-policy is the tools/post-execute consumer that decides when to spill. |
 | `ctx.directoryPicker` | `seam` | `directory-picker` | `directory-picker-native`, `directory-picker-browse` | `apiproxy` | - | Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement). |

@@ -23,6 +23,9 @@ flowchart LR
   pkg_llm_replay["llm-replay"]
   pkg_agent_loop["agent-loop"]
   pkg_compaction_basic["compaction-basic"]
+  pkg_llm_openrouter_free["llm-openrouter-free"]
+  svc_openrouterFree["ctx.openrouterFree<br/>OpenRouter free-model pool"]
+  pkg_orchestrator["orchestrator"]
   pkg_token_meter["token-meter"]
   svc_tokenMeter["ctx.tokenMeter<br/>Replay token measurement"]
   pkg_compaction_tool_result_pruner["compaction-tool-result-pruner"]
@@ -171,6 +174,10 @@ flowchart LR
   svc_jobs["ctx.jobs<br/>Background job registry"]
   pkg_jobs_local["jobs-local"]
   pkg_tool_jobs["tool-jobs"]
+  pkg_execution["execution"]
+  svc_executions["ctx.executions<br/>Unified execution lifecycle registry"]
+  pkg_workflow["workflow"]
+  pkg_execution_persistence["execution-persistence"]
   pkg_web["web"]
   svc_web["ctx.web<br/>Web access provider registry"]
   pkg_web_search_exa["web-search-exa"]
@@ -191,7 +198,6 @@ flowchart LR
   pkg_modules["modules"]
   pkg_hmr["hmr"]
   svc_clientModules["ctx.clientModules<br/>Client plugin graph host"]
-  pkg_workflow["workflow"]
   svc_workflowEngine["ctx.workflowEngine<br/>Workflow script engine"]
   pkg_workflow_worker_thread["workflow-worker-thread"]
   pkg_tool_workflow["tool-workflow"]
@@ -230,6 +236,7 @@ flowchart LR
   pkg_directory_picker_browse --> svc_directoryPicker
   pkg_directory_picker_native --> svc_directoryPicker
   pkg_e2b --> svc_e2b
+  pkg_execution --> svc_executions
   pkg_file_reference --> svc_fileReferences
   pkg_file_reference_local --> svc_fileReferences
   pkg_fs --> svc_fs
@@ -242,6 +249,7 @@ flowchart LR
   pkg_jobs_local --> svc_jobs
   pkg_llm --> svc_llm
   pkg_llm_deepseek --> svc_llm
+  pkg_llm_openrouter_free --> svc_openrouterFree
   pkg_llm_pi_ai --> svc_llm
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
@@ -331,6 +339,10 @@ flowchart LR
   svc_dynamicCordisRunner --> pkg_tool_cordis
   svc_e2b --> pkg_fs_e2b
   svc_e2b --> pkg_subprocess_e2b
+  svc_executions --> pkg_goal
+  svc_executions --> pkg_jobs
+  svc_executions --> pkg_subagent
+  svc_executions --> pkg_workflow
   svc_fs --> pkg_tool_fs
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
@@ -344,6 +356,7 @@ flowchart LR
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
   svc_mcpServers --> pkg_tools
+  svc_openrouterFree --> pkg_orchestrator
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -422,6 +435,7 @@ flowchart LR
   svc_workflowEngine --> pkg_tool_ralph
   svc_workflowEngine --> pkg_tool_workflow
   svc_workspaceRegistry --> pkg_apiproxy
+  svc_executions -. event gate .-> pkg_execution_persistence
   svc_fs -. event gate .-> pkg_fs_observation_policy
 ```
 
@@ -430,6 +444,7 @@ flowchart LR
 | `ctx.mcpServers` | `core` | [`mcp-servers`](../packages/mcp/mcp-servers) | - | [`tools`](../packages/core/tools) | - | 读取用户与项目 `mcpServers` 注册表，为每个声明的服务器部署一个 `mcp-client` 实例；工具以 `mcp__<server>__<tool>` 落入全局工具层。 |
 | `ctx.attachments` | `seam` | [`attachment`](../packages/attachment/attachment) | [`attachment-local`](../packages/attachment/attachment-local) | `host-runtime`, [`llm-pi-ai`](../packages/llm/llm-pi-ai) | - | 宿主会在会话事件之前提交已接受的图片；提供方适配器将已授权的持久引用解析为提供方原生内容。 |
 | `ctx.llm` | `seam` | [`llm`](../packages/llm/llm) | [`llm-deepseek`](../packages/llm/llm-deepseek), [`llm-pi-ai`](../packages/llm/llm-pi-ai), [`llm-replay`](../packages/test-support/llm-replay) | [`agent-loop`](../packages/core/agent-loop), [`compaction-basic`](../packages/compaction/compaction-basic) | - | 适配器注册提供方实现；agent loop（智能体循环）与压缩功能调用提供方无关的流服务。 |
+| `ctx.openrouterFree` | `core` | [`llm-openrouter-free`](../packages/llm/llm-openrouter-free) | - | [`orchestrator`](../packages/context/orchestrator) | - | 扫描 OpenRouter 公开模型目录中的零价格模型，把留下的模型通过该命名空间发布为 `llm-pi-ai` 路由配置，并一次租出一个预留请求；orchestrator 的 swarm 通过 `ctx.get` 读取该池，池耗尽时直接上报，而不是继续等待。 |
 | `ctx.tokenMeter` | `core` | [`token-meter`](../packages/llm/token-meter) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 拥有按会话隔离的回放折叠区；压力消费方共享不可变且带修订版本的测量结果。 |
 | `ctx.toolResultPruner` | `core` | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | - | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 在摘要压缩前，通过可回放的单节点表层替换来改写过大的当前工具结果。 |
 | `ctx.sessions` | `core` | [`session`](../packages/core/session) | - | [`agent-loop`](../packages/core/agent-loop), [`agent`](../packages/core/agent), [`session-persistence`](../packages/session/session-persistence), [`session-query`](../packages/session-query/session-query), [`session-query-sqlite`](../packages/session-query/session-query-sqlite), `subagent-inprocess`, [`invariants`](../packages/runtime-diagnostics/invariants), [`message-feedback`](../packages/feedback/message-feedback) | - | 拥有仅追加的 Session 实例，并发出持久的会话事件流。 |
@@ -476,6 +491,7 @@ flowchart LR
 | `ctx.subagents` | `seam` | [`subagent`](../packages/subagent/subagent) | [`subagent-spawn-in-process`](../packages/subagent/subagent-spawn-in-process), [`subagent-fork-in-process`](../packages/subagent/subagent-fork-in-process), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code), [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-subagent-control`](../packages/subagent/tool-subagent-control), [`tool-ralph`](../packages/workflow/tool-ralph) | - | 提供方实现传输；该服务还负责可选的、基于 Activation 的延续编排，tool-subagent 选择一次性或可延续委派，tool-subagent-control 传递后续消息，而 tool-ralph 要求一条全新的结构化输出路由。 |
 | `ctx.agentTeams` | `core` | `agent-team` | - | `tool-agent-team` | - | 负责隐式 Root roster、持久 peer mailbox、共享任务 DAG 与 continuable child 生命周期；tool-agent-team 提供作用域化模型策略和控制工具。 |
 | `ctx.jobs` | `seam` | [`jobs`](../packages/jobs/jobs) | [`jobs-local`](../packages/jobs/jobs-local) | [`tool-bash`](../packages/shell/tool-bash), [`tool-terminal`](../packages/terminal/tool-terminal), [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-jobs`](../packages/jobs/tool-jobs) | - | 生产方（后台 bash、PTY 发送和 subagent 委派）登记正在运行的工作；tool-jobs 是面向模型的控制器，用于读取、列出和终止这些工作；jobs-local 是进程本地注册表。 |
+| `ctx.executions` | `core` | [`execution`](../packages/execution/execution) | - | [`jobs`](../packages/jobs/jobs), [`goal`](../packages/goal/goal), [`workflow`](../packages/workflow/workflow), [`subagent`](../packages/subagent/subagent) | [`execution-persistence`](../packages/execution/execution-persistence) | 仅作观察：jobs、goal、workflow 与 subagent 通过可选的 `ctx.executions` 句柄把各自的实时状态投影到同一个状态机，而不放弃各自的 lifecycle；execution-persistence 伴随插件把 `execution/*` 与 `executions/*` 事件流记入 `$DSH_HOME/executions/events.jsonl`。 |
 | `ctx.web` | `seam` | [`web`](../packages/web/web) | [`web-search-exa`](../packages/web/web-search-exa), [`web-search-perplexity`](../packages/web/web-search-perplexity), [`web-search-deepseek`](../packages/web/web-search-deepseek), [`web-fetch-http`](../packages/web/web-fetch-http) | [`tool-web`](../packages/web/tool-web) | - | 搜索和抓取提供方注册到同一个 ctx.web seam；tool-web 负责稳定的面向模型名称。 |
 | `ctx.spillStore` | `seam` | [`spill`](../packages/spill/spill) | [`spill-local`](../packages/spill/spill-local) | [`spill-policy`](../packages/spill/spill-policy) | - | 后端保存过大的工具文本，并返回面向模型的定位信息和取回提示；spill-policy 是 tools/post-execute 消费方，负责决定何时 spill。 |
 | `ctx.directoryPicker` | `seam` | `directory-picker` | `directory-picker-native`, `directory-picker-browse` | `apiproxy` | - | 带判别标记的交互能力：原生后端在 Host 显示设备上打开一个操作系统选择器，浏览后端为应用内浏览器提供列表与创建原语；双端后端通过其浏览器侧填充 ui-workspace 目录流程的 slot（不通过协议发布）。 |

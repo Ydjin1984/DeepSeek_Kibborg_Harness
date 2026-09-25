@@ -124,6 +124,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Adapters register provider implementations; the loop and compaction call the provider-neutral stream service.',
   },
   {
+    key: 'openrouterFree',
+    pkg: 'llm-openrouter-free',
+    title: 'OpenRouter free-model pool',
+    mode: 'core',
+    consumers: ['orchestrator'],
+    note: 'Scans OpenRouter public model directory for zero-price models, publishes the survivors as a `llm-pi-ai` route profile through that namespace, and leases one reserved request at a time; the orchestrator swarm reads the pool through `ctx.get` and reports a spent pool rather than waiting on it.',
+  },
+  {
     key: 'tokenMeter',
     pkg: 'token-meter',
     title: 'Replay token measurement',
@@ -502,6 +510,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: ['jobs-local'],
     consumers: ['tool-bash', 'tool-terminal', 'tool-subagent', 'tool-jobs'],
     note: 'Producers (background bash, PTY sends, and subagent delegations) register running work; tool-jobs is the model-facing controller that reads, lists, and kills it; jobs-local is the process-local registry.',
+  },
+  {
+    key: 'executions',
+    pkg: 'execution',
+    title: 'Unified execution lifecycle registry',
+    mode: 'core',
+    consumers: ['jobs', 'goal', 'workflow', 'subagent'],
+    companions: ['execution-persistence'],
+    note: 'Observation only: jobs, goals, workflows, and subagents project their live status into one state machine through the optional `ctx.executions` handle without giving up their own lifecycle, and the execution-persistence companion journals the `execution/*` and `executions/*` feed to `$DSH_HOME/executions/events.jsonl`.',
   },
   {
     key: 'web',
@@ -960,6 +977,16 @@ export class EventRelationCollector {
               for (const event of this.eventNamesFromArgumentList(argumentList, new Set())) {
                 this.addDispatcher(event, source.pkg, 'events.dispatch')
               }
+            }
+          } else if (receiverKind === 'events-service') {
+            // Calling the bus directly (`ctx.events.emit(...)`) dispatches the
+            // same way as the mixed-onto-context form, so it takes the same
+            // argument layout: an optional leading `this` argument, then the name.
+            const eventNames = this.eventNamesFromCall(node, 'context')
+            if (method === 'on' || method === 'once') {
+              for (const event of eventNames) this.ensure(event).listeners.add(source.pkg)
+            } else if (method === 'emit' || method === 'parallel' || method === 'serial' || method === 'waterfall') {
+              for (const event of eventNames) this.addDispatcher(event, source.pkg, `events.${method}`)
             }
           } else if (receiverKind === 'context' || receiverKind === 'agent-dispatch') {
             const eventNames = this.eventNamesFromCall(node, receiverKind)

@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-client-ui-settings-claude-code
 
+English | [中文](README.zh.md)
+
 Claude Code technology settings section: manages the ECC-derived skill library (`.dsh/skills` `cc-*` and `cc-role-*` skills converted from [affaan-m/ECC](https://github.com/affaan-m/ECC), Everything Claude Code v2.2.1).
 
 The section enables and disables library skills through the skill-manager RPC domain (`skills.listManaged` / `skills.setEnabled`, one call per skill) and explains the chat invocation. Enabling a skill removes its `.disabled` marker; the skill-filesystem watcher then publishes it to the agent skill catalog on the next turn, where the model can load it by name.

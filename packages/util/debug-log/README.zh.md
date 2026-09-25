@@ -16,6 +16,8 @@ import {
   uiDebug, uiDebugSpan, uiDebugSpanSync, uiDebugTick,
 } from '@deepseek-ai/dsh-debug-log'
 
+declare const load: () => Promise<unknown>
+
 setUiDebugEnabled(true)
 uiDebug('session', 'open', { sessionId: 'ses_1' })
 const page = await uiDebugSpan('rpc', 'session.history', { sessionId: 'ses_1' }, load)
@@ -36,7 +38,7 @@ uiDebugTick('mux', 'downlink', { type: 'assistant/chunk' })
 
 ## 模型体验
 
-无。记录只进入操作者控制台；这里没有任何内容进入模型请求。
+无，因为记录只进入操作者控制台，这里没有任何内容进入模型请求。
 
 #### KV Cache 影响
 

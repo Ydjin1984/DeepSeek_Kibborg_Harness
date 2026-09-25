@@ -922,6 +922,43 @@ stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 
 Source: [`packages/llm/llm/src/index.ts:286`](../../packages/llm/llm/src/index.ts)
 
+<a id="ctxopenrouterfree--openrouterfreepool"></a>
+
+### `ctx.openrouterFree` — `OpenRouterFreePool`
+
+The pool service. Enabled through its own settings namespace; while enabled it scans on an interval, republishes the `pi-ai` route after every scan, and serves leases.
+
+```ts cordis-catalog
+/**
+ * Current pool status. Cheap: it reads the last scan and the ledger, never the
+ * network, so a caller may consult it before every delegation.
+ * @returns the snapshot a caller needs to decide whether to start work.
+ */
+snapshot(): FreePoolSnapshot
+
+/**
+ * Whether the pool can hand out a lease right now.
+ * @returns whether at least one pooled model has budget left.
+ */
+available(): boolean
+
+/**
+ * Reserve the next model to run on: the least-used selectable one.
+ * @returns a lease to release when the attempt settles, or `undefined` when
+ * the pool is disabled, empty, or fully spent — never a wait.
+ */
+acquire(): FreeModelLease | undefined
+
+/**
+ * Scan the directory, publish the route, and report the pool. Concurrent
+ * callers share one scan.
+ * @returns after the scan settled, whether it succeeded or not.
+ */
+refresh(): Promise<void>
+```
+
+Source: [`packages/llm/llm-openrouter-free/src/service.ts:162`](../../packages/llm/llm-openrouter-free/src/service.ts)
+
 <a id="llm-events"></a>
 
 ### `llm/*` events

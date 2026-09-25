@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-engagement-stub
 
+English | [中文](README.zh.md)
+
 Deny-only engagement contour: it refuses a tool call whose target falls outside the configured engagement scope and records one audit event per refusal. It owns no model context of its own — the tool registry keeps dispatching, and this plugin only answers whether a call may proceed.
 
 ## Surface
