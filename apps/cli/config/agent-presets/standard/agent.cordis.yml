@@ -199,6 +199,7 @@
         provider: spawn
         toolName: subagent
         backgroundMode: continuable
+        maxDepth: 1
 
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'
@@ -206,6 +207,7 @@
         provider: fork
         toolName: subagent_fork
         backgroundMode: continuable
+        maxDepth: 1
 
     # Продакшн-dsh не ставит эти опциональные провайдеры. Установи
     # соответствующий Bundle в этом Профиле и перезапусти Хост, затем скопируй

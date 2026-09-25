@@ -34,6 +34,12 @@ flowchart LR
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@deepseek-ai/dsh-jobs-local"]
   cfg --> plugin_dsh_base_jobs
+  plugin_dsh_base_execution["execution<br/>@deepseek-ai/dsh-execution"]
+  cfg --> plugin_dsh_base_execution
+  plugin_dsh_base_execution_persistence["execution-persistence<br/>@deepseek-ai/dsh-execution-persistence"]
+  cfg --> plugin_dsh_base_execution_persistence
+  plugin_dsh_base_engagement_stub["engagement-stub<br/>@deepseek-ai/dsh-engagement-stub"]
+  cfg --> plugin_dsh_base_engagement_stub
   plugin_dsh_base_llm_retry["llm-retry<br/>@deepseek-ai/dsh-llm-retry"]
   cfg --> plugin_dsh_base_llm_retry
   plugin_dsh_base_settings["settings<br/>@deepseek-ai/dsh-settings-file"]
@@ -42,6 +48,8 @@ flowchart LR
   cfg --> plugin_dsh_base_credentials
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@deepseek-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
+  plugin_dsh_base_llm_openrouter_free["llm-openrouter-free<br/>@deepseek-ai/dsh-llm-openrouter-free"]
+  cfg --> plugin_dsh_base_llm_openrouter_free
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@deepseek-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_attachment_local["attachment-local<br/>@deepseek-ai/dsh-attachment-local"]
@@ -154,6 +162,8 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_deepseek
   plugin_dsh_base_tool_web["tool-web<br/>@deepseek-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
+  plugin_dsh_base_tool_typesafe["tool-typesafe<br/>@deepseek-ai/dsh-typesafe-tool"]
+  cfg --> plugin_dsh_base_tool_typesafe
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
@@ -183,10 +193,14 @@ flowchart LR
 | `agent` | `@deepseek-ai/dsh-agent` |
 | `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` |
 | `jobs` | `@deepseek-ai/dsh-jobs-local` |
+| `execution` | `@deepseek-ai/dsh-execution` |
+| `execution-persistence` | `@deepseek-ai/dsh-execution-persistence` |
+| `engagement-stub` | `@deepseek-ai/dsh-engagement-stub` |
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |
 | `settings` | `@deepseek-ai/dsh-settings-file` |
 | `credentials` | `@deepseek-ai/dsh-credentials-local` |
 | `llm-pi-ai` | `@deepseek-ai/dsh-llm-pi-ai` |
+| `llm-openrouter-free` | `@deepseek-ai/dsh-llm-openrouter-free` |
 | `session-persistence-jsonl` | `@deepseek-ai/dsh-session-persistence-jsonl` |
 | `attachment-local` | `@deepseek-ai/dsh-attachment-local` |
 | `session-query-sqlite` | `@deepseek-ai/dsh-session-query-sqlite` |
@@ -243,6 +257,7 @@ flowchart LR
 | `web` | `@deepseek-ai/dsh-web` |
 | `web-search-deepseek` | `@deepseek-ai/dsh-web-search-deepseek` |
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |
+| `tool-typesafe` | `@deepseek-ai/dsh-typesafe-tool` |
 | `tools` | `@deepseek-ai/dsh-tools` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |
