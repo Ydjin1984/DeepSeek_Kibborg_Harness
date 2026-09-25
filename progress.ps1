@@ -7,11 +7,13 @@
 #   start    - при отсутствии артефактов сначала собирает проект, затем запускает сервис
 #              и ждёт реальной готовности: порт слушается (60%) -> HTTP отвечает (100%);
 #   bar      - тест отрисовки прогресс-бара;
+#   supervise - запуск сервера под наблюдением server-supervisor.ps1: перезапуск
+#              после падения, журнал памяти, корректная остановка по файлу-стопу;
 #   selftest - самопроверка: отрисовка, нормализация пути, механика процессов.
 
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('build', 'start', 'bar', 'selftest')]
+  [ValidateSet('build', 'start', 'bar', 'supervise', 'selftest')]
   [string]$Command,
   [string]$Root = (Split-Path -Parent $MyInvocation.MyCommand.Path),
   [int]$Percent = 11
@@ -35,10 +37,13 @@ $Port = 3080
 $Url = "http://127.0.0.1:$Port/"
 $LogDir = Join-Path $Root '.dsh-build'
 $WebLog = Join-Path $LogDir 'web-run.log'
-$PrevWebLog = Join-Path $LogDir 'web-run.prev.log'
 $PhaseLogDir = Join-Path $LogDir 'phases'
 $RecordPath = Join-Path $LogDir 'client-build-environment.json'
 $IndexPath = Join-Path $Root 'apps\web\dist\index.html'
+$SupervisorScript = Join-Path $Root 'server-supervisor.ps1'
+$SupervisorLog = Join-Path $LogDir 'server-supervisor.log'
+$SupervisorStopFile = Join-Path $LogDir 'supervisor.stop'
+$WebLogKeepPrev = 5
 $StartTimeoutSec = 300
 $HttpReadyTimeoutSec = 120
 
@@ -203,23 +208,95 @@ writeClientBuildRecord(root, env)
 }
 
 # --- Запуск сервиса (в одном окне: фоновый процесс, вывод в журнал, без отдельного терминала)
+
+# Ротация журнала сервера: журнал предыдущего запуска (в т.ч. след падения)
+# сохраняется в web-run.prev-<штамп>.log, иначе оператор ">" в запуске затирает
+# его при каждом старте. Имя с датой обязательно: при двух падениях подряд
+# фиксированное имя web-run.prev.log затирало след первого падения - теперь
+# каждый запуск оставляет отдельный архив, а старые (сверх $WebLogKeepPrev)
+# удаляются.
+function Invoke-WebLogRotation {
+  if (-not (Test-Path -LiteralPath $WebLog)) { return }
+  $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+  $archive = Join-Path $LogDir ('web-run.prev-' + $stamp + '.log')
+  try {
+    Move-Item -LiteralPath $WebLog -Destination $archive -Force
+  } catch {
+    Write-Host ('Не удалось сохранить журнал прошлого запуска: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+    return
+  }
+  $archives = @(Get-ChildItem -LiteralPath $LogDir -Filter 'web-run.prev-*.log' -ErrorAction SilentlyContinue |
+    Sort-Object -Property Name)
+  if ($archives.Count -gt $WebLogKeepPrev) {
+    for ($i = 0; $i -lt ($archives.Count - $WebLogKeepPrev); $i++) {
+      Remove-Item -LiteralPath $archives[$i].FullName -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
 function Start-WebServer {
   New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-  # Ротация журнала: журнал предыдущего запуска (в т.ч. след падения) сохраняется
-  # в $PrevWebLog, иначе оператор ">" в запуске затирает его при каждом старте.
-  if (Test-Path -LiteralPath $WebLog) {
-    Remove-Item -LiteralPath $PrevWebLog -Force -ErrorAction SilentlyContinue
-    Rename-Item -LiteralPath $WebLog -NewName (Split-Path -Leaf $PrevWebLog) -Force -ErrorAction SilentlyContinue
-  }
+  Invoke-WebLogRotation
   # Detached-запуск через Start-Process (UseShellExecute): сервис получает
   # собственную консольную сессию и НЕ умирает при закрытии окна run.bat —
   # раньше весь процесс-дерево получало сигнал при закрытии консоли, из-за
   # чего сервер "падал". Вывод по-прежнему идёт в журнал на уровне ОС.
   # Маркер выхода с кодом дописывается в тот же журнал: без него падение
   # сервера выглядит как обрыв журнала на строке приветствия.
-  $cmdline = '/v:on /c node --import tsx/esm apps/cli/src/bin.ts web > "' + $WebLog + '" 2>&1'
+  # --max-old-space-size обязателен: без него действует дефолт V8 (~4.3 ГБ heap),
+  # и загрузка истории крупных сессий в память упирает процесс в FATAL ERROR
+  # (heap out of memory, код выхода 134). Машина даёт 176 ГБ RAM.
+  $cmdline = '/v:on /c node --max-old-space-size=65536 --import tsx/esm apps/cli/src/bin.ts web > "' + $WebLog + '" 2>&1'
   $cmdline += ' & echo [server] exited with code !errorlevel! at %DATE% %TIME% >> "' + $WebLog + '"'
   return Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdline -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+}
+
+# --- Супервизор: отдельный процесс-наблюдатель (server-supervisor.ps1).
+# Нужен там, где прямой запуск не годится: он держит сервер живым (перезапуск
+# после падения, журнал памяти), тогда как Invoke-Start запускает сервер и сразу
+# завершается, оставляя процесс без присмотра.
+function Stop-Supervisor {
+  # Останавливаем своей рукой, а не молча: супервизор сам убивает своё дерево
+  # процессов (taskkill /T /F) и снимает файл-стоп. Иначе он немедленно
+  # перезапустит сервер, который мы только что остановили.
+  $procs = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*server-supervisor.ps1*' })
+  # Файл-стоп: страховка на случай, если процесс супервизора не нашёлся.
+  New-Item -ItemType File -Force -Path $SupervisorStopFile | Out-Null
+  if ($procs.Count -eq 0) {
+    Remove-Item -LiteralPath $SupervisorStopFile -Force -ErrorAction SilentlyContinue
+    return
+  }
+  $ids = @($procs | ForEach-Object { $_.ProcessId })
+  Write-Host ('Останавливаю супервизор сервера (PID: {0})...' -f ($ids -join ','))
+  foreach ($procId in $ids) { $null = & taskkill /PID $procId /T /F 2>&1 }
+  Start-Sleep -Milliseconds 800
+  Remove-Item -LiteralPath $SupervisorStopFile -Force -ErrorAction SilentlyContinue
+}
+
+function Invoke-Supervise {
+  if (-not (Test-Path -LiteralPath $SupervisorScript)) {
+    Write-Host ('ОШИБКА: не найден супервизор {0}' -f $SupervisorScript) -ForegroundColor Red
+    exit 1
+  }
+  # Супервизор сам проверяет порт и уже запущенный сервер, сам пишет журнал и
+  # снимает метрики памяти — здесь остаётся передать ему параметры окружения.
+  Write-Host 'Запуск сервера под наблюдением супервизора...' -ForegroundColor Cyan
+  Write-Host ("  корень:    {0}" -f $Root) -ForegroundColor DarkGray
+  Write-Host ("  порт:      {0}" -f $Port) -ForegroundColor DarkGray
+  Write-Host ("  журнал:    {0}" -f $SupervisorLog) -ForegroundColor DarkGray
+  Write-Host ("  журнал сервера: {0}" -f $WebLog) -ForegroundColor DarkGray
+  Write-Host ("  остановка: {0} или Ctrl+C" -f $SupervisorStopFile) -ForegroundColor DarkGray
+  Write-Host ''
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $SupervisorScript -Root $Root -Port $Port
+  $code = $LASTEXITCODE
+  Write-Host ''
+  if ($code -eq 0) {
+    Write-Host 'Супервизор завершён.' -ForegroundColor Green
+  } else {
+    Write-Host ('Супервизор завершён с кодом {0}. Журнал: {1}' -f $code, $SupervisorLog) -ForegroundColor Red
+  }
+  exit $code
 }
 
 function Show-WebLogTail {
@@ -315,9 +392,12 @@ function Invoke-Start {
   Write-Host ''
   Write-Host ("Сервис готов за {0} — {1}" -f (Format-Elapsed $total), $Url) -ForegroundColor Green
   Write-Host 'Сервис работает в фоне; журнал: .dsh-build\web-run.log' -ForegroundColor DarkGray
-  if (Test-Path -LiteralPath $PrevWebLog) {
-    Write-Host 'Журнал предыдущего запуска: .dsh-build\web-run.prev.log' -ForegroundColor DarkGray
+  $prev = @(Get-ChildItem -LiteralPath $LogDir -Filter 'web-run.prev-*.log' -ErrorAction SilentlyContinue |
+    Sort-Object -Property Name -Descending)
+  if ($prev.Count -gt 0) {
+    Write-Host ('Журнал предыдущего запуска: .dsh-build\{0}' -f $prev[0].Name) -ForegroundColor DarkGray
   }
+  Write-Host 'Сервер запущен напрямую, без наблюдения. Перезапуск после падения: -Command supervise' -ForegroundColor DarkGray
 }
 
 # --- Диспетчер команд
@@ -329,6 +409,10 @@ switch ($Command) {
   }
   'start' {
     Invoke-Start
+    exit 0
+  }
+  'supervise' {
+    Invoke-Supervise
     exit 0
   }
   'bar' {
