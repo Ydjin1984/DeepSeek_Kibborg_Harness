@@ -473,7 +473,20 @@ async function runTask(ctx: Context, input: TaskInput): Promise<TaskMetrics> {
         // manager tool would leak the on-disk catalog and let the run rewrite the
         // very skill under test (creating versions and breaking the baseline's
         // blind evaluation).
-        agentCtx.tools.restrict({ deny: ['skill_manage', 'skill'] })
+        //
+        // `restrict()` masks only what a scope INHERITS, and it rejects a name the
+        // scope's OWN layer registers as unknown — which is where the `skill` tool
+        // lands once presets moved model-facing tools onto the agent plane. Naming
+        // it unconditionally therefore aborted the whole run before a single case
+        // was generated. Mask the names this scope can actually restrict (which
+        // also keeps them out of the prompt), and deny every one of them by guard
+        // so a scope-local registration cannot slip past the isolation.
+        const hiddenSkillTools = ['skill_manage', 'skill']
+        const restrictable = hiddenSkillTools.filter(name => agentCtx.tools.get(name) !== undefined)
+        if (restrictable.length > 0) agentCtx.tools.restrict({ deny: restrictable })
+        agentCtx.tools.guard(execution => hiddenSkillTools.includes(execution.name)
+          ? 'managed-skill tools are withheld from a benchmark task agent'
+          : undefined)
         if (input.skill === undefined) return
         // `ctx.get` resolves the scope-bound skills service: the agent scope
         // declares no inject, and the registry's register() files into the

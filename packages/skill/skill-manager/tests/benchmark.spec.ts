@@ -72,13 +72,16 @@ interface FakeHarness {
   createCalls: number
   streamCalls: number
   restrictions: { allow?: string[]; deny?: string[] }[]
+  guards: ((execution: { readonly name: string }) => string | undefined)[]
+  /** Names the fake registry exposes as restrictable globals; others read as scope-local. */
+  restrictable: string[]
 }
 
 /** Build a context whose llm/agents services replay scripted responses. */
-function fakeContext(manager: SkillManager, llmResponses: string[], events: SessionEvent[][], ctx?: Context): FakeHarness {
+function fakeContext(manager: SkillManager, llmResponses: string[], events: SessionEvent[][], ctx?: Context, restrictable: string[] = ['skill_manage']): FakeHarness {
   void manager
   const target = ctx ?? new Context()
-  const harness: FakeHarness = { ctx: target, llmResponses, createCalls: 0, streamCalls: 0, restrictions: [] }
+  const harness: FakeHarness = { ctx: target, llmResponses, createCalls: 0, streamCalls: 0, restrictions: [], guards: [], restrictable }
   target.provide('llm', {
     stream: async function* (options: GenerateOptions): AsyncGenerator<StreamChunk> {
       void options
@@ -95,12 +98,20 @@ function fakeContext(manager: SkillManager, llmResponses: string[], events: Sess
     create: async (options: {
       setup?: (agentCtx: {
         get: (name: string) => { register: () => () => void } | undefined
-        tools: { restrict: (filter: { allow?: string[]; deny?: string[] }) => () => void }
+        tools: {
+          get: (name: string) => unknown
+          restrict: (filter: { allow?: string[]; deny?: string[] }) => () => void
+          guard: (guard: (execution: { readonly name: string }) => string | undefined) => () => void
+        }
       }) => void
     }) => {
       options.setup?.({
         get: name => name === 'skills' ? { register: () => () => {} } : undefined,
-        tools: { restrict: (filter) => { harness.restrictions.push(filter); return () => {} } },
+        tools: {
+          get: name => harness.restrictable.includes(name) ? {} : undefined,
+          restrict: (filter) => { harness.restrictions.push(filter); return () => {} },
+          guard: (guard) => { harness.guards.push(guard); return () => {} },
+        },
       })
       const index = harness.createCalls
       harness.createCalls += 1
@@ -350,12 +361,54 @@ describe('runBenchmark', () => {
       taskModel: { provider: 'p', model: 'm' },
       caseCount: 1,
     })
-    // Both arms (baseline and with-skill) get the restriction, so the task model
+    // Both arms (baseline and with-skill) get the isolation, so the task model
     // can neither read the on-disk catalog through the manager nor rewrite the
-    // skill under test while it is being scored.
-    expect(harness.restrictions.filter(restriction =>
-      restriction.deny?.includes('skill_manage') && restriction.deny.includes('skill'),
-    )).toHaveLength(2)
+    // skill under test while it is being scored. The mask carries only the
+    // restrictable name — naming the scope-local `skill` there is exactly what
+    // aborted the run — while the guard covers both names.
+    expect(harness.restrictions.filter(restriction => restriction.deny?.includes('skill_manage'))).toHaveLength(2)
+    expect(harness.restrictions.flatMap(restriction => restriction.deny ?? [])).not.toContain('skill')
+    expect(harness.guards).toHaveLength(2)
+    for (const guard of harness.guards) {
+      expect(guard({ name: 'skill_manage' })).toBeTypeOf('string')
+      expect(guard({ name: 'skill' })).toBeTypeOf('string')
+      expect(guard({ name: 'bash' })).toBeUndefined()
+    }
+  })
+
+  it('isolates managed-skill tools even when neither name is restrictable', async () => {
+    // The real deployment registers `skill` scope-locally and `skill_manage`
+    // globally; a registry that can restrict neither must still not hand the
+    // task model a way to read or rewrite the skill under test — and must not
+    // crash the run by naming an unrestrictable tool.
+    const home = await tempDir('home9')
+    const project = await tempDir('project9')
+    await mkdir(join(project, '.git'), { recursive: true })
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    const manager = new SkillManager(ctx, { dshHome: join(home, '.dsh') })
+    await manager.save({ name: 'demo-skill', content: validSkill('demo-skill', 'Demo', 'body'), scope: 'project', cwd: project })
+    const cases = JSON.stringify([{ id: 'case-1', title: 'Basic', request: 'Do basic' }])
+    vi.spyOn(Math, 'random').mockReturnValue(0.9)
+    const harness = fakeContext(
+      manager,
+      [cases, '{"scoreA": 90, "scoreB": 90, "commentA": "ok", "commentB": "ok"}'],
+      [taskEvents(1, 10, 0), taskEvents(1, 10, 0)],
+      undefined,
+      [],
+    )
+    await runBenchmark(harness.ctx, manager, {
+      skillName: 'demo-skill',
+      cwd: project,
+      taskModel: { provider: 'p', model: 'm' },
+      caseCount: 1,
+    })
+    expect(harness.restrictions).toHaveLength(0)
+    expect(harness.guards).toHaveLength(2)
+    for (const guard of harness.guards) {
+      expect(guard({ name: 'skill_manage' })).toBeTypeOf('string')
+      expect(guard({ name: 'skill' })).toBeTypeOf('string')
+    }
   })
 
   it('fails loudly when the with-skill agent scope lacks the skills service', async () => {
@@ -379,10 +432,22 @@ describe('runBenchmark', () => {
     let calls = 0
     target.provide('agents', {
       create: async (
-        options: { setup?: (agentCtx: { get: (name: string) => undefined; tools: { restrict: () => () => void } }) => void },
+        options: {
+          setup?: (agentCtx: {
+            get: (name: string) => undefined
+            tools: {
+              get: (name: string) => undefined
+              restrict: () => () => void
+              guard: () => () => void
+            }
+          }) => void
+        },
       ) => {
         calls += 1
-        options.setup?.({ get: () => undefined, tools: { restrict: () => () => {} } })
+        options.setup?.({
+          get: () => undefined,
+          tools: { get: () => undefined, restrict: () => () => {}, guard: () => () => {} },
+        })
         const agent = {
           session: { header: { cwd: 'cwd' }, seq: 0, events: [] },
           whenIdle: async () => {},
