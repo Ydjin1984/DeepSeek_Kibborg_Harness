@@ -48,6 +48,85 @@
 
 ## 从源码运行
 
+### 环境要求
+
+- Node.js `^22.19 || >=24`（推荐 24 LTS）。
+- pnpm `>=11` —— 通过随 Node.js 22 与 24 一起提供的 Corepack 启用。
+- Git 2.26 或更高版本。
+- Linux：编译原生插件需要 `build-essential` 与 `python3`。
+
+先确认已经安装的内容：
+
+```sh
+node -v      # need 22.19+ or 24+
+pnpm -v      # need 11+
+```
+
+### 没有 Node.js 时如何安装
+
+**Windows** —— 最简单的方式是 winget：
+
+```sh
+winget install OpenJS.NodeJS.LTS
+```
+
+如需同时保留多个版本，请安装 nvm-windows：
+
+```sh
+winget install CoreyButler.NVMforWindows
+nvm install lts
+nvm use lts
+```
+
+**Linux** —— 使用 [nvm](https://github.com/nvm-sh/nvm#installing-and-updating)（无需 root，可切换版本）：
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
+exec "$SHELL" -l
+nvm install 24
+nvm use 24
+```
+
+或使用 [NodeSource](https://github.com/nodesource/distributions) 的系统软件包 —— Debian/Ubuntu：
+
+```sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+Fedora/RHEL：第一条命令为 `curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -`，第二条为 `sudo dnf install -y nodejs`。
+
+发行版自带仓库中的 `nodejs` 软件包通常低于所需版本，安装后请核对 `node -v` 的输出。
+
+### 更新 Node.js
+
+用当初安装它的方式完成更新：
+
+```sh
+winget upgrade OpenJS.NodeJS.LTS   # Windows
+nvm install 24 && nvm use 24       # nvm on Linux or macOS
+```
+
+切换 Node 版本后请重新安装依赖：原生插件与具体版本的 ABI 绑定。
+
+```sh
+node -v
+pnpm install
+pnpm run build
+```
+
+### pnpm
+
+启用 Corepack 后，pnpm 会按项目的 `packageManager` 取用：
+
+```sh
+corepack enable
+```
+
+Node.js 25 及更高版本不再附带 Corepack：请单独安装它（`npm install -g corepack`），或直接安装 pnpm（`npm install -g pnpm@11`）。
+
+### 克隆与构建
+
 克隆**本**仓库（非上游）：
 
 ```sh
@@ -58,9 +137,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-Web UI 默认运行于 `http://127.0.0.1:3080`。Windows 下可使用 `run.bat`（带进度条的构建与启动菜单）。
-
-要求：Node.js `^22.19 || >=24`，pnpm `>=11`。
+Web UI 默认运行于 `http://127.0.0.1:3080`。Windows 下可使用 `run.bat`（带进度条的构建与启动菜单）。在 Linux 上，从其他机器访问时可通过端口转发打开：`ssh -N -L 3080:127.0.0.1:3080 user@host`。
 
 ---
 

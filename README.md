@@ -48,6 +48,85 @@
 
 ## Запуск из исходников
 
+### Требования
+
+- Node.js `^22.19 || >=24` (рекомендуется 24 LTS).
+- pnpm `>=11` — включается через Corepack, который поставляется с Node.js 22 и 24.
+- Git 2.26 или новее.
+- Linux: `build-essential` и `python3` для сборки нативных аддонов.
+
+Проверьте, что уже установлено:
+
+```sh
+node -v      # need 22.19+ or 24+
+pnpm -v      # need 11+
+```
+
+### Установка Node.js, если её нет
+
+**Windows** — проще всего через winget:
+
+```sh
+winget install OpenJS.NodeJS.LTS
+```
+
+Если нужно держать несколько версий одновременно, поставьте nvm-windows:
+
+```sh
+winget install CoreyButler.NVMforWindows
+nvm install lts
+nvm use lts
+```
+
+**Linux** — через [nvm](https://github.com/nvm-sh/nvm#installing-and-updating) (без root, версии переключаются):
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | bash
+exec "$SHELL" -l
+nvm install 24
+nvm use 24
+```
+
+Или системным пакетом из [NodeSource](https://github.com/nodesource/distributions) — Debian/Ubuntu:
+
+```sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+Для Fedora/RHEL первая команда — `curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -`, вторая — `sudo dnf install -y nodejs`.
+
+Пакет `nodejs` из штатного репозитория дистрибутива обычно отстаёт от требуемой версии, поэтому после установки сверяйте вывод `node -v`.
+
+### Обновление Node.js
+
+Обновите версию тем же способом, каким она поставлена:
+
+```sh
+winget upgrade OpenJS.NodeJS.LTS   # Windows
+nvm install 24 && nvm use 24       # nvm on Linux or macOS
+```
+
+После смены версии Node пересоберите зависимости: нативные аддоны привязаны к ABI конкретной версии.
+
+```sh
+node -v
+pnpm install
+pnpm run build
+```
+
+### pnpm
+
+Включите Corepack, и pnpm возьмётся из `packageManager` проекта:
+
+```sh
+corepack enable
+```
+
+В Node.js 25 и новее Corepack не поставляется: поставьте его отдельно (`npm install -g corepack`) или сам pnpm (`npm install -g pnpm@11`).
+
+### Клонирование и сборка
+
 Клонируйте **этот** репозиторий (не upstream):
 
 ```sh
@@ -58,9 +137,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-Web UI запускается на `http://127.0.0.1:3080`. На Windows удобно использовать `run.bat` (меню сборки и запуска с прогресс-баром).
-
-Требования: Node.js `^22.19 || >=24`, pnpm `>=11`.
+Web UI запускается на `http://127.0.0.1:3080`. На Windows удобно использовать `run.bat` (меню сборки и запуска с прогресс-баром). На Linux доступ с другой машины открывается пробросом порта: `ssh -N -L 3080:127.0.0.1:3080 user@host`.
 
 ---
 
